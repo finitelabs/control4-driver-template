@@ -13,74 +13,15 @@ Persist.__index = Persist
 --- @type table
 local EMPTY = {}
 
-local function convertMapIntKeysToStrings(array)
-  log:trace("convertMapIntKeysToStrings(%s)", array)
-  if IsEmpty(array) then
-    return nil
-  end
-  local newMap = {}
-  for key, value in pairs(array) do
-    if type(key) ~= "number" then
-      -- Not a big array
-      return array
-    end
-    newMap[tostring(key)] = value
-  end
-  return not IsEmpty(newMap) and newMap or nil
-end
-
 --- Migrate data during first retrieval. Helpful in cases where you wish to change structure of data
 --- between driver versions.
 --- This map is of the form:
 --- {
 ---   "key": function(value) -> newValue
 --- }
+--- Drivers can register migrations via Persist:registerMigrations(map) before the first get() call.
 --- @type table<string, fun(value: any): any>
-local MIGRATIONS = {
-  ["ConfiguredNames"] = function(value)
-    for ns, nsNames in pairs(value or {}) do
-      value[ns] = convertMapIntKeysToStrings(nsNames)
-    end
-    if IsEmpty(value) then
-      value = nil
-    end
-    return value
-  end,
-  ["Cameras"] = function(value)
-    return convertMapIntKeysToStrings(value)
-  end,
-  ["GarageDoors"] = function(value)
-    return convertMapIntKeysToStrings(value)
-  end,
-  ["Doors"] = function(value)
-    return convertMapIntKeysToStrings(value)
-  end,
-  ["Windows"] = function(value)
-    return convertMapIntKeysToStrings(value)
-  end,
-  ["LockMechanisms"] = function(value)
-    return convertMapIntKeysToStrings(value)
-  end,
-  ["Macros"] = function(value)
-    return convertMapIntKeysToStrings(value)
-  end,
-  ["SecuritySystems"] = function(value)
-    return convertMapIntKeysToStrings(value)
-  end,
-  ["Televisions"] = function(value)
-    local televisions = convertMapIntKeysToStrings(value)
-    for _, television in pairs(televisions or {}) do
-      television["watchActivityVisibilities"] =
-        convertMapIntKeysToStrings(Select(television, "watchActivityVisibilities"))
-      television["listenActivityVisibilities"] =
-        convertMapIntKeysToStrings(Select(television, "listenActivityVisibilities"))
-    end
-    if IsEmpty(televisions) then
-      televisions = nil
-    end
-    return televisions
-  end,
-}
+local MIGRATIONS = {}
 
 --- Creates a new instance of the Persist class.
 --- @return Persist persist A new instance of the Persist class.
@@ -89,6 +30,16 @@ function Persist:new()
   local instance = setmetatable({}, self)
   instance._persist = {}
   return instance
+end
+
+--- Registers one or more data migrations.
+--- Migrations run once on first get() for each key, then remove themselves.
+--- @param migrations table<string, fun(value: any): any> A map of key -> migration function.
+--- @return void
+function Persist:registerMigrations(migrations)
+  for key, fn in pairs(migrations) do
+    MIGRATIONS[key] = fn
+  end
 end
 
 --- Retrieves a value from the persistence store.
@@ -143,6 +94,7 @@ end
 --- @param key string The key to set the value for.
 --- @param value any The value to store. If nil, the key will be deleted.
 --- @param encrypted? boolean Whether to encrypt the value (optional).
+--- @return void
 function Persist:set(key, value, encrypted)
   log:trace("Persist:set(%s, %s, %s)", key, value, encrypted)
   if value == nil then
@@ -160,6 +112,7 @@ end
 
 --- Deletes a value from the persistence store.
 --- @param key string The key to delete.
+--- @return void
 function Persist:delete(key)
   log:trace("Persist:delete(%s)", key)
   self:set(key, nil)
@@ -167,6 +120,7 @@ end
 
 --- Resets/clears specified keys from the persistence store.
 --- @param keys string[] Array of keys to delete.
+--- @return void
 function Persist:reset(keys)
   log:trace("Persist:reset(%s)", keys)
   for _, key in ipairs(keys) do
