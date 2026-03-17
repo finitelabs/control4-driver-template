@@ -35,7 +35,9 @@ infrastructure, build tooling, and common Lua libraries used across all Finite L
 - **run_test.sh** — Test runner script with LuaJIT
 
 ### Project Files
-- **package.json** — npm scripts for build, format, docs, package, and clean workflows
+- **Makefile** — build, format, docs, package, and clean targets
+- **package.json** — npm dependency declarations only (no scripts)
+- **CONTRIBUTING.md** — explains how the template system works
 - **.gitignore**, **LICENSE**, **CHANGELOG.md**, **README.md**
 
 ## Usage
