@@ -65,7 +65,7 @@ preprocess: ## Run preprocessor for all distributions
 	@for build in $(DISTRIBUTIONS); do \
 		./tools/preprocess --$$build || exit 1; \
 	done
-{% if has_gen_squishy %}
+
 # ─── Squishy ──────────────────────────────────────────────────────────────────
 
 .PHONY: gen-squishy
@@ -75,7 +75,7 @@ gen-squishy: ## Auto-generate squishy files from .c4zproj
 			(cd "$$driver_dir" && lua ../../../../tools/gen-squishy.lua) || exit 1; \
 		done; \
 	done
-{% endif %}
+
 # ─── Driver XML ───────────────────────────────────────────────────────────────
 
 .PHONY: update-xml update-xml-version update-xml-modified
@@ -161,9 +161,9 @@ zip: ## Zip .c4z and .pdf files per distribution
 # ─── Build ────────────────────────────────────────────────────────────────────
 
 .PHONY: build build-nodocs
-build: clean-build fmt preprocess {% if has_gen_squishy %}gen-squishy {% endif %}update-xml docs package zip ## Full build
+build: clean-build fmt preprocess gen-squishy update-xml docs package zip ## Full build
 
-build-nodocs: clean-build fmt preprocess {% if has_gen_squishy %}gen-squishy {% endif %}update-xml package ## Build without docs
+build-nodocs: clean-build fmt preprocess gen-squishy update-xml package ## Build without docs
 
 # ─── Clean ────────────────────────────────────────────────────────────────────
 
