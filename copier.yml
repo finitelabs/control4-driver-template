@@ -1,0 +1,91 @@
+_min_copier_version: "9.0.0"
+_subdirectory: template
+
+_jinja_extensions:
+  - jinja2.ext.do
+
+# Skip overwriting these on `copier update` if they already exist
+_skip_if_exists:
+  - "CHANGELOG.md"
+  - "README.md"
+
+# Conditionally exclude files based on answers
+_exclude:
+  - "{% if not has_values_lib %}src/lib/values.lua{% endif %}"
+  - "{% if not has_github_updater %}src/lib/github-updater.lua{% endif %}"
+  - "{% if not has_version_vendor %}vendor/version.lua{% endif %}"
+  - "{% if not has_gen_squishy %}tools/gen-squishy.lua{% endif %}"
+  - "{% if not has_tests %}test/{% endif %}"
+
+project_name:
+  type: str
+  help: "Project name (e.g., control4-esphome)"
+
+project_description:
+  type: str
+  help: "Short project description"
+  default: "A Control4 driver"
+
+author:
+  type: str
+  help: "Author name"
+  default: "Finite Labs"
+
+license_year:
+  type: str
+  help: "License year"
+  default: "2025"
+
+github_org:
+  type: str
+  help: "GitHub organization"
+  default: "finitelabs"
+
+distributions:
+  type: str
+  help: "Space-separated build distributions (e.g., 'drivercentral oss')"
+  default: "drivercentral oss"
+
+has_drivercentral_dev:
+  type: bool
+  help: "Include a separate drivercentral-dev distribution?"
+  default: false
+
+has_github_updater:
+  type: bool
+  help: "Include GitHub self-updater for non-DriverCentral builds?"
+  default: true
+
+has_gen_squishy:
+  type: bool
+  help: "Auto-generate squishy files (vs. hand-written)?"
+  default: true
+
+has_variants:
+  type: bool
+  help: "Does the preprocess tool need variant expansion support?"
+  default: false
+
+has_tests:
+  type: bool
+  help: "Include test directory with C4 shim and test runner?"
+  default: true
+
+has_values_lib:
+  type: bool
+  help: "Include src/lib/values.lua (value parsing/coercion utilities)?"
+  default: true
+
+has_version_vendor:
+  type: bool
+  help: "Include vendor/version.lua (semantic version comparison)?"
+  default: true
+
+readme_driver_slug:
+  type: str
+  help: "Driver slug used for README docs (e.g., 'esphome', 'mqtt_broker', 'home_connect')"
+
+readme_build:
+  type: str
+  help: "Build distribution used to generate README (e.g., 'oss', 'drivercentral')"
+  default: "oss"
