@@ -11,7 +11,6 @@ _skip_if_exists:
 
 # Conditionally exclude files based on answers
 _exclude:
-  - "{% if not has_values_lib %}src/lib/values.lua{% endif %}"
   - "{% if not has_github_updater %}src/lib/github-updater.lua{% endif %}"
   - "{% if not has_version_vendor %}vendor/version.lua{% endif %}"
   - "{% if not has_gen_squishy %}tools/gen-squishy.lua{% endif %}"
@@ -69,11 +68,6 @@ has_variants:
 has_tests:
   type: bool
   help: "Include test directory with C4 shim and test runner?"
-  default: true
-
-has_values_lib:
-  type: bool
-  help: "Include src/lib/values.lua (value parsing/coercion utilities)?"
   default: true
 
 has_version_vendor:
