@@ -13,7 +13,7 @@ _skip_if_exists:
 _exclude:
   - "{% if not has_github_updater %}src/lib/github-updater.lua{% endif %}"
   - "{% if not has_version_vendor %}vendor/version.lua{% endif %}"
-  - "{% if not has_gen_squishy %}tools/gen-squishy.lua{% endif %}"
+
   - "{% if not has_tests %}test/{% endif %}"
 
 project_name:
@@ -53,11 +53,6 @@ has_drivercentral_dev:
 has_github_updater:
   type: bool
   help: "Include GitHub self-updater for non-DriverCentral builds?"
-  default: true
-
-has_gen_squishy:
-  type: bool
-  help: "Auto-generate squishy files (vs. hand-written)?"
   default: true
 
 has_variants:
