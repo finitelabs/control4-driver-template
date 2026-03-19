@@ -13,7 +13,6 @@ _skip_if_exists:
 _exclude:
   - "{% if not has_github_updater %}src/lib/github-updater.lua{% endif %}"
   - "{% if not has_version_vendor %}vendor/version.lua{% endif %}"
-
   - "{% if not has_tests %}test/{% endif %}"
 
 project_name:
@@ -25,49 +24,24 @@ project_description:
   help: "Short project description"
   default: "A Control4 driver"
 
-author:
-  type: str
-  help: "Author name"
-  default: "Finite Labs"
-
-license_year:
-  type: str
-  help: "License year"
-  default: "2025"
-
-github_org:
-  type: str
-  help: "GitHub organization"
-  default: "finitelabs"
-
 distributions:
   type: str
   help: "Space-separated build distributions (e.g., 'drivercentral oss')"
   default: "drivercentral oss"
-
-has_drivercentral_dev:
-  type: bool
-  help: "Include a separate drivercentral-dev distribution?"
-  default: false
 
 has_github_updater:
   type: bool
   help: "Include GitHub self-updater for non-DriverCentral builds?"
   default: true
 
-has_variants:
+has_version_vendor:
   type: bool
-  help: "Does the preprocess tool need variant expansion support?"
-  default: false
+  help: "Include vendor/version.lua (semantic version comparison)?"
+  default: true
 
 has_tests:
   type: bool
   help: "Include test directory with C4 shim and test runner?"
-  default: true
-
-has_version_vendor:
-  type: bool
-  help: "Include vendor/version.lua (semantic version comparison)?"
   default: true
 
 readme_driver_slug:
