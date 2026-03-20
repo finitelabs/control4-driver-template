@@ -23,14 +23,6 @@ project_description:
   help: "Short project description"
   default: "A Control4 driver"
 
-author:
-  type: str
-  help: "Author name"
-
-license_year:
-  type: str
-  help: "License year"
-
 github_org:
   type: str
   help: "GitHub organization"

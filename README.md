@@ -63,8 +63,6 @@ Copier will show diffs for any files that changed in the template and let you re
 |---|---|---|
 | `project_name` | Project name (e.g., `control4-esphome`) | — |
 | `project_description` | Short description | `A Control4 driver` |
-| `author` | Author name | — |
-| `license_year` | License year | — |
 | `github_org` | GitHub organization | — |
 | `distributions` | Space-separated build targets | `drivercentral oss` |
 | `has_github_updater` | Include GitHub self-updater? | `true` |
