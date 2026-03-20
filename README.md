@@ -25,7 +25,7 @@ infrastructure, build tooling, and common Lua libraries used across all Finite L
 ### Vendor Libraries (`vendor/`)
 - **JSON.lua** — JSON encoder/decoder
 - **deferred.lua** — Promise/deferred implementation for async workflows
-- **version.lua** *(optional)* — Semantic version comparison
+- **version.lua** — Semantic version comparison
 - **cloud-client-byte.lua** — DriverCentral cloud client
 - **drivers-common-public/** — Control4's official shared libraries (handlers, lib, timer, url)
 - **xml/** — XML parser (xml2lua)
@@ -63,13 +63,10 @@ Copier will show diffs for any files that changed in the template and let you re
 |---|---|---|
 | `project_name` | Project name (e.g., `control4-esphome`) | — |
 | `project_description` | Short description | `A Control4 driver` |
+| `github_org` | GitHub organization | — |
 | `distributions` | Space-separated build targets | `drivercentral oss` |
 | `has_github_updater` | Include GitHub self-updater? | `true` |
-| `has_gen_squishy` | Auto-generate squishy files? | `true` |
-| `has_variants` | Variant expansion support in preprocess? | `false` |
 | `has_tests` | Include test directory? | `true` |
-| `has_values_lib` | Include `src/lib/values.lua`? | `true` |
-| `has_version_vendor` | Include `vendor/version.lua`? | `true` |
 | `readme_driver_slug` | Driver slug for README generation | — |
 | `readme_build` | Build distribution for README | `oss` |
 
