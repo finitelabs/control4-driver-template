@@ -12,7 +12,6 @@ _skip_if_exists:
 # Conditionally exclude files based on answers
 _exclude:
   - "{% if not has_github_updater %}src/lib/github-updater.lua{% endif %}"
-  - "{% if not has_version_vendor %}vendor/version.lua{% endif %}"
   - "{% if not has_tests %}test/{% endif %}"
 
 project_name:
@@ -24,6 +23,18 @@ project_description:
   help: "Short project description"
   default: "A Control4 driver"
 
+author:
+  type: str
+  help: "Author name"
+
+license_year:
+  type: str
+  help: "License year"
+
+github_org:
+  type: str
+  help: "GitHub organization"
+
 distributions:
   type: str
   help: "Space-separated build distributions (e.g., 'drivercentral oss')"
@@ -32,11 +43,6 @@ distributions:
 has_github_updater:
   type: bool
   help: "Include GitHub self-updater for non-DriverCentral builds?"
-  default: true
-
-has_version_vendor:
-  type: bool
-  help: "Include vendor/version.lua (semantic version comparison)?"
   default: true
 
 has_tests:
