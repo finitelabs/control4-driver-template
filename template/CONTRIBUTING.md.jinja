@@ -32,7 +32,7 @@ Changes to these files should be made in the
 {%- endif %}
 
 **Vendor libraries (`vendor/`):**
-- `JSON.lua`, `deferred.lua`, `cloud-client-byte.lua`{% if has_version_vendor %}, `version.lua`{% endif %}
+- `JSON.lua`, `deferred.lua`, `cloud-client-byte.lua`, `version.lua`
 - `drivers-common-public/` — Control4's official shared libraries
 - `xml/` — XML parser (xml2lua)
 
@@ -131,10 +131,9 @@ DRIVER_GITHUB_REPO = "{{ github_org }}/{{ project_name }}"
 <Driver type="c4z" name="driver" squishLua="true">
 <!-- #endif -->
 ```
-{%- if has_variants %}
 
 ### Variant Expansion
 
 Drivers can define variants via a `variants.json` file. The preprocessor expands these into multiple
 driver directories with substituted values, generating one .c4z per variant combination.
-{%- endif %}
+
