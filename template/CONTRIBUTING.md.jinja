@@ -24,17 +24,45 @@ Changes to these files should be made in the
 - `events.lua` — event firing and management
 - `http.lua` — HTTP client wrapper
 - `logging.lua` — structured logging with configurable levels
+- `lru.lua` — LRU cache utility
 - `persist.lua` — persistent storage abstraction
 - `utils.lua` — general utilities (XML, device queries, table helpers, type coercion)
 - `values.lua` — value parsing, coercion, and formatting
-{%- if has_github_updater %}
+{%- if 'oss' in distributions.split() %}
 - `github-updater.lua` — GitHub Releases self-updater (non-DriverCentral builds)
 {%- endif %}
 
 **Vendor libraries (`vendor/`):**
-- `JSON.lua`, `deferred.lua`, `cloud-client-byte.lua`, `version.lua`
+{%- if 'json' in vendor_modules.split() %}
+- `JSON.lua` — JSON encoder/decoder
+{%- endif %}
+{%- if 'deferred' in vendor_modules.split() %}
+- `deferred.lua` — promises/deferred implementation
+{%- endif %}
+{%- if 'drivercentral' in distributions.split() %}
+- `cloud-client-byte.lua` — DriverCentral cloud licensing
+{%- endif %}
+{%- if 'oss' in distributions.split() %}
+- `version.lua` — semver comparison (used by github-updater)
+{%- endif %}
+{%- if 'drivers-common-public' in vendor_modules.split() %}
 - `drivers-common-public/` — Control4's official shared libraries
+{%- endif %}
+{%- if 'xml' in vendor_modules.split() %}
 - `xml/` — XML parser (xml2lua)
+{%- endif %}
+{%- if 'bitn' in vendor_modules.split() %}
+- `bitn.lua` — bit manipulation library
+{%- endif %}
+{%- if 'bthome' in vendor_modules.split() %}
+- `bthome.lua` — BTHome protocol support
+{%- endif %}
+{%- if 'noiseprotocol' in vendor_modules.split() %}
+- `noiseprotocol.lua` — Noise Protocol encryption
+{%- endif %}
+{%- if 'protobuf' in vendor_modules.split() %}
+- `protobuf.lua` — Protocol Buffers
+{%- endif %}
 
 **Tools (`tools/`):**
 - `preprocess` — C-style `#ifdef`/`#ifndef` preprocessor for Lua, XML, and Markdown
@@ -43,9 +71,7 @@ Changes to these files should be made in the
 
 **Other:**
 - `.gitignore`, `LICENSE`, `CONTRIBUTING.md`
-{%- if has_tests %}
 - `test/c4_shim.lua`, `test/run_test.sh`
-{%- endif %}
 
 ### What's Driver-Specific (Yours to Edit)
 
@@ -117,7 +143,7 @@ The `tools/preprocess` script supports C-style conditional compilation in Lua, X
 
 ```lua
 --#ifdef DRIVERCENTRAL
-DC_PID = 819
+DC_PID = 1234
 DC_FILENAME = "driver.c4z"
 --#else
 DRIVER_GITHUB_REPO = "{{ github_org }}/{{ project_name }}"
@@ -136,4 +162,3 @@ DRIVER_GITHUB_REPO = "{{ github_org }}/{{ project_name }}"
 
 Drivers can define variants via a `variants.json` file. The preprocessor expands these into multiple
 driver directories with substituted values, generating one .c4z per variant combination.
-
