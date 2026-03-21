@@ -35,7 +35,7 @@ node_modules: package.json
 
 $(VENV):
 	python3 -m venv $(VENV)
-	$(VENV_PY) -m pip install --upgrade pip setuptools wheel M2Crypto lxml black
+	$(VENV_PY) -m pip install --upgrade pip setuptools wheel M2Crypto lxml black copier
 
 $(PACKAGER):
 	rm -rf dist/driverpackager
@@ -104,11 +104,19 @@ update-xml-modified:
 .PHONY: docs docs-html docs-pdf docs-readme
 docs: docs-readme docs-html docs-pdf ## Generate all documentation
 
+{% if readme_driver_slug == "root" %}
+docs-readme:
+	rm -rf ./images
+	cp -r documentation/images .
+	pandoc documentation/index.md \
+		-f gfm -t gfm --lua-filter=tools/pandoc-remove-style.lua -o README.md
+{% else %}
 docs-readme:
 	rm -rf ./images
 	cp -r drivers/$(README_DRIVER)/www/documentation/images .
 	pandoc build/$(README_BUILD)/drivers/$(README_DRIVER)/www/documentation/index.md \
 		-f gfm -t gfm --lua-filter=tools/pandoc-remove-style.lua -o README.md
+{% endif %}
 
 docs-html: node_modules
 	@for build in $(DISTRIBUTIONS); do \
