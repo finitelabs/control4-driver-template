@@ -105,10 +105,10 @@ update-xml-modified:
 docs: docs-readme docs-html docs-pdf ## Generate all documentation
 
 {% if readme_driver_slug == "root" %}
-docs-readme:
+docs-readme: preprocess
 	rm -rf ./images
 	cp -r documentation/images .
-	pandoc documentation/index.md \
+	pandoc build/$(README_BUILD)/documentation/index.md \
 		-f gfm -t gfm --lua-filter=tools/pandoc-remove-style.lua -o README.md
 {% else %}
 docs-readme:
