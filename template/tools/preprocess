@@ -166,8 +166,42 @@ def process_file(
             try:
                 changelog_path = Path(__file__).parent.parent / "CHANGELOG.md"
                 with open(changelog_path, "r", encoding="utf-8") as cf:
-                    changelog_content = cf.read()
-                    output_lines.append(changelog_content)
+                    changelog_lines = cf.readlines()
+                # Process the changelog through the same preprocessor logic
+                # so that conditional directives (e.g. #ifndef DRIVERCENTRAL)
+                # are resolved before embedding.
+                cl_stack = []
+                cl_including = True
+                for cl_line in changelog_lines:
+                    cl_ifdef = xml_ifdef_pattern.match(cl_line)
+                    cl_ifndef = xml_ifndef_pattern.match(cl_line)
+                    cl_else = xml_else_pattern.match(cl_line)
+                    cl_endif = xml_endif_pattern.match(cl_line)
+                    if cl_ifdef:
+                        cond = cl_ifdef.group(1)
+                        cl_stack.append((cond, cl_including))
+                        if cl_including:
+                            cl_including = cond in conditions
+                        continue
+                    if cl_ifndef:
+                        cond = cl_ifndef.group(1)
+                        cl_stack.append((cond, cl_including))
+                        if cl_including:
+                            cl_including = cond not in conditions
+                        continue
+                    if cl_else:
+                        if cl_stack:
+                            cond, parent = cl_stack[-1]
+                            if parent:
+                                cl_including = not cl_including
+                        continue
+                    if cl_endif:
+                        if cl_stack:
+                            _, parent = cl_stack.pop()
+                            cl_including = parent if not cl_stack else cl_including
+                        continue
+                    if cl_including:
+                        output_lines.append(cl_line)
             except Exception as e:
                 print(f"Error embedding changelog in {file_path}: {e}")
             continue
