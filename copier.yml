@@ -12,6 +12,7 @@ _skip_if_exists:
 _exclude:
   - "{% if 'oss' not in distributions.split() %}src/lib/github-updater.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() and 'version' not in vendor_modules.split() %}vendor/version.lua{% endif %}"
+  - "{% if 'oss' not in distributions.split() %}.github/workflows/release.yml{% endif %}"
   - "{% if 'drivercentral' not in distributions.split() %}vendor/cloud-client-byte.lua{% endif %}"
   - "{% if 'json' not in vendor_modules.split() %}vendor/JSON.lua{% endif %}"
   - "{% if 'deferred' not in vendor_modules.split() %}vendor/deferred.lua{% endif %}"
