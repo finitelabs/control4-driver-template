@@ -22,6 +22,13 @@ _exclude:
   - "{% if 'bthome' not in vendor_modules.split() %}vendor/bthome.lua{% endif %}"
   - "{% if 'noiseprotocol' not in vendor_modules.split() %}vendor/noiseprotocol.lua{% endif %}"
   - "{% if 'protobuf' not in vendor_modules.split() %}vendor/protobuf.lua{% endif %}"
+  - "{% if 'bindings' not in lib_modules.split() %}src/lib/bindings.lua{% endif %}"
+  - "{% if 'conditionals' not in lib_modules.split() %}src/lib/conditionals.lua{% endif %}"
+  - "{% if 'events' not in lib_modules.split() %}src/lib/events.lua{% endif %}"
+  - "{% if 'http' not in lib_modules.split() %}src/lib/http.lua{% endif %}"
+  - "{% if 'lru' not in lib_modules.split() %}src/lib/lru{% endif %}"
+  - "{% if 'persist' not in lib_modules.split() %}src/lib/persist.lua{% endif %}"
+  - "{% if 'values' not in lib_modules.split() %}src/lib/values.lua{% endif %}"
 
 project_name:
   type: str
@@ -59,3 +66,8 @@ vendor_modules:
   type: str
   help: "Space-separated vendor modules (available: json deferred drivers-common-public xml bitn bthome noiseprotocol protobuf)"
   default: "json deferred drivers-common-public xml"
+
+lib_modules:
+  type: str
+  help: "Space-separated lib modules (available: bindings conditionals events http lru persist values)"
+  default: "bindings conditionals events http lru persist values"
