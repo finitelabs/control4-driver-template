@@ -99,14 +99,7 @@ end
 --- @param propertySuffix string? Optional suffix to append to the property value (e.g., "°C" for temperature units).
 --- @return boolean changed True if the value changed, false otherwise.
 function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
-  log:trace(
-    "Values:update(%s, %s, %s, %s, %s)",
-    name,
-    value,
-    varType,
-    callbackOrWritable,
-    propertySuffix
-  )
+  log:trace("Values:update(%s, %s, %s, %s, %s)", name, value, varType, callbackOrWritable, propertySuffix)
 
   if type(callbackOrWritable) == "function" then
     self:setCallback(name, callbackOrWritable)
