@@ -99,14 +99,7 @@ end
 --- @param propertySuffix string? Optional suffix to append to the property value (e.g., "°C" for temperature units).
 --- @return boolean changed True if the value changed, false otherwise.
 function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
-  log:trace(
-    "Values:update(%s, %s, %s, %s, %s)",
-    name,
-    value,
-    varType,
-    callbackOrWritable,
-    propertySuffix
-  )
+  log:trace("Values:update(%s, %s, %s, %s, %s)", name, value, varType, callbackOrWritable, propertySuffix)
 
   if type(callbackOrWritable) == "function" then
     self:setCallback(name, callbackOrWritable)
@@ -250,6 +243,9 @@ end
 --- values are re-added in a consistent order based on their index.
 --- Deleted values are restored as hidden placeholders to preserve
 --- variable ID ordering for subsequent variables.
+---
+--- Call this from OnDriverInit: programming attached to variables added
+--- after OnDriverInit may not work after a Director restart.
 --- @return void
 function Values:restoreValues()
   log:trace("Values:restoreValues()")
