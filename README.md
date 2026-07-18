@@ -10,6 +10,8 @@ infrastructure, build tooling, and common Lua libraries used across all Finite L
   expansion for generating multiple driver configurations from a single source.
 - **gen-squishy.lua** — Auto-generates squishy files for squish (Lua module bundler) from driver.c4zproj.
 - **pandoc-remove-style.lua** — Pandoc filter for cleaning up markdown when generating README from docs.
+- **github-setup** - Checks the GitHub repository against the standard settings and prints the
+  drift; with --apply it creates the repository if needed and fixes the drift.
 
 ### Common Libraries (`src/lib/`)
 - **bindings.lua** — Binding management (add/remove/query Control4 driver bindings)
@@ -47,6 +49,33 @@ infrastructure, build tooling, and common Lua libraries used across all Finite L
 ```bash
 copier copy gh:finitelabs/control4-driver-template my-new-driver
 ```
+
+### Set Up the GitHub Repository
+
+After scaffolding, create the GitHub repository and apply the standard settings:
+
+```bash
+cd my-new-driver
+./tools/github-setup           # dry run: prints the changes it would make
+./tools/github-setup --apply   # make the changes (add --public for a public repo)
+```
+
+The repository is `<github_org>/<project_name>` from the copier answers, so
+the script works against whatever organization or personal account the
+project was scaffolded for. It is idempotent and can be re-run on existing
+repositories to check for or fix drift. The standard is:
+
+- Projects and wiki disabled
+- Squash merges only, auto-merge allowed, head branches deleted on merge
+- Default branch `main` (an existing `master` gets renamed)
+- Branch ruleset named `Default` on the default branch: no deletions or force
+  pushes, PRs require one approval and a passing `build` check, squash merges
+  only, org admins can bypass
+- Dependabot alerts and security updates enabled
+
+One step stays manual: add the repository to the project's VCS integration in
+YouTrack so the webhook gets installed. YouTrack generates the webhook
+endpoint, so it cannot be scripted from the GitHub side.
 
 ### Update an Existing Driver with Latest Template
 
