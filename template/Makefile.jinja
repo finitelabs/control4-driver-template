@@ -25,6 +25,16 @@ else
   export CFLAGS   := -DPRAGMA_IGNORE_UNUSED_LABEL= -DPRAGMA_WARN_STRICT_PROTOTYPES=
 endif
 
+# WeasyPrint (docs PDF) links GObject/Pango/Cairo native libs at runtime. On
+# macOS these are Homebrew-installed outside the default dyld search path, so
+# point WeasyPrint at them. On Linux (incl. CI) the libs are on the standard
+# loader path and no override is needed.
+ifeq ($(shell uname -s),Darwin)
+  WEASYPRINT_ENV := DYLD_FALLBACK_LIBRARY_PATH=$(shell brew --prefix 2>/dev/null)/lib
+else
+  WEASYPRINT_ENV :=
+endif
+
 # ─── Help ─────────────────────────────────────────────────────────────────────
 
 .PHONY: help
@@ -43,7 +53,7 @@ node_modules: package.json
 
 $(VENV):
 	python3 -m venv $(VENV)
-	$(VENV_PY) -m pip install --upgrade pip setuptools wheel M2Crypto lxml black copier
+	$(VENV_PY) -m pip install --upgrade pip setuptools wheel M2Crypto lxml black copier weasyprint
 
 $(PACKAGER):
 	rm -rf dist/driverpackager
@@ -129,13 +139,13 @@ docs-readme:
 docs-html: node_modules
 	@for build in $(DISTRIBUTIONS); do \
 		for driver_dir in build/$$build/drivers/*/; do \
-			npx generate-md --layout github \
-				--input "$${driver_dir}www/documentation/index.md" \
-				--output "$${driver_dir}www/documentation"; \
+			node tools/render-md.mjs \
+				"$${driver_dir}www/documentation/index.md" \
+				"$${driver_dir}www/documentation"; \
 		done; \
 	done
 
-docs-pdf: node_modules
+docs-pdf: $(VENV)
 	@for build in $(DISTRIBUTIONS); do \
 		mkdir -p "dist/$$build"; \
 		for driver_dir in build/$$build/drivers/*/; do \
@@ -146,9 +156,9 @@ docs-pdf: node_modules
 			fi; \
 			pdf_output="dist/$$build/$$driver_display_name Documentation.pdf"; \
 			if [ -f "$$pdf_output" ]; then continue; fi; \
-			npx electron-pdf --marginsType 0 \
-				--input "$$(pwd)/$${driver_dir}www/documentation/index.html" \
-				--output "$$pdf_output" || exit 1; \
+			$(WEASYPRINT_ENV) $(VENV_PY) tools/render-pdf.py \
+				"$$(pwd)/$${driver_dir}www/documentation/index.html" \
+				"$$pdf_output" || exit 1; \
 		done; \
 	done
 
