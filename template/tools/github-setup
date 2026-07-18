@@ -1,0 +1,144 @@
+#!/usr/bin/env bash
+# Create the GitHub repository for this project if it does not exist, then
+# converge it to the standard Finite Labs repository settings. Safe to re-run
+# at any time.
+#
+# Usage: tools/github-setup [--public]
+#
+# New repositories are created private. Pass --public to create a public
+# repository instead. The flag does not change the visibility of an existing
+# repository; flip that deliberately in the GitHub UI when a driver is ready
+# for release.
+#
+# Standard settings applied:
+#   - Projects and wiki disabled
+#   - Squash merges only, auto-merge allowed, head branches deleted on merge
+#   - Default branch "main" (renames "master" if found)
+#   - Branch ruleset "Default": no deletions or force pushes, PRs require one
+#     approval and a passing "build" check, org admins can bypass
+#   - Dependabot alerts and security updates enabled
+#
+# Requires the GitHub CLI (gh) authenticated with admin access to the org.
+
+set -euo pipefail
+
+ANSWERS=.copier-answers.yml
+VISIBILITY=private
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --public) VISIBILITY=public ;;
+    -h|--help)
+      sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    *) echo "error: unknown argument: $1 (see --help)" >&2; exit 1 ;;
+  esac
+  shift
+done
+
+command -v gh >/dev/null || { echo "error: gh is not installed" >&2; exit 1; }
+[ -f "$ANSWERS" ] || { echo "error: $ANSWERS not found; run from the project root" >&2; exit 1; }
+
+answer() { sed -n "s/^$1: *//p" "$ANSWERS" | tr -d '"'; }
+ORG=$(answer github_org)
+NAME=$(answer project_name)
+DESCRIPTION=$(answer project_description)
+REPO="$ORG/$NAME"
+
+[ -n "$ORG" ] && [ -n "$NAME" ] || { echo "error: github_org or project_name missing from $ANSWERS" >&2; exit 1; }
+
+echo "Repository: $REPO"
+
+CREATED=false
+if gh repo view "$REPO" --json name >/dev/null 2>&1; then
+  echo "Repository exists"
+else
+  echo "Creating $VISIBILITY repository"
+  gh repo create "$REPO" "--$VISIBILITY" --description "$DESCRIPTION" >/dev/null
+  CREATED=true
+fi
+
+# Local git wiring. Initialize if needed and point origin at the repository,
+# but leave committing and pushing history to the user unless the repository
+# was just created and there is something to push.
+if [ ! -d .git ]; then
+  git init -b main >/dev/null
+  echo "Initialized local git repository on main"
+fi
+if ! git remote get-url origin >/dev/null 2>&1; then
+  git remote add origin "git@github.com:$REPO.git"
+  echo "Added origin remote"
+fi
+if $CREATED; then
+  if git rev-parse HEAD >/dev/null 2>&1; then
+    git push -u origin "$(git branch --show-current)"
+  else
+    echo "note: no local commits yet; push with: git push -u origin main"
+  fi
+fi
+
+DEFAULT_BRANCH=$(gh api "repos/$REPO" --jq .default_branch)
+if [ "$DEFAULT_BRANCH" = "master" ]; then
+  echo "Renaming default branch master to main"
+  gh api -X POST "repos/$REPO/branches/master/rename" -f new_name=main >/dev/null
+fi
+
+echo "Applying repository settings"
+gh api -X PATCH "repos/$REPO" \
+  -F has_projects=false \
+  -F has_wiki=false \
+  -F allow_squash_merge=true \
+  -F allow_merge_commit=false \
+  -F allow_rebase_merge=false \
+  -F allow_auto_merge=true \
+  -F delete_branch_on_merge=true >/dev/null
+
+echo "Applying branch ruleset"
+RULESET=$(cat << 'EOF'
+{
+  "name": "Default",
+  "target": "branch",
+  "enforcement": "active",
+  "bypass_actors": [
+    {"actor_id": null, "actor_type": "OrganizationAdmin", "bypass_mode": "always"}
+  ],
+  "conditions": {"ref_name": {"exclude": [], "include": ["~DEFAULT_BRANCH"]}},
+  "rules": [
+    {"type": "deletion"},
+    {"type": "non_fast_forward"},
+    {"type": "pull_request", "parameters": {
+      "allowed_merge_methods": ["squash"],
+      "dismiss_stale_reviews_on_push": true,
+      "dismissal_restriction": {"allowed_actors": [], "enabled": false},
+      "require_code_owner_review": false,
+      "require_last_push_approval": false,
+      "required_approving_review_count": 1,
+      "required_review_thread_resolution": false,
+      "required_reviewers": []
+    }},
+    {"type": "required_status_checks", "parameters": {
+      "do_not_enforce_on_create": false,
+      "required_status_checks": [{"context": "build", "integration_id": 15368}],
+      "strict_required_status_checks_policy": false
+    }}
+  ]
+}
+EOF
+)
+EXISTING=$(gh api "repos/$REPO/rulesets" --jq '[.[] | select(.name == "Default")][0].id // empty')
+if [ -n "$EXISTING" ]; then
+  echo "$RULESET" | gh api -X PUT "repos/$REPO/rulesets/$EXISTING" --input - >/dev/null
+else
+  echo "$RULESET" | gh api -X POST "repos/$REPO/rulesets" --input - >/dev/null
+fi
+
+echo "Enabling Dependabot alerts and security updates"
+gh api -X PUT "repos/$REPO/vulnerability-alerts" >/dev/null
+gh api -X PUT "repos/$REPO/automated-security-fixes" >/dev/null
+
+echo "Done."
+echo
+echo "Remaining manual step: add this repository to the project's VCS"
+echo "integration in YouTrack (Administration > Projects > VCS) so the"
+echo "webhook gets installed."
