@@ -53,7 +53,7 @@ node_modules: package.json
 
 $(VENV):
 	python3 -m venv $(VENV)
-	$(VENV_PY) -m pip install --upgrade pip setuptools wheel M2Crypto lxml black copier weasyprint
+	$(VENV_PY) -m pip install --upgrade pip setuptools wheel M2Crypto lxml black copier weasyprint markdown-it-py[linkify] mdit-py-plugins pygments
 
 $(PACKAGER):
 	rm -rf dist/driverpackager
@@ -136,10 +136,10 @@ docs-readme:
 		-f gfm -t gfm --lua-filter=tools/pandoc-remove-style.lua -o README.md
 {% endif %}
 
-docs-html: node_modules
+docs-html: $(VENV)
 	@for build in $(DISTRIBUTIONS); do \
 		for driver_dir in build/$$build/drivers/*/; do \
-			node tools/render-md.mjs \
+			$(VENV_PY) tools/render-docs.py md2html \
 				"$${driver_dir}www/documentation/index.md" \
 				"$${driver_dir}www/documentation"; \
 		done; \
@@ -156,7 +156,7 @@ docs-pdf: $(VENV)
 			fi; \
 			pdf_output="dist/$$build/$$driver_display_name Documentation.pdf"; \
 			if [ -f "$$pdf_output" ]; then continue; fi; \
-			$(WEASYPRINT_ENV) $(VENV_PY) tools/render-pdf.py \
+			$(WEASYPRINT_ENV) $(VENV_PY) tools/render-docs.py html2pdf \
 				"$$(pwd)/$${driver_dir}www/documentation/index.html" \
 				"$$pdf_output" || exit 1; \
 		done; \
