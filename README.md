@@ -10,8 +10,8 @@ infrastructure, build tooling, and common Lua libraries used across all Finite L
   expansion for generating multiple driver configurations from a single source.
 - **gen-squishy.lua** — Auto-generates squishy files for squish (Lua module bundler) from driver.c4zproj.
 - **pandoc-remove-style.lua** — Pandoc filter for cleaning up markdown when generating README from docs.
-- **github-setup** - Creates the GitHub repository if it does not exist and converges it to the
-  standard repository settings. Safe to re-run.
+- **github-setup** - Checks the GitHub repository against the standard settings and prints the
+  drift; with --apply it creates the repository if needed and fixes the drift.
 
 ### Common Libraries (`src/lib/`)
 - **bindings.lua** — Binding management (add/remove/query Control4 driver bindings)
@@ -56,12 +56,14 @@ After scaffolding, create the GitHub repository and apply the standard settings:
 
 ```bash
 cd my-new-driver
-make github-setup            # creates a private repo
-./tools/github-setup --public
+./tools/github-setup           # dry run: prints the changes it would make
+./tools/github-setup --apply   # make the changes (add --public for a public repo)
 ```
 
-The script is idempotent and can be re-run on existing repositories to bring
-them back to the standard. The standard is:
+The repository is `<github_org>/<project_name>` from the copier answers, so
+the script works against whatever organization or personal account the
+project was scaffolded for. It is idempotent and can be re-run on existing
+repositories to check for or fix drift. The standard is:
 
 - Projects and wiki disabled
 - Squash merges only, auto-merge allowed, head branches deleted on merge

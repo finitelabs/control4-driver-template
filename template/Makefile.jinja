@@ -37,10 +37,6 @@ help: ## Show this help
 .PHONY: init
 init: node_modules $(VENV) $(PACKAGER) ## One-time setup: install all dependencies
 
-.PHONY: github-setup
-github-setup: ## Create the GitHub repo if missing and apply standard settings
-	./tools/github-setup
-
 node_modules: package.json
 	npm install
 	@touch $@
