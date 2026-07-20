@@ -14,11 +14,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-
       - name: Setup Lua
         uses: leafo/gh-actions-lua@v12
         with:
@@ -29,6 +24,13 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Setup stylua
+        uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
+          version: latest
+          args: --version
+
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -37,8 +39,6 @@ jobs:
             libxslt-dev \
             libssl-dev \
             swig \
-            pandoc \
-            xmlstarlet \
             libpango-1.0-0 \
             libpangocairo-1.0-0 \
             libcairo2 \
@@ -72,7 +72,6 @@ jobs:
             echo "$UNTRACKED"
             exit 1
           fi
-
 {% for dist in distributions.split() %}
 
       - name: Upload {{ dist }} artifacts

@@ -1,22 +1,25 @@
 #!/usr/bin/env python3
-"""Driver documentation renderer: Markdown -> styled HTML -> PDF.
+"""Driver documentation generation (no Node, no browser).
 
-Single, self-contained pipeline (no Node, no browser):
+Subcommands:
+  docs.py md2html  <input.md>   <output-dir>   # styled HTML -> <output-dir>/index.html
+  docs.py html2pdf <input.html> <output.pdf>   # HTML -> PDF
+  docs.py readme   <input.md>   <output.md>    # driver docs -> repo README.md
+
+Pipeline:
   - Markdown -> HTML via markdown-it-py (GitHub-flavored, HTML passthrough),
-    with syntax highlighting by Pygments.
-  - HTML is wrapped in a vendored github-markdown stylesheet plus print rules,
-    written to the driver's www/documentation (shipped in the driver and shown
-    by Control4's documentation viewer).
+    with syntax highlighting by Pygments. Wrapped in a vendored github-markdown
+    stylesheet plus print rules and written to the driver's www/documentation
+    (shipped in the driver and shown by Control4's documentation viewer).
   - HTML -> PDF via WeasyPrint, a CSS Paged Media engine. Page size/margins come
     from the @page rule; pagination is automatic and content-aware (headings
     kept with their content, tables/code never split, orphan/widow control) —
     no hand-placed page-break markers required.
-
-Subcommands:
-  render-docs.py md2html  <input.md>   <output-dir>   # writes <output-dir>/index.html
-  render-docs.py html2pdf <input.html> <output.pdf>   # writes the PDF
+  - README is the driver docs markdown with <style> blocks stripped, then
+    normalized with mdformat.
 """
 
+import re
 import sys
 from pathlib import Path
 
@@ -101,25 +104,24 @@ def html2pdf(input_path: Path, output_path: Path) -> None:
     HTML(filename=str(input_path)).write_pdf(str(output_path))
 
 
-def main() -> int:
-    if len(sys.argv) != 4 or sys.argv[1] not in ("md2html", "html2pdf"):
-        print(
-            "Usage:\n"
-            "  render-docs.py md2html  <input.md>   <output-dir>\n"
-            "  render-docs.py html2pdf <input.html> <output.pdf>",
-            file=sys.stderr,
-        )
-        return 1
+def readme(input_path: Path, output_path: Path) -> None:
+    import mdformat
 
-    cmd, src, dst = (
-        sys.argv[1],
-        Path(sys.argv[2]).resolve(),
-        Path(sys.argv[3]).resolve(),
-    )
-    if cmd == "md2html":
-        md2html(src, dst)
-    else:
-        html2pdf(src, dst)
+    text = input_path.read_text(encoding="utf-8")
+    # Strip <style> blocks (screen-only chrome), then normalize.
+    text = re.sub(r"<style\b[^>]*>.*?</style>", "", text, flags=re.S | re.I)
+    text = mdformat.text(text, options={"wrap": 80}, extensions={"gfm"})
+    output_path.write_text(text, encoding="utf-8")
+
+
+_COMMANDS = {"md2html": md2html, "html2pdf": html2pdf, "readme": readme}
+
+
+def main() -> int:
+    if len(sys.argv) != 4 or sys.argv[1] not in _COMMANDS:
+        print(__doc__, file=sys.stderr)
+        return 1
+    _COMMANDS[sys.argv[1]](Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve())
     return 0
 
 
