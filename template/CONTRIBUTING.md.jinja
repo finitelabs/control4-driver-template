@@ -57,6 +57,9 @@ synced with `copier update`.
 {%- if 'bitn' in vendor_modules.split() %}
 - `bitn.lua` — bit manipulation library
 {%- endif %}
+{%- if 'crypto' in vendor_modules.split() %}
+- `crypto.lua` — cryptographic primitives (core build; requires `bitn`)
+{%- endif %}
 {%- if 'bthome' in vendor_modules.split() %}
 - `bthome.lua` — BTHome protocol support
 {%- endif %}
