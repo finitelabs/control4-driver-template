@@ -78,7 +78,10 @@ fmt-py: $(VENV)
 	$(VENV_BLACK) tools/*.py
 
 fmt-md: $(VENV)
-	$(VENV_PY) -m mdformat --wrap 80 ./drivers/*/www/documentation/*.md documentation/*.md *.md
+	@files=""; for g in ./drivers/*/www/documentation/*.md documentation/*.md *.md; do \
+		[ -e "$$g" ] && files="$$files $$g"; \
+	done; \
+	[ -z "$$files" ] || $(VENV_PY) -m mdformat --wrap 80 $$files
 
 # ─── Preprocess ───────────────────────────────────────────────────────────────
 
