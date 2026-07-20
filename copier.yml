@@ -19,6 +19,7 @@ _exclude:
   - "{% if 'drivers-common-public' not in vendor_modules.split() %}vendor/drivers-common-public{% endif %}"
   - "{% if 'xml' not in vendor_modules.split() %}vendor/xml{% endif %}"
   - "{% if 'bitn' not in vendor_modules.split() %}vendor/bitn.lua{% endif %}"
+  - "{% if 'crypto' not in vendor_modules.split() %}vendor/crypto.lua{% endif %}"
   - "{% if 'bthome' not in vendor_modules.split() %}vendor/bthome.lua{% endif %}"
   - "{% if 'noiseprotocol' not in vendor_modules.split() %}vendor/noiseprotocol.lua{% endif %}"
   - "{% if 'protobuf' not in vendor_modules.split() %}vendor/protobuf.lua{% endif %}"
@@ -64,7 +65,7 @@ primary_color:
 
 vendor_modules:
   type: str
-  help: "Space-separated vendor modules (available: json deferred drivers-common-public xml bitn bthome noiseprotocol protobuf)"
+  help: "Space-separated vendor modules (available: json deferred drivers-common-public xml bitn crypto bthome noiseprotocol protobuf). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol)."
   default: "json deferred drivers-common-public xml"
 
 lib_modules:
