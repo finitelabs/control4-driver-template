@@ -69,10 +69,13 @@ fmt: fmt-lua fmt-py fmt-md ## Format all code
 
 # stylua is a standalone binary (brew install stylua / stylua-action in CI).
 fmt-lua:
-	stylua \
+	@dirs=""; for d in ./drivers ./src ./test ./tools ./vendor; do \
+		[ -d "$$d" ] && dirs="$$dirs $$d"; \
+	done; \
+	[ -z "$$dirs" ] || stylua \
 		--indent-type Spaces --column-width 120 --line-endings Unix \
 		--indent-width 2 --quote-style AutoPreferDouble \
-		-g '*.lua' -v ./drivers ./src ./test ./tools ./vendor
+		-g '*.lua' -v $$dirs
 
 fmt-py: $(VENV)
 	$(VENV_BLACK) tools/*.py
