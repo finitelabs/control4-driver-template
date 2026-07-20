@@ -193,9 +193,9 @@ zip: $(VENV) ## Zip .c4z and .pdf files per distribution
 # ─── Build ────────────────────────────────────────────────────────────────────
 
 .PHONY: build build-nodocs
-build: clean-build preprocess gen-squishy update-xml fmt docs package zip ## Full build
+build: clean-build fmt preprocess gen-squishy update-xml docs package zip ## Full build
 
-build-nodocs: clean-build preprocess gen-squishy update-xml fmt package ## Build without docs
+build-nodocs: clean-build fmt preprocess gen-squishy update-xml package ## Build without docs
 
 # ─── Clean ────────────────────────────────────────────────────────────────────
 
