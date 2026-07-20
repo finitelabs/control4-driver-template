@@ -98,16 +98,3 @@ Copier will show diffs for any files that changed in the template and let you re
 | `has_tests` | Include test directory? | `true` |
 | `readme_driver_slug` | Driver slug for README generation | — |
 | `readme_build` | Build distribution for README | `oss` |
-
-## Source Repos
-
-This template was created by unifying shared code from:
-- [control4-home-connect](https://github.com/finitelabs/control4-home-connect)
-- [control4-esphome](https://github.com/finitelabs/control4-esphome)
-- [control4-mqtt](https://github.com/finitelabs/control4-mqtt)
-
-When the "best" version of a shared file differed across repos, the most complete/modern version was chosen:
-- **HC/ES version** (identical, most complete): conditionals, http, logging, gen-squishy, pandoc-remove-style, drivers-common-public (handlers, timer, url)
-- **ES version** (most advanced): preprocess (variant support), deferred (modern annotations), utils (core + binary serialization), drivers-common-public/lib
-- **ES/MQ version** (identical): values, github-updater, version
-- **HC version** (most complete): persist
