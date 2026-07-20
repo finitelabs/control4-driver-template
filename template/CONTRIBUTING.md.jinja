@@ -93,17 +93,21 @@ synced with `copier update`.
 
 ## Updating Shared Code
 
-When the template is updated, sync changes into this repo:
+Copier is only needed for this occasional sync — it is **not** a build
+dependency and is intentionally not installed by `make init`. Run it without
+installing anything:
 
 ```bash
-copier update --trust
+uvx copier update --trust        # using uv (https://docs.astral.sh/uv/)
+# or:
+pipx run copier update --trust   # using pipx
 ```
 
 Copier will show diffs for any files that changed and let you resolve conflicts.
 It tracks which template version you're on via the `.copier-answers.yml` file
 (committed to the repo).
 
-To update shared code for **all** driver repos, run `copier update` in each one.
+To update shared code for **all** driver repos, run the same command in each one.
 
 ## Build System
 
