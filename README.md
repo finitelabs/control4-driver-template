@@ -3,34 +3,45 @@
 [Copier](https://copier.readthedocs.io/) template for Control4 driver projects. Contains shared
 infrastructure, build tooling, and common Lua libraries used across all Finite Labs drivers.
 
+The toolchain is Python + a few standalone binaries — **no Node/npm**. `make init` creates a local
+`.venv` with everything the build needs (docs, formatters, and the driver packager's crypto/XML libs).
+
 ## What's Included
 
 ### Build Tooling (`tools/`)
-- **preprocess** — C preprocessor-style `#ifdef`/`#ifndef` for Lua, XML, and Markdown. Supports variant
-  expansion for generating multiple driver configurations from a single source.
+- **preprocess.py** — C preprocessor-style `#ifdef`/`#ifndef` for Lua, XML, and Markdown. Supports
+  variant expansion for generating multiple driver configurations from a single source.
+- **docs.py** — documentation generation: Markdown → HTML (markdown-it-py + Pygments) → PDF
+  (WeasyPrint, a CSS Paged Media engine — no browser), plus the repo README.
+- **package.py** — packaging helpers: driver.xml version/modified stamping and zip bundling (stdlib).
 - **gen-squishy.lua** — Auto-generates squishy files for squish (Lua module bundler) from driver.c4zproj.
-- **pandoc-remove-style.lua** — Pandoc filter for cleaning up markdown when generating README from docs.
-- **github-setup** - Checks the GitHub repository against the standard settings and prints the
-  drift; with --apply it creates the repository if needed and fixes the drift.
+- **github-markdown.css** — Vendored stylesheet for the rendered documentation.
+- **github-setup** — Checks the GitHub repository against the standard settings and prints the
+  drift; with `--apply` it creates the repository if needed and fixes the drift.
 
-### Common Libraries (`src/lib/`)
+### Common Libraries (`src/lib/`, selected via `lib_modules`)
 - **bindings.lua** — Binding management (add/remove/query Control4 driver bindings)
 - **conditionals.lua** — Conditional/programming UI management
 - **events.lua** — Event firing and management
 - **http.lua** — HTTP client wrapper around C4:urlGet/urlPost/urlPut/urlDelete
-- **logging.lua** — Structured logging with configurable levels (Fatal through Ultra)
+- **lru.lua** — LRU cache utility
 - **persist.lua** — Persistent storage abstraction over C4 PersistData
-- **utils.lua** — General utilities (XML parsing, device queries, table helpers, type coercion, etc.)
-- **values.lua** *(optional)* — Value parsing, coercion, and formatting utilities
-- **github-updater.lua** *(optional)* — GitHub Releases-based self-updater for non-DriverCentral builds
+- **values.lua** — Value parsing, coercion, and formatting utilities
+- **logging.lua** / **utils.lua** — Structured logging and general utilities (always included)
+- **github-updater.lua** — GitHub Releases-based self-updater for non-DriverCentral (`oss`) builds
 
-### Vendor Libraries (`vendor/`)
+### Vendor Libraries (`vendor/`, selected via `vendor_modules`)
 - **JSON.lua** — JSON encoder/decoder
 - **deferred.lua** — Promise/deferred implementation for async workflows
 - **version.lua** — Semantic version comparison
 - **cloud-client-byte.lua** — DriverCentral cloud client
 - **drivers-common-public/** — Control4's official shared libraries (handlers, lib, timer, url)
 - **xml/** — XML parser (xml2lua)
+- **bitn.lua** — bit manipulation library
+- **crypto.lua** — cryptographic primitives (core build; requires `bitn`)
+- **bthome.lua** — BTHome protocol support
+- **noiseprotocol.lua** — Noise Protocol encryption
+- **protobuf.lua** — Protocol Buffers
 
 ### Test Support (`test/`)
 - **c4_shim.lua** — Shim layer replacing C4 API calls with native Lua equivalents for local testing
@@ -38,16 +49,25 @@ infrastructure, build tooling, and common Lua libraries used across all Finite L
 
 ### Project Files
 - **Makefile** — build, format, docs, package, and clean targets
-- **package.json** — npm dependency declarations only (no scripts)
 - **CONTRIBUTING.md** — explains how the template system works
 - **.gitignore**, **LICENSE**, **CHANGELOG.md**, **README.md**
+
+## Build Prerequisites
+
+- Python 3.9+ (docs, formatters, preprocess, and the driver packager)
+- [LuaJIT](https://luajit.org/) (`brew install luajit`) — squish and tests
+- [stylua](https://github.com/JohnnyMorganz/StyLua) (`brew install stylua`) — Lua formatter
+- [Pango](https://gtk.org/) (`brew install pango`) — WeasyPrint's PDF rendering engine
+
+`make init` provisions the rest into a local `.venv` (WeasyPrint, markdown-it-py, Pygments, mdformat,
+black, and the packager's M2Crypto + lxml).
 
 ## Usage
 
 ### Create a New Driver Project
 
 ```bash
-copier copy gh:finitelabs/control4-driver-template my-new-driver
+uvx copier copy --trust gh:finitelabs/control4-driver-template my-new-driver
 ```
 
 ### Set Up the GitHub Repository
@@ -79,9 +99,13 @@ endpoint, so it cannot be scripted from the GitHub side.
 
 ### Update an Existing Driver with Latest Template
 
+Copier is only needed for this occasional sync — it is not a build dependency.
+Run it without installing anything:
+
 ```bash
 cd my-existing-driver
-copier update
+uvx copier update --trust        # using uv
+# or: pipx run copier update --trust
 ```
 
 Copier will show diffs for any files that changed in the template and let you resolve conflicts.
@@ -94,7 +118,8 @@ Copier will show diffs for any files that changed in the template and let you re
 | `project_description` | Short description | `A Control4 driver` |
 | `github_org` | GitHub organization | — |
 | `distributions` | Space-separated build targets | `drivercentral oss` |
-| `has_github_updater` | Include GitHub self-updater? | `true` |
-| `has_tests` | Include test directory? | `true` |
-| `readme_driver_slug` | Driver slug for README generation | — |
+| `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | — |
 | `readme_build` | Build distribution for README | `oss` |
+| `primary_color` | Accent color for generated docs | `#109EFF` |
+| `lib_modules` | Space-separated `src/lib` modules to include | — |
+| `vendor_modules` | Space-separated `vendor` modules to include | `json deferred drivers-common-public xml` |
