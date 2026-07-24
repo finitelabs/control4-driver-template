@@ -223,9 +223,22 @@ def md2html(input_path: Path, output_dir: Path) -> None:
 def html2pdf(input_path: Path, output_path: Path) -> None:
     # Imported lazily so md2html works on machines without WeasyPrint's native
     # libs (e.g. HTML-only preview).
-    from weasyprint import HTML
+    import ssl
 
-    HTML(filename=str(input_path)).write_pdf(str(output_path))
+    import certifi
+    from weasyprint import HTML, default_url_fetcher
+
+    # WeasyPrint's default fetcher uses urllib, whose SSL context has no CA
+    # bundle on many Pythons (notably framework/venv Python on macOS), so TLS
+    # verification fails for remote images and they silently fall back to alt
+    # text (e.g. a Buy Me A Coffee button on cdn.buymeacoffee.com). Give the
+    # fetcher certifi's CA bundle and a generous timeout so remote assets embed.
+    ssl_context = ssl.create_default_context(cafile=certifi.where())
+
+    def url_fetcher(url):
+        return default_url_fetcher(url, timeout=30, ssl_context=ssl_context)
+
+    HTML(filename=str(input_path), url_fetcher=url_fetcher).write_pdf(str(output_path))
 
 
 def readme(input_path: Path, output_path: Path) -> None:

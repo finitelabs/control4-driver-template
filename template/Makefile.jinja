@@ -55,7 +55,7 @@ $(VENV):
 	python3 -m venv $(VENV)
 	$(VENV_PY) -m pip install --upgrade pip setuptools wheel \
 		M2Crypto lxml \
-		weasyprint markdown-it-py[linkify] mdit-py-plugins pygments \
+		weasyprint certifi markdown-it-py[linkify] mdit-py-plugins pygments \
 		black mdformat mdformat-gfm
 
 $(PACKAGER):
