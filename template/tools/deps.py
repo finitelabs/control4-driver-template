@@ -20,6 +20,10 @@ Runs on the stdlib only -- it has to work in exactly the broken venv it is
 diagnosing.
 """
 
+# Keeps PEP 604 annotations (`Path | None`) readable on the documented 3.9
+# floor, where they would otherwise raise TypeError at import.
+from __future__ import annotations
+
 import re
 import sys
 from importlib.metadata import PackageNotFoundError, distribution
@@ -42,15 +46,16 @@ def parse(requirements_path: Path) -> list[tuple[str, list[str]]]:
         # guaranteed present, and a wrong guess would block the build.
         if not line or line.startswith("-") or ";" in line:
             continue
-        # A PEP 508 direct reference ("name @ https://host/pkg.whl") still names
-        # a distribution, so keep the name. A bare URL, VCS ref or filesystem
-        # path does not: matching its leading token reports "missing: git" for a
-        # line pip installs fine, and no amount of reinstalling would fix it.
-        if " @ " in line:
-            line = line.split(" @ ", 1)[0].strip()
-        elif line.startswith((".", "/", "git+")) or "://" in line:
+        # A PEP 508 direct reference still names a distribution, so keep what is
+        # left of the "@": a distribution name cannot contain one, and PEP 508
+        # permits both "name @ https://host/pkg.whl" and the space-less form.
+        # A bare URL, VCS ref or filesystem path names nothing: matching its
+        # leading token reports "missing: git" for a line pip installs fine, and
+        # no amount of reinstalling would fix it.
+        head = line.split("@", 1)[0].strip()
+        if head.startswith((".", "/", "git+")) or "://" in head:
             continue
-        match = REQUIREMENT.match(line)
+        match = REQUIREMENT.match(head)
         if match is None:
             continue
         extras = [e.strip() for e in (match["extras"] or "").split(",") if e.strip()]
@@ -86,12 +91,12 @@ def extra_dependencies(dist_name: str, extras: list[str]) -> list[str]:
 
 
 def check(requirements_path: Path, stamp_path: Path | None) -> int:
-    # Presence only, never versions: pip owns resolution, and a version check
-    # here could fail a venv pip considers perfectly valid.
-    missing = []
     if not requirements_path.is_file():
         print(f"no such requirements file: {requirements_path}", file=sys.stderr)
         return 2
+    # Presence only, never versions: pip owns resolution, and a version check
+    # here could fail a venv pip considers perfectly valid.
+    missing = []
     for name, extras in parse(requirements_path):
         if not installed(name):
             missing.append(name)
@@ -111,8 +116,13 @@ def check(requirements_path: Path, stamp_path: Path | None) -> int:
     # Invalidating the stamp is enough to make `make init` run the install again.
     if stamp_path is not None:
         fix = f"rm -f {stamp_path} && make init"
-    else:
+    elif sys.prefix != sys.base_prefix:
         fix = f"rm -rf {sys.prefix} && make init"
+    else:
+        # No stamp and not inside a venv, so this was run by hand against the
+        # system interpreter. Printing `rm -rf {sys.prefix}` there is a
+        # copy-pasteable command that deletes that installation.
+        fix = "make init"
     print(f"\nRun `{fix}` to reinstall.", file=sys.stderr)
     return 1
 
