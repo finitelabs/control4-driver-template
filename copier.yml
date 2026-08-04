@@ -13,7 +13,7 @@ _exclude:
   - "{% if 'oss' not in distributions.split() %}src/lib/github-updater.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() and 'version' not in vendor_modules.split() %}vendor/version.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}.github/workflows/release.yml{% endif %}"
-  - "{% if 'drivercentral' not in distributions.split() %}vendor/cloud-client-byte.lua{% endif %}"
+  - "{% if 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}vendor/cloud-client-byte.lua{% endif %}"
   - "{% if 'json' not in vendor_modules.split() %}vendor/JSON.lua{% endif %}"
   - "{% if 'deferred' not in vendor_modules.split() %}vendor/deferred.lua{% endif %}"
   - "{% if 'drivers-common-public' not in vendor_modules.split() %}vendor/drivers-common-public{% endif %}"
@@ -27,7 +27,7 @@ _exclude:
   - "{% if 'conditionals' not in lib_modules.split() %}src/lib/conditionals.lua{% endif %}"
   - "{% if 'events' not in lib_modules.split() %}src/lib/events.lua{% endif %}"
   - "{% if 'http' not in lib_modules.split() %}src/lib/http.lua{% endif %}"
-  - "{% if 'lru' not in lib_modules.split() %}src/lib/lru{% endif %}"
+  - "{% if 'lru' not in lib_modules.split() %}src/lib/lru.lua{% endif %}"
   - "{% if 'persist' not in lib_modules.split() %}src/lib/persist.lua{% endif %}"
   - "{% if 'values' not in lib_modules.split() %}src/lib/values.lua{% endif %}"
 
