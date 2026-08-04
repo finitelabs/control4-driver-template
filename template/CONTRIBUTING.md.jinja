@@ -58,7 +58,7 @@ then pull the change in with `copier update`.
 {%- if 'deferred' in vendor_modules.split() %}
 - `deferred.lua`: promises/deferred implementation
 {%- endif %}
-{%- if 'drivercentral' in distributions.split() %}
+{%- if 'drivercentral' in distributions.split() or 'drivercentral-dev' in distributions.split() %}
 - `cloud-client-byte.lua`: DriverCentral cloud licensing
 {%- endif %}
 {%- if 'oss' in distributions.split() or 'version' in vendor_modules.split() %}
