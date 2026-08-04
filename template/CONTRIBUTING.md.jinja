@@ -75,12 +75,14 @@ synced with `copier update`.
   Markdown
 - `docs.py` — documentation generation (Markdown → HTML → PDF, plus README)
 - `package.py` — packaging helpers (driver.xml stamping, zip bundling)
+- `deps.py` — build preflight: checks the `.venv` against `requirements.txt`
 - `gen-squishy.lua` — auto-generates squishy files from driver.c4zproj
 - `github-markdown.css` — vendored stylesheet for the rendered docs
 
 **Other:**
 
 - `.gitignore`, `LICENSE`, `CONTRIBUTING.md`
+- `requirements.txt` — the build-time Python dependency list
 - `test/c4_shim.lua`, `test/run_test.sh`
 
 ### What's Driver-Specific (Yours to Edit)
@@ -133,7 +135,7 @@ a template update that adds a dependency reinstalls on the next `make init` or
 
 ```bash
 make init          # Install all dependencies (safe to re-run)
-make check-deps    # Verify the .venv satisfies requirements.txt
+make check-deps    # Install if needed, then verify .venv matches requirements.txt
 make build         # Full build: format, preprocess, docs, package, zip
 make build-nodocs  # Build without generating docs
 make fmt           # Format all code (Lua, Python, Markdown)

@@ -4,7 +4,8 @@
 infrastructure, build tooling, and common Lua libraries used across all Finite Labs drivers.
 
 The toolchain is Python + a few standalone binaries — **no Node/npm**. `make init` creates a local
-`.venv` with everything the build needs (docs, formatters, and the driver packager's crypto/XML libs).
+`.venv` from `requirements.txt` with everything the build needs (docs, formatters, and the driver
+packager's crypto/XML libs), and re-installs whenever that list changes.
 
 ## What's Included
 
@@ -14,6 +15,8 @@ The toolchain is Python + a few standalone binaries — **no Node/npm**. `make i
 - **docs.py** — documentation generation: Markdown → HTML (markdown-it-py + Pygments) → PDF
   (WeasyPrint, a CSS Paged Media engine — no browser), plus the repo README.
 - **package.py** — packaging helpers: driver.xml version/modified stamping and zip bundling (stdlib).
+- **deps.py** — build preflight: checks the `.venv` against `requirements.txt` and names what is
+  missing, instead of failing later with a bare `ImportError` (stdlib).
 - **gen-squishy.lua** — Auto-generates squishy files for squish (Lua module bundler) from driver.c4zproj.
 - **github-markdown.css** — Vendored stylesheet for the rendered documentation.
 - **github-setup** — Checks the GitHub repository against the standard settings and prints the

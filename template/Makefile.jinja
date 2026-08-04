@@ -58,17 +58,23 @@ init: $(VENV_STAMP) $(PACKAGER) ## One-time setup: install all dependencies
 # The requirements install is deliberately not --upgrade: it adds what is
 # missing and leaves working packages alone, so `make init` cannot drag in a
 # breaking upstream release. Version needs belong in requirements.txt as
-# constraints, which pip honors either way.
+# constraints, which pip honors either way. Bootstrap tooling (pip, setuptools,
+# wheel) is upgraded only when the venv is first created, for the same reason --
+# setuptools is M2Crypto's build dependency, and a dependency-list change is no
+# reason to bump it underneath a working build.
 $(VENV_STAMP): requirements.txt
-	@test -x $(VENV_PY) || python3 -m venv $(VENV)
-	$(VENV_PY) -m pip install --upgrade pip setuptools wheel
+	@test -x $(VENV_PY) || { \
+		python3 -m venv $(VENV) && \
+		$(VENV_PY) -m pip install --upgrade pip setuptools wheel; \
+	}
 	$(VENV_PY) -m pip install -r requirements.txt
 	@touch $@
 
 # Safety net for drift the stamp cannot see (hand-removed package, interrupted
-# install). Cheap: no network, stdlib only.
-check-deps: $(VENV_STAMP) ## Verify the venv satisfies requirements.txt
-	@$(VENV_PY) tools/deps.py check requirements.txt
+# install). Cheap: no network, stdlib only. Installs first if the stamp is
+# stale, so this is "make the venv correct and prove it", not a pure read.
+check-deps: $(VENV_STAMP) ## Install if needed, then verify the venv satisfies requirements.txt
+	@$(VENV_PY) tools/deps.py check requirements.txt $(VENV_STAMP)
 
 $(PACKAGER):
 	rm -rf dist/driverpackager

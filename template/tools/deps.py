@@ -2,10 +2,12 @@
 """Verify the venv satisfies requirements.txt.
 
 Subcommands:
-  deps.py check <requirements.txt>
+  deps.py check <requirements.txt> [<stamp>]
       Exit 0 if every requirement (and every requested extra) is installed in
       the interpreter running this script. Otherwise list what is missing and
-      exit 1 with the command to fix it.
+      exit 1 with the command to fix it. <stamp> is the Makefile's install
+      stamp; when given, the fix command invalidates it rather than proposing
+      a full venv rebuild.
 
 Why this exists: the $(VENV_STAMP) rule in the Makefile re-installs whenever
 requirements.txt changes, which covers dependencies added by a template update.
@@ -40,6 +42,14 @@ def parse(requirements_path: Path) -> list[tuple[str, list[str]]]:
         # guaranteed present, and a wrong guess would block the build.
         if not line or line.startswith("-") or ";" in line:
             continue
+        # A PEP 508 direct reference ("name @ https://host/pkg.whl") still names
+        # a distribution, so keep the name. A bare URL, VCS ref or filesystem
+        # path does not: matching its leading token reports "missing: git" for a
+        # line pip installs fine, and no amount of reinstalling would fix it.
+        if " @ " in line:
+            line = line.split(" @ ", 1)[0].strip()
+        elif line.startswith((".", "/", "git+")) or "://" in line:
+            continue
         match = REQUIREMENT.match(line)
         if match is None:
             continue
@@ -60,19 +70,28 @@ def extra_dependencies(dist_name: str, extras: list[str]) -> list[str]:
     """Names a distribution pulls in for the given extras, per its metadata."""
     names = []
     for requirement in distribution(dist_name).requires or []:
-        marker = EXTRA_MARKER.search(requirement)
-        if marker is None or marker["extra"] not in extras:
+        spec, _, marker = requirement.partition(";")
+        # Only a bare `extra == "x"` is actionable. A compound marker such as
+        # `extra == "x" and python_version < "3.10"` needs real marker
+        # evaluation, which needs `packaging`; treating it as required anyway
+        # would report a missing package that is correctly absent and, since
+        # check-deps gates build, block the build over it.
+        matched_extra = EXTRA_MARKER.fullmatch(marker.strip())
+        if matched_extra is None or matched_extra["extra"] not in extras:
             continue
-        match = REQUIREMENT.match(requirement.strip())
+        match = REQUIREMENT.match(spec.strip())
         if match is not None:
             names.append(match["name"])
     return names
 
 
-def check(requirements_path: Path) -> int:
+def check(requirements_path: Path, stamp_path: Path | None) -> int:
     # Presence only, never versions: pip owns resolution, and a version check
     # here could fail a venv pip considers perfectly valid.
     missing = []
+    if not requirements_path.is_file():
+        print(f"no such requirements file: {requirements_path}", file=sys.stderr)
+        return 2
     for name, extras in parse(requirements_path):
         if not installed(name):
             missing.append(name)
@@ -87,15 +106,23 @@ def check(requirements_path: Path) -> int:
     print(f"{requirements_path} is not satisfied by {sys.prefix}", file=sys.stderr)
     for name in missing:
         print(f"  missing: {name}", file=sys.stderr)
-    print("\nRun `make clean-all && make init` to rebuild the venv.", file=sys.stderr)
+    # Reinstall, do not rebuild: `make clean-all` also removes dist/, taking
+    # dist/driverpackager with it, which only a network clone restores.
+    # Invalidating the stamp is enough to make `make init` run the install again.
+    if stamp_path is not None:
+        fix = f"rm -f {stamp_path} && make init"
+    else:
+        fix = f"rm -rf {sys.prefix} && make init"
+    print(f"\nRun `{fix}` to reinstall.", file=sys.stderr)
     return 1
 
 
 def main() -> int:
     args = sys.argv[1:]
     cmd, rest = (args[0], args[1:]) if args else ("", [])
-    if cmd == "check" and len(rest) == 1:
-        return check(Path(rest[0]).resolve())
+    if cmd == "check" and len(rest) in (1, 2):
+        stamp = Path(rest[1]) if len(rest) == 2 else None
+        return check(Path(rest[0]).resolve(), stamp)
     print(__doc__, file=sys.stderr)
     return 2
 
