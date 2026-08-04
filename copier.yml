@@ -27,7 +27,7 @@ _exclude:
   - "{% if 'conditionals' not in lib_modules.split() %}src/lib/conditionals.lua{% endif %}"
   - "{% if 'events' not in lib_modules.split() %}src/lib/events.lua{% endif %}"
   - "{% if 'http' not in lib_modules.split() %}src/lib/http.lua{% endif %}"
-  - "{% if 'lru' not in lib_modules.split() %}src/lib/lru{% endif %}"
+  - "{% if 'lru' not in lib_modules.split() %}src/lib/lru.lua{% endif %}"
   - "{% if 'persist' not in lib_modules.split() %}src/lib/persist.lua{% endif %}"
   - "{% if 'values' not in lib_modules.split() %}src/lib/values.lua{% endif %}"
 
