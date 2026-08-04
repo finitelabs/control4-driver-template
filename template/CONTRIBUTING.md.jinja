@@ -94,6 +94,7 @@ then pull the change in with `copier update`.
   Markdown
 - `docs.py`: documentation generation (Markdown -> HTML -> PDF, plus README)
 - `package.py`: packaging helpers (driver.xml stamping, zip bundling)
+- `deps.py`: build preflight, checks the `.venv` against `requirements.txt`
 - `gen-squishy.lua`: auto-generates squishy files from driver.c4zproj
 - `github-markdown.css`: vendored stylesheet for the rendered docs
 - `github-setup`: checks the GitHub repo against the standard settings and
@@ -102,6 +103,7 @@ then pull the change in with `copier update`.
 **Other:**
 
 - `.gitignore`, `LICENSE`, `CONTRIBUTING.md`
+- `requirements.txt`, the build-time Python dependency list
 - `test/c4_shim.lua`, `test/run_test.sh`
 - `.copier-answers.yml`, which Copier maintains; never edit it by hand
 
@@ -156,16 +158,20 @@ local `.venv`) plus a few standalone binaries, with no Node/npm.
 - `swig` and OpenSSL headers (`brew install swig openssl`), which M2Crypto
   compiles against
 
-`make init` creates the `.venv`, installs the Python dependencies (WeasyPrint,
-markdown-it-py, mdit-py-plugins, Pygments, mdformat, black, and the
+`make init` creates the `.venv`, installs everything in `requirements.txt`
+(WeasyPrint, markdown-it-py, mdit-py-plugins, Pygments, mdformat, black, and the
 driverpackager's M2Crypto + lxml), and clones the driverpackager into
-`dist/driverpackager`.
+`dist/driverpackager`. It is safe (and cheap) to re-run: the install is keyed on
+`requirements.txt`, so a template update that adds a dependency reinstalls on
+the next `make init` or `make build` rather than leaving the existing `.venv`
+stale.
 
 ### Common Commands
 
 ```bash
 make help          # List every pipeline step, plus init/build/fmt/clean
-make init          # One-time setup: install all dependencies
+make init          # Install all dependencies (safe to re-run)
+make check-deps    # Install if needed, then verify .venv matches requirements.txt
 make build         # Full build, from clean through zip (see Build Pipeline)
 make build-nodocs  # Build without generating docs
 make fmt           # Format all code (Lua, Python, Markdown)
