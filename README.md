@@ -55,12 +55,14 @@ The toolchain is Python + a few standalone binaries, with **no Node/npm**. `make
 ## Build Prerequisites
 
 - Python 3.9+ (docs, formatters, preprocess, and the driver packager)
+- Git, since `make init` clones the driverpackager into `dist/`
 - [LuaJIT](https://luajit.org/) (`brew install luajit`), for gen-squishy and the tests
 - [stylua](https://github.com/JohnnyMorganz/StyLua) (`brew install stylua`), the Lua formatter
 - [Pango](https://gtk.org/) (`brew install pango`), WeasyPrint's PDF rendering engine
+- `swig` and OpenSSL headers (`brew install swig openssl`), which M2Crypto compiles against
 
-`make init` provisions the rest into a local `.venv` (WeasyPrint, markdown-it-py, Pygments, mdformat,
-black, and the packager's M2Crypto + lxml).
+`make init` provisions the rest into a local `.venv` (WeasyPrint, markdown-it-py, mdit-py-plugins,
+Pygments, mdformat, black, and the packager's M2Crypto + lxml).
 
 ## Usage
 
@@ -121,5 +123,5 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
-| `lib_modules` | Space-separated `src/lib` modules to include | (required) |
+| `lib_modules` | Space-separated `src/lib` modules to include | `bindings conditionals events http lru persist values` |
 | `vendor_modules` | Space-separated `vendor` modules to include | `json deferred drivers-common-public xml` |
