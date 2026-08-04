@@ -61,8 +61,10 @@ then pull the change in with `copier update`.
 {%- if 'drivercentral' in distributions.split() or 'drivercentral-dev' in distributions.split() %}
 - `cloud-client-byte.lua`: DriverCentral cloud licensing
 {%- endif %}
-{%- if 'oss' in distributions.split() or 'version' in vendor_modules.split() %}
+{%- if 'oss' in distributions.split() %}
 - `version.lua`: semver comparison (used by github-updater)
+{%- elif 'version' in vendor_modules.split() %}
+- `version.lua`: semver comparison
 {%- endif %}
 {%- if 'drivers-common-public' in vendor_modules.split() %}
 - `drivers-common-public/`: Control4's official shared libraries
@@ -162,7 +164,7 @@ driverpackager's M2Crypto + lxml), and clones the driverpackager into
 ### Common Commands
 
 ```bash
-make help          # List every target, including the individual build steps
+make help          # List every pipeline step, plus init/build/fmt/clean
 make init          # One-time setup: install all dependencies
 make build         # Full build, from clean through zip (see Build Pipeline)
 make build-nodocs  # Build without generating docs
@@ -171,8 +173,13 @@ make clean         # Remove build artifacts and dist/ (including driverpackager)
 make clean-all     # Remove everything (build artifacts, dist, deps, venv)
 ```
 
-Every step in the pipeline below is also a target of its own, so you can run
-`make docs` or `make package` in isolation. `make help` lists them all.
+Every step in the pipeline below is also a target of its own, and `make help`
+lists them all. The sub-targets those steps delegate to (`fmt-lua`, `fmt-py`,
+`fmt-md`, `docs-html`, `docs-pdf`, `docs-readme`, `update-xml-version`,
+`update-xml-modified`) are real targets too, but carry no `##` annotation, so
+`make help` does not print them. Note that the later steps read `build/`:
+`make docs` pulls in `preprocess` itself, but `make package` and `make zip` fail
+on a clean tree until something has populated `build/`.
 
 ### Build Pipeline
 
@@ -188,9 +195,11 @@ Every step in the pipeline below is also a target of its own, so you can run
 
 Step 1 rewrites tracked files in place. Formatting covers `tools/*.py`, all Lua
 under `drivers/`, `src/`, `test/`, `tools/` and `vendor/`, and every Markdown
-file at the repo root plus under `documentation/`, so it reformats this file and
-the generated `README.md` too. CI fails the build if it finishes with a dirty
-tree, so build on a clean checkout and commit whatever the formatter changes.
+file at the repo root, under `documentation/`, and under
+`drivers/*/www/documentation/`, so it reformats this file, the driver docs you
+author, and the generated `README.md` too. CI fails the build if it finishes
+with a dirty tree, so build on a clean checkout and commit whatever the
+formatter changes.
 
 ### Distributions
 
