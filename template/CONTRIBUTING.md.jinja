@@ -124,14 +124,16 @@ local `.venv`) plus a few standalone binaries — no Node/npm.
 - [stylua](https://github.com/JohnnyMorganz/StyLua) (`brew install stylua`) — Lua formatter
 - [Pango](https://gtk.org/) (`brew install pango`) — WeasyPrint's PDF rendering engine
 
-`make init` creates the `.venv` and installs the Python dependencies
-(WeasyPrint, markdown-it-py, Pygments, mdformat, black, and the driverpackager's
-M2Crypto + lxml).
+`make init` creates the `.venv` and installs everything in `requirements.txt`.
+It is safe (and cheap) to re-run: the install is keyed on `requirements.txt`, so
+a template update that adds a dependency reinstalls on the next `make init` or
+`make build` rather than leaving the existing `.venv` stale.
 
 ### Common Commands
 
 ```bash
-make init          # One-time setup: install all dependencies
+make init          # Install all dependencies (safe to re-run)
+make check-deps    # Verify the .venv satisfies requirements.txt
 make build         # Full build: format, preprocess, docs, package, zip
 make build-nodocs  # Build without generating docs
 make fmt           # Format all code (Lua, Python, Markdown)
