@@ -211,6 +211,20 @@ zip: $(VENV_STAMP) ## Zip .c4z and .pdf files per distribution
 				"$$repo.zip" *.c4z *.pdf); \
 	done
 
+# ─── Test ─────────────────────────────────────────────────────────────────────
+
+.PHONY: test
+test: ## Run the Lua test suite (test/test_*.lua)
+	@found=0; \
+	for f in test/test_*.lua; do \
+		[ -e "$$f" ] || continue; \
+		found=1; \
+		echo "==> $$f"; \
+		LUA_PATH="$(CURDIR)/src/?.lua;$(CURDIR)/src/?/init.lua;$(CURDIR)/vendor/?.lua;$(CURDIR)/vendor/?/init.lua;;" \
+			luajit "$$f" || exit 1; \
+	done; \
+	if [ "$$found" = "0" ]; then echo "No test/test_*.lua files found; nothing to run."; fi
+
 # ─── Build ────────────────────────────────────────────────────────────────────
 
 .PHONY: build build-nodocs

@@ -1,4 +1,23 @@
 -- Copyright 2025 Snap One, LLC. All rights reserved.
+--
+-- LOCAL FORK of Snap One's drivers-common-public websocket module, upstream v14.
+-- Re-vendoring from upstream silently drops everything listed here, across every
+-- repo carrying drivers-common-public in vendor_modules. Keep this list current.
+--
+-- Deltas against upstream v14:
+--   1. setupC4Connection reuses one network binding per protocol://host:port
+--      rather than allocating a fresh one on every WebSocket:new(), which leaked
+--      a slot from the 6100-6199 pool on each reconnect until the pool ran out.
+--   2. Send() takes an optional frame opcode (default 0x81, unchanged for every
+--      existing caller) so binary-framed protocols such as MQTT-over-WebSocket
+--      can be sent at all.
+--   3. MakeHeaders omits the default port from the Host header. SigV4 hosts
+--      (AWS IoT) sign the host without it and drop the upgrade otherwise.
+--   4. The 64-bit extended-length field is built with %016X rather than %16X.
+--      %16X is space padded, not zero padded, so tohex left the spaces in and
+--      emitted a malformed 14-byte field for payloads over 65535 bytes.
+--
+-- test/test_websocket.lua covers all four.
 
 COMMON_WEBSOCKET_VER = 14
 
@@ -213,7 +232,10 @@ function WebSocket:Send(s, opcode)
     elseif len <= 65535 then
       lenstr = string.char(opcode, bit.bor(126, 0x80)) .. tohex(string.format("%04X", len))
     else
-      lenstr = string.char(opcode, bit.bor(127, 0x80)) .. tohex(string.format("%16X", len))
+      -- %016X, not %16X: the latter is space padded to width 16 rather than zero
+      -- padded to 16 digits, and tohex only substitutes hex pairs, so the spaces
+      -- survived into a malformed 14-byte field. This one must be exactly 8 bytes.
+      lenstr = string.char(opcode, bit.bor(127, 0x80)) .. tohex(string.format("%016X", len))
     end
 
     local mask = {
@@ -356,7 +378,12 @@ function WebSocket:setupC4Connection()
       end
     end
     _netBindingHighWaterMark = assert(self.netBinding)
-    if endpointKey then
+    -- Only claim the cache slot if the endpoint has none yet. Overwriting it
+    -- would re-point a long-lived socket's endpoint at a transient second
+    -- socket's binding, orphaning the original slot for the controller's
+    -- lifetime. Leaving the first winner pinned means the transient socket takes
+    -- the fresh binding and the long-lived one keeps reusing its own.
+    if endpointKey and not _netBindingByEndpoint[endpointKey] then
       _netBindingByEndpoint[endpointKey] = self.netBinding
     end
   end
