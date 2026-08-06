@@ -12,6 +12,91 @@ local MAX_TIMEOUT = 300
 --- @type number
 local DEFAULT_TIMEOUT = 30
 
+--- Placeholder substituted for any credential-bearing value before it is logged.
+--- @type string
+local REDACTED = "***REDACTED***"
+
+--- Key fragments that mark a value as a credential. Matched against the key with
+--- every non-alphanumeric character stripped, so "X-Api-Key" -> "xapikey" and
+--- "client_secret" -> "clientsecret" both match.
+--- @type string[]
+local SENSITIVE_KEYS = {
+  "password",
+  "passwd",
+  "secret",
+  "token",
+  "auth",
+  "credential",
+  "apikey",
+  "signature",
+  "cookie",
+}
+
+--- Does this key name mark its value as a credential?
+--- @param key any
+--- @return boolean
+local function isSensitiveKey(key)
+  local normalized = tostring(key):lower():gsub("[^%a%d]", "")
+  for _, fragment in ipairs(SENSITIVE_KEYS) do
+    if normalized:find(fragment, 1, true) then
+      return true
+    end
+  end
+  return false
+end
+
+--- Does this value look like a bearer credential regardless of its key? Catches
+--- JWTs (three base64url segments), which arrive under innocuous keys such as
+--- the identity-provider name in a Cognito `Logins` map.
+--- @param value any
+--- @return boolean
+local function looksLikeSecret(value)
+  return type(value) == "string" and value:match("^[%w_-]+%.[%w_-]+%.[%w_-]+$") ~= nil and #value > 60
+end
+
+--- Mask credentials inside an already-encoded body, query string, or URL.
+--- @param text string
+--- @return string
+local function redactSerialized(text)
+  -- JSON object members: "password":"hunter2"
+  text = text:gsub('("[%w_%-%.]-")(%s*:%s*)"[^"]*"', function(key, separator)
+    if isSensitiveKey(key) then
+      return key .. separator .. '"' .. REDACTED .. '"'
+    end
+  end)
+  -- Form-encoded and query-string pairs: password=hunter2
+  text = text:gsub("([%w_%-%.]+)=([^&%s]+)", function(key, value)
+    if isSensitiveKey(key) then
+      return key .. "=" .. REDACTED
+    end
+  end)
+  return text
+end
+
+--- Copy `value` with every credential masked, so secrets never reach the log.
+--- Tables are copied rather than mutated, leaving the caller's request intact.
+--- @param value any
+--- @param depth? number Recursion guard for deeply nested or cyclic tables.
+--- @return any
+local function redact(value, depth)
+  depth = (depth or 0) + 1
+  if type(value) == "string" then
+    return looksLikeSecret(value) and REDACTED or redactSerialized(value)
+  end
+  if type(value) ~= "table" or depth > 8 then
+    return value
+  end
+  local copy = {}
+  for k, v in pairs(value) do
+    if isSensitiveKey(k) or looksLikeSecret(v) then
+      copy[k] = REDACTED
+    else
+      copy[k] = redact(v, depth)
+    end
+  end
+  return copy
+end
+
 --- @class Http
 --- A class representing an HTTP client.
 local Http = {}
@@ -47,7 +132,7 @@ end
 --- @return Deferred<HTTPResponse, HTTPErrorResponse> response A Deferred that resolves or rejects with the response.
 --- @diagnostic disable-next-line: unused
 function Http:request(method, url, data, headers, options)
-  log:trace("Http:request(%s, %s, %s, %s, %s)", method, url, data, headers, options)
+  log:trace("Http:request(%s, %s, %s, %s, %s)", method, redact(url), redact(data), redact(headers), redact(options))
   local d = deferred.new()
 
   options = options or {}
