@@ -45,8 +45,20 @@ local SENSITIVE_LAST_WORDS = {
   "auth",
   "token",
   "cookie",
-  "signature",
   "sig",
+}
+
+--- Nouns that turn a generic fragment anywhere in the key into a credential.
+--- Last-word anchoring alone drops "X-Auth-Key" (Cloudflare's global API key
+--- header), "auth_key" and "authKey", whose final word is the noun rather than
+--- the fragment. Requiring the noun keeps "AuthFlow", "AuthParameters" and
+--- "author" out, which is the whole point of the anchoring.
+--- @type string[]
+local CREDENTIAL_NOUNS = {
+  "key",
+  "secret",
+  "value",
+  "hash",
 }
 
 --- Split a key into lowercase words, breaking on punctuation and camelCase, so
@@ -74,10 +86,28 @@ local function isSensitiveKey(key)
   end
   local words = keyWords(key)
   local last = words[#words]
-  if last then
-    for _, fragment in ipairs(SENSITIVE_LAST_WORDS) do
-      if last == fragment then
-        return true
+  if not last then
+    return false
+  end
+  for _, fragment in ipairs(SENSITIVE_LAST_WORDS) do
+    if last == fragment then
+      return true
+    end
+  end
+  -- "<generic fragment> ... <credential noun>", e.g. X-Auth-Key, auth_key.
+  local isNoun = false
+  for _, noun in ipairs(CREDENTIAL_NOUNS) do
+    if last == noun then
+      isNoun = true
+      break
+    end
+  end
+  if isNoun then
+    for _, word in ipairs(words) do
+      for _, fragment in ipairs(SENSITIVE_LAST_WORDS) do
+        if word == fragment then
+          return true
+        end
       end
     end
   end
@@ -131,7 +161,29 @@ local MAX_REDACT_DEPTH = 8
 local function redact(value, depth, seen)
   depth = (depth or 0) + 1
   if type(value) == "string" then
-    return looksLikeSecret(value) and REDACTED or redactSerialized(value)
+    if looksLikeSecret(value) then
+      return REDACTED
+    end
+    -- Decode JSON bodies and redact the table, rather than pattern-matching the
+    -- text. The serialized fallback's `[^"]*` stops at the first escaped quote,
+    -- so a credential containing one kept its tail and produced invalid JSON;
+    -- Lua patterns cannot express escape-aware string matching. Falls back to
+    -- the text path when the body is not JSON or does not decode.
+    local trimmed = value:match("^%s*(.-)%s*$")
+    if JSON and (trimmed:sub(1, 1) == "{" or trimmed:sub(1, 1) == "[") then
+      local ok, decoded = pcall(function()
+        return JSON:decode(trimmed)
+      end)
+      if ok and type(decoded) == "table" then
+        local encodedOk, reencoded = pcall(function()
+          return JSON:encode(redact(decoded, depth, seen))
+        end)
+        if encodedOk and type(reencoded) == "string" then
+          return reencoded
+        end
+      end
+    end
+    return redactSerialized(value)
   end
   if type(value) ~= "table" then
     return value
@@ -146,12 +198,12 @@ local function redact(value, depth, seen)
   seen[value] = true
   local copy = {}
   for k, v in pairs(value) do
-    if looksLikeSecret(v) then
+    if isSensitiveKey(k) or looksLikeSecret(v) then
+      -- Mask the whole subtree, never recurse into it. Recursing would expose
+      -- children whose own key is not recognized ("credentials" holding "key"
+      -- and "pass"), where the parent key was the only thing protecting them.
+      -- That is the same fail-open direction the guards above exist to prevent.
       copy[k] = REDACTED
-    elseif isSensitiveKey(k) then
-      -- Recurse into a sensitive parent rather than blanking the whole subtree,
-      -- so its non-secret siblings stay visible.
-      copy[k] = type(v) == "table" and redact(v, depth, seen) or REDACTED
     else
       copy[k] = redact(v, depth, seen)
     end
@@ -204,7 +256,7 @@ function Http:request(method, url, data, headers, options)
   -- actually be emitted. Arguments are evaluated before the level is checked
   -- inside the logger, which would otherwise pay this cost on every request at
   -- the default INFO level.
-  if log:getLogLevel() >= log.LogLevel.TRACE then
+  if log:isEnabled() and log:getLogLevel() >= log.LogLevel.TRACE then
     log:trace("Http:request(%s, %s, %s, %s, %s)", method, redact(url), redact(data), redact(headers), redact(options))
   end
   local d = deferred.new()

@@ -33,7 +33,17 @@ function IsEmpty(v)
 end
 function urlDo() end
 
-local JSON = require("JSON")
+-- vendor/JSON.lua calls this for every number it encodes. Without it any fixture
+-- containing a number makes encode throw, and since nearly every assertion below
+-- is `not contains(out, secret)`, they would all pass against the error text
+-- rather than the payload. Defining it keeps those assertions meaningful.
+function tostring_return_period(value)
+  return tostring(value)
+end
+
+-- Global, not local: src/lib/http.lua reads JSON as a runtime global the way the
+-- driver environment provides it.
+JSON = require("JSON")
 local Http = require("lib.http")
 
 local redact = Http._redact
@@ -41,12 +51,19 @@ local isSensitiveKey = Http._isSensitiveKey
 
 local REDACTED = "***REDACTED***"
 
---- Encode the way lib.logging does, so assertions look at real log output.
+--- Encode the way lib.logging does, so assertions look at real log output. An
+--- encode failure is surfaced as a failed check rather than swallowed into a
+--- string, which negative assertions would otherwise pass against.
 local function encoded(value)
   local ok, out = pcall(function()
     return JSON:encode(value)
   end)
-  return ok and out or ("<encode error: " .. tostring(out) .. ">")
+  if not ok then
+    fail = fail + 1
+    print(string.format("  FAIL <encode threw>  -> %s", tostring(out)))
+    return "\0<encode failed>\0"
+  end
+  return out
 end
 
 local function contains(haystack, needle)
@@ -174,6 +191,65 @@ do
   check("nil passes through", redact(nil) == nil)
   check("number passes through", redact(42) == 42)
   check("boolean passes through", redact(true) == true)
+end
+
+--------------------------------------------------------------------------------
+print("\n[8] A sensitive key masks its whole subtree, never recurses into it")
+--------------------------------------------------------------------------------
+do
+  -- Children whose own key is unrecognized are protected only by the parent key.
+  -- Recursing into a matched parent exposed every one of these.
+  local out = encoded(redact({
+    credentials = { key = "AKIA_LEAK", pass = "p_LEAK" },
+    secret = { data = "s_LEAK" },
+    auth = { user = "alice", pass = "a_LEAK" },
+    cookie = { jar = "c_LEAK" },
+    visible = { note = "keep me" },
+  }))
+  check("credentials subtree masked", not contains(out, "AKIA_LEAK") and not contains(out, "p_LEAK"), out)
+  check("secret subtree masked", not contains(out, "s_LEAK"), out)
+  check("auth subtree masked", not contains(out, "a_LEAK"), out)
+  check("cookie subtree masked", not contains(out, "c_LEAK"), out)
+  check("unrelated subtree preserved", contains(out, "keep me"), out)
+end
+
+--------------------------------------------------------------------------------
+print("\n[9] Generic fragment plus a credential noun (X-Auth-Key and friends)")
+--------------------------------------------------------------------------------
+do
+  check("X-Auth-Key IS sensitive", isSensitiveKey("X-Auth-Key"))
+  check("auth_key IS sensitive", isSensitiveKey("auth_key"))
+  check("authKey IS sensitive", isSensitiveKey("authKey"))
+  check("token_secret IS sensitive", isSensitiveKey("token_secret"))
+  -- The noun rule must not undo the anchoring.
+  check("AuthFlow still not sensitive", not isSensitiveKey("AuthFlow"))
+  check("AuthParameters still not sensitive", not isSensitiveKey("AuthParameters"))
+  check("author still not sensitive", not isSensitiveKey("author"))
+  check("primary_key not sensitive on its own", not isSensitiveKey("primary_key"))
+
+  local out = encoded(redact({ ["X-Auth-Key"] = "CF_GLOBAL_KEY_LEAK", ["Content-Type"] = "application/json" }))
+  check("X-Auth-Key value masked", not contains(out, "CF_GLOBAL_KEY_LEAK"), out)
+  check("Content-Type preserved", contains(out, "application/json"), out)
+end
+
+--------------------------------------------------------------------------------
+print("\n[10] JSON bodies are decoded, not pattern matched")
+--------------------------------------------------------------------------------
+do
+  -- `[^"]*` stopped at the first escaped quote, leaving the tail of the
+  -- credential in the output and producing invalid JSON.
+  local body = '{"password":"he said \\"hi\\" ok","next":"visible"}'
+  local out = redact(body)
+  check("escaped-quote password fully masked", not contains(out, "hi"), out)
+  check("sibling still present", contains(out, "visible"), out)
+  check("output is valid JSON", (pcall(function()
+    return JSON:decode(out)
+  end)), out)
+
+  -- Numbers must survive encoding: this is what makes the assertions above real.
+  local withNumber = encoded(redact({ expires = 3600, password = "hunter2" }))
+  check("numeric field encodes", contains(withNumber, "3600"), withNumber)
+  check("password beside a number masked", not contains(withNumber, "hunter2"), withNumber)
 end
 
 print(string.format("\n%d passed, %d failed\n", pass, fail))
