@@ -23,6 +23,7 @@ _exclude:
   - "{% if 'bthome' not in vendor_modules.split() %}vendor/bthome.lua{% endif %}"
   - "{% if 'noiseprotocol' not in vendor_modules.split() %}vendor/noiseprotocol.lua{% endif %}"
   - "{% if 'protobuf' not in vendor_modules.split() %}vendor/protobuf.lua{% endif %}"
+  - "{% if 'drivers-common-public' not in vendor_modules.split() %}test/test_websocket.lua{% endif %}"
   - "{% if 'bindings' not in lib_modules.split() %}src/lib/bindings.lua{% endif %}"
   - "{% if 'conditionals' not in lib_modules.split() %}src/lib/conditionals.lua{% endif %}"
   - "{% if 'events' not in lib_modules.split() %}src/lib/events.lua{% endif %}"
