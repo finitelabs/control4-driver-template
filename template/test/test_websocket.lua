@@ -269,7 +269,31 @@ do
 end
 
 --------------------------------------------------------------------------------
-print("\n[7] Host header: default port omitted, others preserved")
+print("\n[7] Sequential transients reclaim a binding instead of leaking one each")
+--------------------------------------------------------------------------------
+do
+  resetBindings()
+  -- One transient cannot tell a single cached binding apart from a list, because
+  -- either way it allocates one. The SECOND transient is what separates them: a
+  -- single binding pinned to the first claimant never records the transient's
+  -- binding, so every later transient allocates another and the pool bleeds one
+  -- slot per overlap. The list reclaims the freed transient binding.
+  local main = WebSocket:new("wss://busy.example.com/ws?main=1")
+  for i = 1, 6 do
+    local transient = WebSocket:new("wss://busy.example.com/ws?install=" .. i)
+    simulateClose(transient) -- each finishes before the next begins
+  end
+  check("long-lived socket keeps its own binding", WebSocket.Sockets[main.netBinding] == main, main.netBinding)
+  check(
+    "6 sequential transients consume 1 slot between them",
+    bindingsInUse() == 2,
+    bindingsInUse() .. " slots (pinned-single would be 7)"
+  )
+  simulateClose(main)
+end
+
+--------------------------------------------------------------------------------
+print("\n[8] Host header: default port omitted, others preserved")
 --------------------------------------------------------------------------------
 do
   local function hostHeaderOf(url)

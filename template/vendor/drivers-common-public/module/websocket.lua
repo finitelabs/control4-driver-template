@@ -345,11 +345,17 @@ end
 --
 -- The cache key is protocol://host:port, not host alone: the binding carries the
 -- port (NetPortOptions) and owns the OCS/RFN callbacks, so two sockets to
--- different ports on the same host must not share one. A cached binding is also
--- only reused when no live socket still owns it, which keeps concurrent sockets
--- to the same endpoint independent. Drivers that fully delete the old socket
--- before opening its replacement (the documented reconnect pattern) therefore
--- keep reusing a single slot.
+-- different ports on the same host must not share one.
+--
+-- Each endpoint keeps a LIST of bindings, and a new socket takes the first one
+-- no live socket still owns. One binding per endpoint cannot cover both cases:
+-- overwriting it re-points a long-lived socket at a transient second socket's
+-- binding and orphans the original, while pinning it to the first claimant means
+-- every overlapping transient allocates a binding that is never recorded and so
+-- can never be reclaimed, leaking a slot per overlap without bound. The list
+-- reclaims any binding for the endpoint whose owner is gone, so it grows only to
+-- that endpoint's peak concurrency. Drivers that fully delete the old socket
+-- before opening its replacement (the documented reconnect pattern) stay at one.
 local _netBindingHighWaterMark = 6099
 local _netBindingByEndpoint = {}
 
@@ -357,11 +363,15 @@ function WebSocket:setupC4Connection()
   local endpointKey = self.host
     and string.format("%s://%s:%s", tostring(self.protocol), tostring(self.host), tostring(self.port))
 
-  local cached = endpointKey and _netBindingByEndpoint[endpointKey] or nil
-  if cached and self.Sockets and self.Sockets[cached] and self.Sockets[cached] ~= self then
-    cached = nil
+  local bindings = endpointKey and _netBindingByEndpoint[endpointKey] or nil
+  if bindings then
+    for _, binding in ipairs(bindings) do
+      if not (self.Sockets and self.Sockets[binding] and self.Sockets[binding] ~= self) then
+        self.netBinding = binding
+        break
+      end
+    end
   end
-  self.netBinding = cached
 
   if not self.netBinding then
     local i = _netBindingHighWaterMark + 1
@@ -378,13 +388,12 @@ function WebSocket:setupC4Connection()
       end
     end
     _netBindingHighWaterMark = assert(self.netBinding)
-    -- Only claim the cache slot if the endpoint has none yet. Overwriting it
-    -- would re-point a long-lived socket's endpoint at a transient second
-    -- socket's binding, orphaning the original slot for the controller's
-    -- lifetime. Leaving the first winner pinned means the transient socket takes
-    -- the fresh binding and the long-lived one keeps reusing its own.
-    if endpointKey and not _netBindingByEndpoint[endpointKey] then
-      _netBindingByEndpoint[endpointKey] = self.netBinding
+    -- Record every binding allocated for this endpoint, so a later socket can
+    -- reclaim whichever one is free rather than allocating another.
+    if endpointKey then
+      bindings = bindings or {}
+      _netBindingByEndpoint[endpointKey] = bindings
+      bindings[#bindings + 1] = self.netBinding
     end
   end
 
