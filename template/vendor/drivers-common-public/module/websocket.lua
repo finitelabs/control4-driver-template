@@ -202,16 +202,18 @@ end
 
 --- Sends data through the WebSocket.
 --- @param s string The data to send.
-function WebSocket:Send(s)
+--- @param opcode? number Frame opcode. Default 0x81 (FIN + text). Pass 0x82 for FIN + binary (e.g. MQTT over WebSocket).
+function WebSocket:Send(s, opcode)
+  opcode = opcode or 0x81
   if self.connected then
     local len = string.len(s)
     local lenstr
     if len <= 125 then
-      lenstr = string.char(0x81, bit.bor(len, 0x80))
+      lenstr = string.char(opcode, bit.bor(len, 0x80))
     elseif len <= 65535 then
-      lenstr = string.char(0x81, bit.bor(126, 0x80)) .. tohex(string.format("%04X", len))
+      lenstr = string.char(opcode, bit.bor(126, 0x80)) .. tohex(string.format("%04X", len))
     else
-      lenstr = string.char(0x81, bit.bor(127, 0x80)) .. tohex(string.format("%16X", len))
+      lenstr = string.char(opcode, bit.bor(127, 0x80)) .. tohex(string.format("%16X", len))
     end
 
     local mask = {
@@ -311,23 +313,53 @@ end
 
 -- Functions below this line should not be called directly by users of this library
 
+-- Reuse one network binding per endpoint across reconnects. Control4 has no API
+-- to destroy a CreateNetworkConnection, and SetBindingAddress("") does not
+-- durably release the binding (C4 keeps re-resolving the host and re-populating
+-- the binding address), so allocating a fresh binding on every WebSocket:new()
+-- permanently burns a slot in the 6100-6199 pool until the controller reboots.
+-- A driver that reconnects (e.g. cloud MQTT-over-WS) eventually exhausts the
+-- pool and the assert below fires.
+--
+-- The cache key is protocol://host:port, not host alone: the binding carries the
+-- port (NetPortOptions) and owns the OCS/RFN callbacks, so two sockets to
+-- different ports on the same host must not share one. A cached binding is also
+-- only reused when no live socket still owns it, which keeps concurrent sockets
+-- to the same endpoint independent. Drivers that fully delete the old socket
+-- before opening its replacement (the documented reconnect pattern) therefore
+-- keep reusing a single slot.
 local _netBindingHighWaterMark = 6099
+local _netBindingByEndpoint = {}
 
 function WebSocket:setupC4Connection()
-  local i = _netBindingHighWaterMark + 1
-  while not self.netBinding and i ~= _netBindingHighWaterMark do
-    local checkAddress = C4:GetBindingAddress(i)
-    if checkAddress == nil or checkAddress == "" then
-      self.netBinding = i
-      break
+  local endpointKey = self.host
+    and string.format("%s://%s:%s", tostring(self.protocol), tostring(self.host), tostring(self.port))
+
+  local cached = endpointKey and _netBindingByEndpoint[endpointKey] or nil
+  if cached and self.Sockets and self.Sockets[cached] and self.Sockets[cached] ~= self then
+    cached = nil
+  end
+  self.netBinding = cached
+
+  if not self.netBinding then
+    local i = _netBindingHighWaterMark + 1
+    while not self.netBinding and i ~= _netBindingHighWaterMark do
+      local checkAddress = C4:GetBindingAddress(i)
+      if checkAddress == nil or checkAddress == "" then
+        self.netBinding = i
+        break
+      end
+      i = i + 1
+      if i == 6200 then
+        i = 6100
+        _netBindingHighWaterMark = _netBindingHighWaterMark + 1
+      end
     end
-    i = i + 1
-    if i == 6200 then
-      i = 6100
-      _netBindingHighWaterMark = _netBindingHighWaterMark + 1
+    _netBindingHighWaterMark = assert(self.netBinding)
+    if endpointKey then
+      _netBindingByEndpoint[endpointKey] = self.netBinding
     end
   end
-  _netBindingHighWaterMark = assert(self.netBinding)
 
   if self.netBinding and self.protocol then
     self.Sockets = self.Sockets or {}
@@ -360,9 +392,18 @@ function WebSocket:MakeHeaders()
   end
   self.key = C4:Base64Encode(self.key)
 
+  -- Omit the default port from the Host header. SigV4 hosts (AWS IoT) sign the host
+  -- WITHOUT the default port, so including :443 (or :80) breaks signature validation and
+  -- the server silently drops the upgrade. RFC 7230 says the default port SHOULD be
+  -- omitted, so non-default ports are unaffected and still carry ":port".
+  local hostHeader = self.host
+  if not ((self.protocol == "wss" and self.port == 443) or (self.protocol == "ws" and self.port == 80)) then
+    hostHeader = self.host .. ":" .. self.port
+  end
+
   local headers = {
     "GET " .. self.resource .. " HTTP/1.1",
-    "Host: " .. self.host .. ":" .. self.port,
+    "Host: " .. hostHeader,
     "Cache-Control: no-cache",
     "Pragma: no-cache",
     "Connection: Upgrade",
