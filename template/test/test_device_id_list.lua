@@ -1,10 +1,12 @@
 -- Tests for the callback index handed out by ParseDeviceIdList (src/lib/utils.lua).
 --
--- The third callback argument is the entry's 1-based position in the device ID
--- list. Consumers publish it as a stable identifier rather than as display
--- ordering: control4-home-connect uses it as a HomeKit outlet `Identifier`, as
--- the key of its `outlets` table, and as part of an LRU cache key, and Apple
--- Home binds accessories and scenes to those numbers. So the index a device gets
+-- The third callback argument is the entry's 1-based position among the
+-- non-empty entries of the device ID list (`gmatch` matches `[^,]+`, so
+-- `"100,,300"` gives `300` index 2). Consumers publish it as a stable
+-- identifier rather than as display ordering: control4-home-connect uses it as
+-- a HomeKit outlet `Identifier`, as the key of its `outlets` table, and as part
+-- of an LRU cache key, and Apple Home binds accessories and scenes to those
+-- numbers. So the index a device gets
 -- must not depend on whether the *other* entries in the list resolved -- if it
 -- does, one transient GetDevice failure silently repoints already-published
 -- accessories at different physical devices. Regression test for DRV-84.
@@ -68,6 +70,16 @@ function C4:GetDeviceDisplayName(deviceId)
   deviceId = tonumber(deviceId)
   local device = deviceId ~= nil and not hidden[deviceId] and PROJECT[deviceId] or nil
   return device and device.deviceName or ""
+end
+
+--- `src/constants.lua` is driver-specific, so it does not exist in the template
+--- itself and `make test` cannot load utils.lua in a bare render. utils.lua
+--- reads only HIDE_PROPERTY / SHOW_PROPERTY from it, in CheckMinimumVersion,
+--- which this suite never calls -- so stub it unconditionally rather than
+--- branching on whether a real one is present. Branching would let the same
+--- source report two different truths depending on where it is checked out.
+package.preload["constants"] = function()
+  return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 1 }
 end
 
 require("lib.utils")
