@@ -402,18 +402,22 @@ end
 --- Each device ID in the list is retrieved, checked for validity, and optionally passed to a callback function for processing.
 --- @param deviceIdListStr string The string of comma-separated device IDs.
 --- @param c4iNames? string[] Optional list of C4i names to filter devices.
---- @param callback? fun(deviceId: DeviceId, device: table, index: integer): any Optional callback to process each device.
+--- @param callback? fun(deviceId: DeviceId, device: table, index: integer): any Optional callback to process each device. `index` is the entry's 1-based position in `deviceIdListStr`, so entries that fail to resolve leave a gap rather than shifting the entries after them.
 --- @return table<DeviceId, any> devices Returns a table of processed devices, keyed by device ID.
 function ParseDeviceIdList(deviceIdListStr, c4iNames, callback)
   log:trace("ParseDeviceIdList(%s, %s, <callback>)", deviceIdListStr, c4iNames)
   local devices = {}
-  local i = 1
+  local i = 0
   for deviceIdStr in string.gmatch(deviceIdListStr or "", "([^,]+)") do
+    -- Advance for every entry in the list, resolvable or not. Consumers use this
+    -- as a stable identifier (HomeKit outlet/input identifiers, cache keys), so
+    -- skipping the increment on an unresolvable device would renumber every
+    -- device behind it and silently repoint already-published accessories.
+    i = i + 1
     local device = GetDevice(deviceIdStr, c4iNames)
     if device ~= nil then
       if type(callback) == "function" then
         local success, result = pcall(callback, device.deviceId, device, i)
-        i = i + 1
         if success then
           devices[device.deviceId] = result
         else
