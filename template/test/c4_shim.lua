@@ -402,13 +402,14 @@ else
   function runEventLoop() end
 end
 
--- Outside the branches above because both SetTimer implementations return a
--- handle carrying Cancel, and neither branch defined this: a test touching a
--- timer got a nil C4:KillTimer, which test_websocket.lua worked around by
--- defining its own.
-function C4:KillTimer(handle)
-  if type(handle) == "table" and handle.Cancel then
-    handle:Cancel()
+-- Mirrors the controller rather than accommodating callers. Measured on a dev
+-- controller: C4:SetTimer returns userdata carrying :Cancel(), C4:AddTimer
+-- returns a number, and C4:KillTimer takes that number. Passing a SetTimer
+-- handle raises "idTimer should be a number", so this does too: a shim that
+-- accepted it would let a call that fails on hardware pass in tests.
+function C4:KillTimer(idTimer)
+  if type(idTimer) ~= "number" then
+    error("idTimer should be a number")
   end
 end
 
