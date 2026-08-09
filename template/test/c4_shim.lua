@@ -402,6 +402,17 @@ else
   function runEventLoop() end
 end
 
+-- Mirrors the controller rather than accommodating callers. Measured on a dev
+-- controller: C4:SetTimer returns userdata carrying :Cancel(), C4:AddTimer
+-- returns a number, and C4:KillTimer takes that number. Passing a SetTimer
+-- handle raises "idTimer should be a number", so this does too: a shim that
+-- accepted it would let a call that fails on hardware pass in tests.
+function C4:KillTimer(idTimer)
+  if type(idTimer) ~= "number" then
+    error("idTimer should be a number")
+  end
+end
+
 print("C4 shim layer loaded" .. (has_socket and " (with luasocket)" or " (stubs only)"))
 
 return C4
