@@ -402,6 +402,16 @@ else
   function runEventLoop() end
 end
 
+-- Outside the branches above because both SetTimer implementations return a
+-- handle carrying Cancel, and neither branch defined this: a test touching a
+-- timer got a nil C4:KillTimer, which test_websocket.lua worked around by
+-- defining its own.
+function C4:KillTimer(handle)
+  if type(handle) == "table" and handle.Cancel then
+    handle:Cancel()
+  end
+end
+
 print("C4 shim layer loaded" .. (has_socket and " (with luasocket)" or " (stubs only)"))
 
 return C4
