@@ -45,6 +45,11 @@ end
 function C4:GetBindingsByDevice()
   return {}
 end
+function C4:RegisterVariableListener() end
+function C4:UnregisterVariableListener() end
+function C4:UnregisterAllVariableListeners() end
+function C4:RegisterDeviceEvent() end
+function C4:UnregisterDeviceEvent() end
 function C4:FileExists()
   return false
 end
