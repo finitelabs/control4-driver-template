@@ -35,7 +35,23 @@ function C4:SetPropertyAttribs() end
 function C4:GetVersionInfo()
   return { version = "test" }
 end
-function C4:FileSetDir() end
+-- C4Z_ROOT is not one of the aliases the firmware accepts by default; it only
+-- resolves after a driver has unlocked it with the key below. Verified on the
+-- dev controller against a driver with no unlock: FileSetDir("C4Z_ROOT", name)
+-- fails with "Invalid alias: C4Z_ROOT", while bare FileSetDir("C4Z") succeeds.
+-- Modelled here because a no-op stub cannot fail on a missing unlock, which is
+-- what let that defect reach production. Only this one case is enforced: it is
+-- the only behavior confirmed against hardware, so every other argument stays a
+-- no-op rather than inventing strictness that was never observed.
+local FILE_SET_DIR_UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
+local c4zRootUnlocked = false
+function C4:FileSetDir(dir)
+  if dir == FILE_SET_DIR_UNLOCK_KEY then
+    c4zRootUnlocked = true
+  elseif dir == "C4Z_ROOT" and not c4zRootUnlocked then
+    error("Invalid alias: C4Z_ROOT", 2)
+  end
+end
 function C4:SendToDevice() end
 function C4:SendToProxy() end
 function C4:SendToNetwork() end
