@@ -26,8 +26,7 @@ function C4:GetDeviceData()
   return ""
 end
 function C4:AllowExecute() end
--- Verbatim from the dev controller; must stay in sync with test/c4_shim.lua.
--- url.lua parses .version at load time to set USE_NEW_URL.
+-- Keep in sync with test/c4_shim.lua; .version is parsed, not just read.
 function C4:GetVersionInfo()
   return { version = "4.2.1.757028-res", builddate = "2026-06-11", buildtime = "23:35:14", buildtype = "" }
 end
