@@ -32,8 +32,10 @@ end
 function C4:AllowExecute() end
 function C4:UpdateProperty() end
 function C4:SetPropertyAttribs() end
+-- Verbatim from the dev controller. url.lua parses .version at load time to set
+-- USE_NEW_URL, so a non-numeric stub silently selects the pre-OS-3.0 path.
 function C4:GetVersionInfo()
-  return { version = "test" }
+  return { version = "4.2.1.757028-res", builddate = "2026-06-11", buildtime = "23:35:14", buildtype = "" }
 end
 -- C4Z_ROOT errors until unlocked with the key below, as confirmed on the dev
 -- controller. Every other argument stays a no-op; that is the only strictness

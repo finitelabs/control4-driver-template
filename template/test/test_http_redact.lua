@@ -26,11 +26,10 @@ function C4:GetDeviceData()
   return ""
 end
 function C4:AllowExecute() end
--- drivers-common-public.global.lib calls this at load time.
-if C4.GetVersionInfo == nil then
-  function C4:GetVersionInfo()
-    return { version = "test" }
-  end
+-- Verbatim from the dev controller; must stay in sync with test/c4_shim.lua.
+-- url.lua parses .version at load time to set USE_NEW_URL.
+function C4:GetVersionInfo()
+  return { version = "4.2.1.757028-res", builddate = "2026-06-11", buildtime = "23:35:14", buildtype = "" }
 end
 -- Provided by src/lib/utils.lua in a driver; it is not loadable here.
 function InRange(v)
