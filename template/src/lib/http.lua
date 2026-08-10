@@ -4,7 +4,6 @@ local deferred = require("deferred")
 
 local log = require("lib.logging")
 
--- Defines the global urlDo() used below.
 require("drivers-common-public.global.url")
 
 --- Maximum timeout for HTTP requests.
