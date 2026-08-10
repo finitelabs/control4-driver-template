@@ -4,10 +4,7 @@ local deferred = require("deferred")
 
 local log = require("lib.logging")
 
--- Defines the global urlDo() this module calls below. Required here rather than
--- left to each driver's driver.lua: tools/gen-squishy.lua bundles from
--- package.loaded, so without this the module ships without url.lua and the
--- first request fails with "attempt to call global 'urlDo' (a nil value)".
+-- Defines the global urlDo() used below.
 require("drivers-common-public.global.url")
 
 --- Maximum timeout for HTTP requests.

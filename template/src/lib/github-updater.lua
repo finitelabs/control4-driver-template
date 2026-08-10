@@ -70,13 +70,7 @@ function GitHubUpdater:getOutdatedDriverAssets(repo, driverFilenames, includePre
   if IsEmpty(driverFilenames) then
     return reject(string.format("at least one driver filename is required to check for updates"))
   end
-  -- Unlock the C4Z_ROOT alias. It is not one of the aliases FileSetDir accepts by
-  -- default (SANDBOX, LOGGING, MEDIA and C4Z), so without this every use below
-  -- fails with "Invalid alias: C4Z_ROOT" before any network call is made:
-  -- GetDriverVersion in the loop just below, and the C4:FileSetDir(dir) in
-  -- downloadOutdatedDrivers, which updateAll calls with "C4Z_ROOT".
-  -- Every path to those reaches this function first, and the call is idempotent,
-  -- so arming it here means a driver no longer has to do it in OnDriverLateInit.
+  -- Unlock the C4Z_ROOT alias; FileSetDir rejects it otherwise.
   C4:FileSetDir("c29tZXNwZWNpYWxrZXk=++11")
   -- Determine the minimum driver version from the provided filenames; this determines if an update is needed.
   local minDriverVersion

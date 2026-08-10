@@ -15,9 +15,7 @@ local function check(name, ok, detail)
 end
 
 -- Minimal C4 surface required to load lib.logging / lib.http. Augments rather
--- than replaces, so the richer surface from test/c4_shim.lua survives when this
--- file is run under it; the fallbacks below cover the standalone invocation in
--- the header comment.
+-- than replaces so test/c4_shim.lua survives when this runs under it.
 C4 = C4 or {}
 function C4:ErrorLog() end
 function C4:DebugLog() end
@@ -28,15 +26,13 @@ function C4:GetDeviceData()
   return ""
 end
 function C4:AllowExecute() end
--- lib.http requires drivers-common-public.global.url, whose global/lib.lua calls
--- this at load time. Only defined when the shim has not already supplied it.
+-- drivers-common-public.global.lib calls this at load time.
 if C4.GetVersionInfo == nil then
   function C4:GetVersionInfo()
     return { version = "test" }
   end
 end
--- Provided by src/lib/utils.lua in a driver, which is not loaded here: it pulls
--- in the driver-owned src/constants.lua that the template does not ship.
+-- Provided by src/lib/utils.lua in a driver; it is not loadable here.
 function InRange(v)
   return v
 end

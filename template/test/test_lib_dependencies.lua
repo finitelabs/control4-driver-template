@@ -5,10 +5,8 @@
 --   LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
 --     luajit -e "require('c4_shim')" test/test_lib_dependencies.lua
 --
--- tools/gen-squishy.lua builds each .c4z from package.loaded after loading
--- driver.lua, so a module the template never requires is simply absent from the
--- bundle. That turns a missing require into a runtime nil-call in the field
--- instead of a build error, which is why this is asserted here.
+-- tools/gen-squishy.lua bundles from package.loaded, so a module nothing
+-- requires is absent from the .c4z and fails as a nil-call in the field.
 
 local pass, fail = 0, 0
 local function check(name, ok, detail)
@@ -21,7 +19,7 @@ local function check(name, ok, detail)
   end
 end
 
--- Deliberately no urlDo stub: the point is that requiring lib.http is enough.
+-- Deliberately no urlDo stub; requiring lib.http must be enough.
 check("urlDo is not defined before lib.http is required", urlDo == nil, "a stub would void this test")
 
 JSON = require("JSON")

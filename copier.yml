@@ -72,5 +72,5 @@ vendor_modules:
 
 lib_modules:
   type: str
-  help: "Space-separated lib modules (available: bindings conditionals events http lru persist values). Note: http requires the drivers-common-public vendor module, which defines the urlDo it calls; include it alongside."
+  help: "Space-separated lib modules (available: bindings conditionals events http lru persist values). Note: http requires the drivers-common-public vendor module; include it alongside."
   default: "bindings conditionals events http lru persist values"
