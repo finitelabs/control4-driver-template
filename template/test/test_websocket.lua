@@ -58,13 +58,13 @@ function C4:GetDeviceID()
   return 1
 end
 -- A real C4 timer handle is userdata carrying a :Cancel() method, and
--- global/timer.lua calls timer:Cancel() on it, so the shim returns a table with
--- the same shape rather than a bare id.
+-- global/timer.lua CancelTimer only resolves it when it is userdata, so a
+-- table returned here would make every cancel in websocket.lua a silent no-op.
 function C4:SetTimer(_delay, fn, _repeating)
   nextTimerHandle = nextTimerHandle + 1
   local id = nextTimerHandle
-  local handle
-  handle = {
+  local handle = newproxy(true)
+  getmetatable(handle).__index = {
     Cancel = function()
       pendingTimers[id] = nil
       return nil
@@ -73,13 +73,12 @@ function C4:SetTimer(_delay, fn, _repeating)
   pendingTimers[id] = { fn = fn, handle = handle }
   return handle
 end
-function C4:KillTimer(handle)
-  for id, entry in pairs(pendingTimers) do
-    if entry.handle == handle then
-      pendingTimers[id] = nil
-    end
+-- C4:KillTimer pairs with C4:AddTimer, which returns a number, and raises on a
+-- C4:SetTimer handle. websocket.lua never calls it.
+function C4:KillTimer(idTimer)
+  if type(idTimer) ~= "number" then
+    error("idTimer should be a number")
   end
-  return 0
 end
 
 --- Fire every pending timer, which is what makes the 3-second close timer run.

@@ -15,6 +15,7 @@ end
 -- Global C4 object shim
 C4 = {}
 Properties = {}
+Variables = {}
 
 -- Stub C4 functions that are called but not needed for testing
 function C4:GetDriverConfigInfo()
@@ -162,6 +163,132 @@ function C4:UUID(prefix)
   return string.format("%s-%d-%d", prefix or "UUID", os.time(), uuid_counter)
 end
 
+---------------------------------------------------------------------------
+-- Variables
+-- Mirrors the controller rather than accommodating callers: values are always
+-- strings, updates are synchronous, and nothing is coerced or auto-created.
+-- test/test_c4_shim.lua pins each behaviour, measured on a dev controller.
+---------------------------------------------------------------------------
+
+-- Accepted on hardware. The controller's error message names only four types.
+-- Each maps to the code C4:GetDeviceVariables reports, measured one varType at
+-- a time: NUMBER and INT share 2, and nothing observed reports 7.
+local var_type_codes = {
+  STRING = 1,
+  INT = 2,
+  NUMBER = 2,
+  FLOAT = 3,
+  BOOL = 4,
+  LEVEL = 5,
+  STATE = 6,
+  TIME = 8,
+  ROOM = 9,
+  MEDIA = 10,
+  LIST = 11,
+  ULONG = 12,
+  XML = 13,
+  DEVICE = 14,
+}
+
+-- Director numbers each device's variables from 1001 and never reuses an id, so
+-- a deleted name returns at the end of the range. lib/values.lua restores hidden
+-- placeholders to keep that range stable, which is what makes ids worth modelling.
+local next_variable_id = 1001
+
+--- Id and attributes per variable name, behind C4:GetDeviceVariables. The value
+--- is read from Variables at call time so a SetVariable needs no bookkeeping here.
+--- @type table<string, { id: string, type: string, readonly: string, hidden: string }>
+local variable_meta = {}
+
+-- Strings and numbers only; nil means the controller would reject the value.
+local function var_value(value)
+  if type(value) == "string" then
+    return value
+  elseif type(value) == "number" then
+    return tostring(value)
+  end
+end
+
+-- Checks run in the controller's order: the value, then that varType is a
+-- string, then the existing-name return, and only then whether varType names a
+-- real type. An existing name returns false without ever validating varType.
+function C4:AddVariable(name, value, varType, readOnly, hidden)
+  local strValue = var_value(value)
+  if strValue == nil then
+    error("strValue should be a string", 2)
+  end
+  if type(varType) ~= "string" then
+    error("strVarType should be a string", 2)
+  end
+
+  name = tostring(name)
+
+  -- Already present: the controller keeps the existing value and type
+  if Variables[name] ~= nil then
+    return false
+  end
+
+  if not var_type_codes[varType] then
+    error("Invalid variable type.  Valid types include: BOOL, LEVEL, NUMBER, STRING.", 2)
+  end
+
+  Variables[name] = strValue
+  variable_meta[name] = {
+    id = tostring(next_variable_id),
+    type = tostring(var_type_codes[varType]),
+    readonly = readOnly == true and "True" or "False",
+    hidden = hidden == true and "True" or "False",
+  }
+  next_variable_id = next_variable_id + 1
+  return true
+end
+
+-- The value is checked before the name is looked up, so a bad value raises even
+-- on a name that was never added.
+function C4:SetVariable(name, value)
+  local strValue = var_value(value)
+  if strValue == nil then
+    error("strValue should be a string", 2)
+  end
+  name = tostring(name)
+
+  -- Never added: silently does nothing, and does not create it
+  if Variables[name] == nil then
+    return
+  end
+
+  Variables[name] = strValue
+end
+
+function C4:DeleteVariable(name)
+  name = tostring(name)
+  Variables[name] = nil
+  variable_meta[name] = nil
+end
+
+-- Keyed by id as a string, with every field a string: `type` is a numeric code,
+-- `readonly` and `hidden` are "True"/"False", and `description` is always empty
+-- because AddVariable cannot set one. A device with no variables and a device
+-- that does not exist both give an empty table, and hidden variables are
+-- returned rather than filtered out.
+function C4:GetDeviceVariables(deviceId)
+  local variables = {}
+  if deviceId ~= C4:GetDeviceID() then
+    return variables
+  end
+  for name, meta in pairs(variable_meta) do
+    variables[meta.id] = {
+      name = name,
+      description = "",
+      value = Variables[name],
+      type = meta.type,
+      readonly = meta.readonly,
+      hidden = meta.hidden,
+    }
+  end
+  return variables
+end
+
 -- Persistence stubs (in-memory storage for testing)
 local persist_store = {}
 
@@ -178,6 +305,37 @@ function PersistDeleteValue(key)
 end
 
 ---------------------------------------------------------------------------
+-- Timer handles
+-- A controller returns userdata from C4:SetTimer, and global/timer.lua only
+-- resolves a handle when `type(timerId) == "userdata"`, so a table handle
+-- makes every CancelTimer a silent no-op under test. newproxy(true) is the
+-- only way to mint userdata from Lua; LuaJIT keeps it.
+---------------------------------------------------------------------------
+
+local timer_handle_count = 0
+
+--- @param cancel fun(): nil Invoked by handle:Cancel().
+--- @return userdata handle A stand-in for the controller's C4LuaTimer.
+local function new_timer_handle(cancel)
+  timer_handle_count = timer_handle_count + 1
+  local serial = timer_handle_count
+  local handle = newproxy(true)
+  local mt = getmetatable(handle)
+  mt.__index = {
+    Cancel = function()
+      cancel()
+      -- Returns nil, so global/timer.lua clears its slot on cancel
+      return nil
+    end,
+  }
+  -- Distinct per handle, like the controller's address-bearing rendering
+  mt.__tostring = function()
+    return string.format("C4LuaTimer (shim #%d)", serial)
+  end
+  return handle
+end
+
+---------------------------------------------------------------------------
 -- Socket-dependent features (timers, TCP client, event loop)
 -- Only available when luasocket is installed.
 ---------------------------------------------------------------------------
@@ -191,15 +349,12 @@ if has_socket then
     timer_id = timer_id + 1
     local id = timer_id
 
-    local handle = {
-      id = id,
-      Cancel = function(self)
-        if timers[id] then
-          timers[id].cancelled = true
-          timers[id] = nil
-        end
-      end,
-    }
+    local handle = new_timer_handle(function()
+      if timers[id] then
+        timers[id].cancelled = true
+        timers[id] = nil
+      end
+    end)
 
     local timer = {
       id = id,
@@ -383,9 +538,10 @@ if has_socket then
     end
   end
 else
-  -- Stub timer that does nothing (sufficient for module loading)
+  -- Stub timer that does nothing (sufficient for module loading). Still real
+  -- userdata, so CancelTimer resolves the handle on this branch too.
   function C4:SetTimer(delay_ms, callback, repeating)
-    return { Cancel = function() end }
+    return new_timer_handle(function() end)
   end
 
   function C4:ProcessTimers() end
@@ -409,7 +565,7 @@ end
 -- accepted it would let a call that fails on hardware pass in tests.
 function C4:KillTimer(idTimer)
   if type(idTimer) ~= "number" then
-    error("idTimer should be a number")
+    error("idTimer should be a number", 2)
   end
 end
 
