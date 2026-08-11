@@ -29,6 +29,8 @@ _exclude:
   - "{% if 'events' not in lib_modules.split() %}src/lib/events.lua{% endif %}"
   - "{% if 'http' not in lib_modules.split() %}src/lib/http.lua{% endif %}"
   - "{% if 'http' not in lib_modules.split() %}test/test_http_redact.lua{% endif %}"
+  - "{% if 'http' not in lib_modules.split() %}test/test_lib_dependencies.lua{% endif %}"
+  - "{% if 'oss' not in distributions.split() or 'http' not in lib_modules.split() %}test/test_github_updater_alias.lua{% endif %}"
   - "{% if 'lru' not in lib_modules.split() %}src/lib/lru.lua{% endif %}"
   - "{% if 'persist' not in lib_modules.split() %}src/lib/persist.lua{% endif %}"
   - "{% if 'values' not in lib_modules.split() %}src/lib/values.lua{% endif %}"
@@ -72,6 +74,6 @@ vendor_modules:
 
 lib_modules:
   type: str
-  help: "Space-separated lib modules (available: bindings conditionals events http lru persist values)"
+  help: "Space-separated lib modules (available: bindings conditionals events http lru persist values). Note: http requires the drivers-common-public and json vendor modules, and loads url.lua, which defines the globals COMMON_URL_VER, GlobalTicketHandlers, ETag, MAX_CACHE, USE_NEW_URL and DEBUG_URL in every driver that selects it."
   default: "bindings conditionals events http lru persist values"
-  validator: "{% if 'http' in lib_modules.split() and 'drivers-common-public' not in vendor_modules.split() %}http requires the drivers-common-public vendor module; add it to vendor_modules{% endif %}"
+  validator: "{% if 'http' in lib_modules.split() %}{% set missing = [] %}{% for m in ['drivers-common-public', 'json'] %}{% if m not in vendor_modules.split() %}{% set _ = missing.append(m) %}{% endif %}{% endfor %}{% if missing %}http requires the {{ missing | join(' and ') }} vendor module{{ 's' if missing | length > 1 else '' }}; add to vendor_modules{% endif %}{% endif %}"
