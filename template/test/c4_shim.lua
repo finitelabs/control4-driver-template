@@ -36,6 +36,10 @@ function C4:SetPropertyAttribs() end
 function C4:GetVersionInfo()
   return { version = "4.2.1.757028-res", builddate = "2026-06-11", buildtime = "23:35:14", buildtype = "" }
 end
+-- Returns the running driver's filename, extension included.
+function C4:GetDriverFileName()
+  return "example.c4z"
+end
 -- Mirrors the controller: C4Z_ROOT errors until unlocked with the key below, and
 -- every other argument is a no-op.
 local FILE_SET_DIR_UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
