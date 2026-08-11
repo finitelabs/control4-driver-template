@@ -16,14 +16,16 @@ The skill does not apply *to this repo*: its preflight requires
 stop rather than review, and nothing it knows covers the template mechanics
 below. That is what this file is for.
 
-## Nothing here has CI
+## CI renders the template rather than running it
 
-There are no workflows at this repo's root. `template/.github/workflows/` renders
-*into* driver repos; it does not run on the template. A change that breaks every
-driver's build merges here completely green, because there is nothing to be green
-or red.
+`.github/workflows/template.yml` renders six answer sets and runs each render's
+tests and format checks. Not to be confused with `template/.github/workflows/`,
+which renders *into* driver repos and never runs here.
 
-**So render before you push.** This is the only gate that exists.
+Every gating defect so far passed a default render and appeared only under a
+non-default one, so when you add an `_exclude` entry, add the leg that exercises
+it — and check that leg is distinct with `diff -r`. `oss` forces `http.lua` and
+`github-updater.lua` in regardless of `lib_modules`.
 
 ## Rendering, and the default that lies
 
