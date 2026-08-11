@@ -74,6 +74,6 @@ vendor_modules:
 
 lib_modules:
   type: str
-  help: "Space-separated lib modules (available: bindings conditionals events http lru persist values). Note: http requires the drivers-common-public and json vendor modules, and loads url.lua, which defines the globals COMMON_URL_VER, GlobalTicketHandlers, ETag, MAX_CACHE, USE_NEW_URL and DEBUG_URL in every driver that selects it."
+  help: "Space-separated lib modules (available: bindings conditionals events http lru persist values)"
   default: "bindings conditionals events http lru persist values"
   validator: "{% if 'http' in lib_modules.split() %}{% set missing = [] %}{% for m in ['drivers-common-public', 'json'] %}{% if m not in vendor_modules.split() %}{% set _ = missing.append(m) %}{% endif %}{% endfor %}{% if missing %}http requires the {{ missing | join(' and ') }} vendor module{{ 's' if missing | length > 1 else '' }}; add to vendor_modules{% endif %}{% endif %}"

@@ -78,9 +78,9 @@ function CheckMinimumVersion(statusProperty)
   return true
 end
 
---- Undocumented Snap One hook: C4:FileSetDir rejects the C4Z_ROOT alias until this key is
---- passed. Chowmain and Bond gate it on OS 3.3, so it is pcall'd here; a controller that
---- rejects the key then fails on the alias itself, exactly as it did before this unlock.
+--- Undocumented hook: C4:FileSetDir rejects the C4Z_ROOT alias until this key is passed.
+--- Not every controller OS accepts the key, so it is pcall'd; a rejection then fails on the
+--- alias itself, as it did before this unlock, instead of erroring out of the update.
 local C4Z_ROOT_UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
 
 --- Gets the version of a driver from its driver.xml file.
