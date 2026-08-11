@@ -14,8 +14,9 @@ local function check(name, ok, detail)
   end
 end
 
--- Minimal C4 surface required to load lib.logging / lib.http.
-C4 = {}
+-- Minimal C4 surface required to load lib.logging / lib.http. Augments rather
+-- than replaces so test/c4_shim.lua survives when this runs under it.
+C4 = C4 or {}
 function C4:ErrorLog() end
 function C4:DebugLog() end
 function C4:GetDeviceID()
@@ -25,13 +26,17 @@ function C4:GetDeviceData()
   return ""
 end
 function C4:AllowExecute() end
+-- Keep in sync with test/c4_shim.lua; .version is parsed, not just read.
+function C4:GetVersionInfo()
+  return { version = "4.2.1.757028-res", builddate = "2026-06-11", buildtime = "23:35:14", buildtype = "" }
+end
+-- Provided by src/lib/utils.lua in a driver; it is not loadable here.
 function InRange(v)
   return v
 end
 function IsEmpty(v)
   return v == nil or v == ""
 end
-function urlDo() end
 
 -- vendor/JSON.lua calls this for every number it encodes. Without it any fixture
 -- containing a number makes encode throw, and since nearly every assertion below

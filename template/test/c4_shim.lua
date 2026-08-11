@@ -32,10 +32,25 @@ end
 function C4:AllowExecute() end
 function C4:UpdateProperty() end
 function C4:SetPropertyAttribs() end
+-- url.lua parses .version at load time; a non-numeric stub selects the pre-OS-3.0 path.
 function C4:GetVersionInfo()
-  return { version = "test" }
+  return { version = "4.2.1.757028-res", builddate = "2026-06-11", buildtime = "23:35:14", buildtype = "" }
 end
-function C4:FileSetDir() end
+-- Returns the running driver's filename, extension included.
+function C4:GetDriverFileName()
+  return "example.c4z"
+end
+-- Mirrors the controller: C4Z_ROOT errors until unlocked with the key below, and
+-- every other argument is a no-op.
+local FILE_SET_DIR_UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
+local c4zRootUnlocked = false
+function C4:FileSetDir(dir)
+  if dir == FILE_SET_DIR_UNLOCK_KEY then
+    c4zRootUnlocked = true
+  elseif dir == "C4Z_ROOT" and not c4zRootUnlocked then
+    error("Invalid alias: C4Z_ROOT", 2)
+  end
+end
 function C4:SendToDevice() end
 function C4:SendToProxy() end
 function C4:SendToNetwork() end
