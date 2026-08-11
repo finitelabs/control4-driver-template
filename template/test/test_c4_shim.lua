@@ -368,8 +368,15 @@ require("drivers-common-public.global.lib") -- Select, Serialize, Deserialize
 require("lib.utils") -- IsEmpty, toboolean, tointeger
 
 clearVariables()
-local loaded, values = pcall(require, "lib.values")
-check("lib.values loads", loaded, values)
+
+-- lib.values is gated on lib_modules; a render without it is valid, not broken.
+local loaded, values
+if package.searchpath("lib.values", package.path) == nil then
+  print("  skip lib/values.lua is not in this render")
+else
+  loaded, values = pcall(require, "lib.values")
+  check("lib.values loads", loaded, values)
+end
 
 if loaded then
   values:reset()

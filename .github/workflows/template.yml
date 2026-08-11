@@ -1,0 +1,132 @@
+name: template
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: render (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: ""
+            lib_modules: bindings conditionals events http values
+          # Off oss: with oss selected this leg equals default (oss forces http in).
+          - name: no-http
+            distributions: drivercentral
+            readme_build: drivercentral
+            vendor_modules: ""
+            lib_modules: bindings conditionals events values
+          - name: minimal
+            distributions: drivercentral
+            readme_build: drivercentral
+            vendor_modules: ""
+            lib_modules: ""
+          - name: drivercentral-only
+            distributions: drivercentral
+            readme_build: drivercentral
+            vendor_modules: ""
+            lib_modules: bindings conditionals events http values
+          - name: oss-no-http
+            distributions: oss
+            readme_build: oss
+            vendor_modules: ""
+            lib_modules: bindings conditionals events values
+          - name: crypto-bundles
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: bitn crypto noiseprotocol protobuf bthome
+            lib_modules: bindings conditionals events http values
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: leafo/gh-actions-lua@v12
+        with:
+          luaVersion: "luajit-2.1"
+
+      # Installs stylua; it is run through a shell below, not this action, whose
+      # arg splitter drops single-quoted globs and would check zero files.
+      - uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: --version
+
+      - name: Install copier
+        run: pipx install copier
+
+      # Without --vcs-ref HEAD copier renders the newest tag, not this checkout.
+      - name: Render
+        env:
+          DISTRIBUTIONS: ${{ matrix.distributions }}
+          README_BUILD: ${{ matrix.readme_build }}
+          VENDOR_MODULES: ${{ matrix.vendor_modules }}
+          LIB_MODULES: ${{ matrix.lib_modules }}
+        run: |
+          copier copy --trust --defaults --vcs-ref HEAD \
+            --data project_name=ci-render \
+            --data project_description="Template CI render" \
+            --data github_org=finitelabs \
+            --data readme_driver_slug=ci \
+            --data distributions="$DISTRIBUTIONS" \
+            --data readme_build="$README_BUILD" \
+            --data vendor_modules="$VENDOR_MODULES" \
+            --data lib_modules="$LIB_MODULES" \
+            . "$RUNNER_TEMP/render"
+
+      # make test only loads modules that call a drivers-common-public global.
+      - name: Every rendered src/lib module loads
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
+          luajit -e '
+            package.preload["constants"] = function()
+              return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 1 }
+            end
+            require("c4_shim")
+            local failed = {}
+            local p = io.popen("ls src/lib")
+            for name in p:lines() do
+              local mod = name:match("^(.*)%.lua$")
+              if mod then
+                local ok, err = pcall(require, "lib." .. mod)
+                if not ok then
+                  failed[#failed + 1] = mod .. ": " .. tostring(err)
+                end
+              end
+            end
+            p:close()
+            if #failed > 0 then
+              io.stderr:write("modules that do not load:\n  " .. table.concat(failed, "\n  ") .. "\n")
+              os.exit(1)
+            end
+            print("every src/lib module loads")
+          '
+
+      - name: make test
+        working-directory: ${{ runner.temp }}/render
+        run: make test
+
+      # vendor/ omitted: the amalgs are not formatted to our style.
+      - name: Formatted
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          stylua --check \
+            --indent-type Spaces --column-width 120 --line-endings Unix \
+            --indent-width 2 --quote-style AutoPreferDouble \
+            src test tools
+          pipx run black --check tools
+          pipx run --spec 'mdformat' --spec 'mdformat-gfm' mdformat --check --wrap 80 *.md

@@ -125,7 +125,9 @@ def _img_dims_to_style(html: str) -> str:
     return _IMG_TAG_RE.sub(repl, html)
 
 
-_ALIGN_TAG_RE = re.compile(r'<(?!img\b|/)[a-zA-Z][\w-]*\b[^>]*\balign\s*=\s*"[^"]*"[^>]*>', re.I)
+_ALIGN_TAG_RE = re.compile(
+    r'<(?!img\b|/)[a-zA-Z][\w-]*\b[^>]*\balign\s*=\s*"[^"]*"[^>]*>', re.I
+)
 _ALIGN_ATTR_RE = re.compile(r'\salign\s*=\s*"(left|right|center|justify)"', re.I)
 
 
@@ -176,9 +178,7 @@ def _status_symbols(html: str) -> str:
     return _WARN_RE.sub('<span style="color:#9a6700">⚠</span>', html)
 
 
-_PAGE_BREAK_RE = re.compile(
-    r'<div\b[^>]*\bpage-break[^>]*>\s*</div>\s*', re.I
-)
+_PAGE_BREAK_RE = re.compile(r"<div\b[^>]*\bpage-break[^>]*>\s*</div>\s*", re.I)
 
 
 def _drop_manual_page_breaks(html: str) -> str:
@@ -195,9 +195,7 @@ def _drop_manual_page_breaks(html: str) -> str:
 def md2html(input_path: Path, output_dir: Path) -> None:
     source = input_path.read_text(encoding="utf-8")
     body = _drop_manual_page_breaks(
-        _status_symbols(
-            _align_to_style(_img_dims_to_style(_make_md().render(source)))
-        )
+        _status_symbols(_align_to_style(_img_dims_to_style(_make_md().render(source))))
     )
     title = input_path.stem
     html = f"""<!doctype html>
