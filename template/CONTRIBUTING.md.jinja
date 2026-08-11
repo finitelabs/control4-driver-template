@@ -32,7 +32,9 @@ then pull the change in with `copier update`.
 {%- if 'events' in lib_modules.split() %}
 - `events.lua`: event firing and management
 {%- endif %}
-{%- if 'http' in lib_modules.split() %}
+{%- if 'oss' in distributions.split() %}
+- `http.lua`: HTTP client wrapper (used by github-updater)
+{%- elif 'http' in lib_modules.split() %}
 - `http.lua`: HTTP client wrapper
 {%- endif %}
 - `logging.lua`: structured logging with configurable levels
