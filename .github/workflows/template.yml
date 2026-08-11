@@ -1,0 +1,172 @@
+name: template
+
+# The template ships tests that, until this existed, ran only in driver repos
+# that had been swept to a version carrying `make test`. A test added under
+# template/test/ gated nothing in the repo that owns it.
+#
+# Rendering is the only way to test this repo honestly: copier.yml's _exclude
+# rules decide which files a driver gets, and a default render exercises exactly
+# one answer set. Every gating defect found so far passed a default render and
+# only showed up under a non-default one, so the matrix below is the point of
+# this workflow rather than a refinement of it.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  render:
+    name: render (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # What every repo in the fleet answers today.
+          - name: default
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: ""
+            lib_modules: bindings conditionals events http values
+          # http gone while the other lib modules stay. Has to be off oss:
+          # selecting oss forces http.lua and github-updater.lua in regardless
+          # of lib_modules, so the same answers with oss render identically to
+          # default and test nothing.
+          - name: no-http
+            distributions: drivercentral
+            readme_build: drivercentral
+            vendor_modules: ""
+            lib_modules: bindings conditionals events values
+          # Nothing optional selected. Catches an always-rendered module with a
+          # gated dependency, which is what DRV-97 was.
+          - name: minimal
+            distributions: drivercentral
+            readme_build: drivercentral
+            vendor_modules: ""
+            lib_modules: ""
+          # No oss, so no updater and no release workflow.
+          - name: drivercentral-only
+            distributions: drivercentral
+            readme_build: drivercentral
+            vendor_modules: ""
+            lib_modules: bindings conditionals events http values
+          # oss forces http and github-updater in regardless of lib_modules.
+          # This combination rendered a driver that could not update itself.
+          - name: oss-no-http
+            distributions: oss
+            readme_build: oss
+            vendor_modules: ""
+            lib_modules: bindings conditionals events values
+          # The vendor bundles that need bitn alongside them.
+          - name: crypto-bundles
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: bitn crypto noiseprotocol protobuf bthome
+            lib_modules: bindings conditionals events http values
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # copier resolves a git source through its history, so the tags have
+          # to be present for --vcs-ref to be meaningful.
+          fetch-depth: 0
+
+      - uses: leafo/gh-actions-lua@v12
+        with:
+          luaVersion: "luajit-2.1"
+
+      - name: Install copier
+        run: pipx install copier
+
+      # --vcs-ref HEAD is load-bearing. Given a git source and no ref, copier
+      # renders the newest *tag*, not the working tree, so without it this job
+      # would test the last release and pass regardless of what the PR changed.
+      #
+      # Answers go through env rather than being interpolated into the command,
+      # so a value containing spaces cannot word-split into separate --data args.
+      - name: Render
+        env:
+          DISTRIBUTIONS: ${{ matrix.distributions }}
+          README_BUILD: ${{ matrix.readme_build }}
+          VENDOR_MODULES: ${{ matrix.vendor_modules }}
+          LIB_MODULES: ${{ matrix.lib_modules }}
+        run: |
+          copier copy --trust --defaults --vcs-ref HEAD \
+            --data project_name=ci-render \
+            --data project_description="Template CI render" \
+            --data github_org=finitelabs \
+            --data readme_driver_slug=ci \
+            --data distributions="$DISTRIBUTIONS" \
+            --data readme_build="$README_BUILD" \
+            --data vendor_modules="$VENDOR_MODULES" \
+            --data lib_modules="$LIB_MODULES" \
+            . "$RUNNER_TEMP/render"
+
+      # test_lib_dependencies.lua already requires every src/lib module, so this
+      # finds nothing `make test` misses today. It is kept for the one shape
+      # that test cannot see: a future module calling no drivers-common-public
+      # global, which it therefore skips, and which nothing else requires. It
+      # also fails naming the module rather than as a suite error.
+      - name: Every rendered src/lib module loads
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
+          luajit -e '
+            -- src/constants.lua is driver-owned; a bare render ships none.
+            package.preload["constants"] = function()
+              return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 1 }
+            end
+            require("c4_shim")
+            local failed = {}
+            local p = io.popen("ls src/lib")
+            for name in p:lines() do
+              local mod = name:match("^(.*)%.lua$")
+              if mod then
+                local ok, err = pcall(require, "lib." .. mod)
+                if not ok then
+                  failed[#failed + 1] = mod .. ": " .. tostring(err)
+                end
+              end
+            end
+            p:close()
+            if #failed > 0 then
+              io.stderr:write("modules that do not load:\n  " .. table.concat(failed, "\n  ") .. "\n")
+              os.exit(1)
+            end
+            print("every src/lib module loads")
+          '
+
+      - name: make test
+        working-directory: ${{ runner.temp }}/render
+        run: make test
+
+  format:
+    name: stylua
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          # Same flags as the fmt-lua target the template ships, against the
+          # template sources rather than a render, so a reformat shows up here
+          # rather than as drift in ten repos.
+          #
+          # No -g. stylua-action interpolates args into a string that
+          # @actions/exec re-splits, and that splitter honours double quotes
+          # only, so -g '*.lua' arrives as the literal glob '*.lua', matches
+          # nothing, and the job passes having checked zero files. **/*.lua is
+          # stylua's default, so dropping the flag is both the fix and the
+          # simpler thing. fmt-lua keeps its -g because a shell strips the
+          # quotes there before stylua sees them.
+          args: >-
+            --check
+            --indent-type Spaces --column-width 120 --line-endings Unix
+            --indent-width 2 --quote-style AutoPreferDouble
+            template/src template/test template/tools

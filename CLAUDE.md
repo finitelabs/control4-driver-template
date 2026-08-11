@@ -16,14 +16,27 @@ The skill does not apply *to this repo*: its preflight requires
 stop rather than review, and nothing it knows covers the template mechanics
 below. That is what this file is for.
 
-## Nothing here has CI
+## CI renders the template rather than running it
 
-There are no workflows at this repo's root. `template/.github/workflows/` renders
-*into* driver repos; it does not run on the template. A change that breaks every
-driver's build merges here completely green, because there is nothing to be green
-or red.
+`.github/workflows/template.yml` is this repo's own CI. It renders the template
+six times with different answers, requires every `src/lib` module in each render,
+and runs each render's `make test`. Do not confuse it with
+`template/.github/workflows/`, which renders *into* driver repos and never runs
+here.
 
-**So render before you push.** This is the only gate that exists.
+**The matrix is the point, not a refinement of it.** Every gating defect found so
+far passed a default render and showed up only under a non-default answer set: a
+module gated while something always-rendered required it, and `oss` with `http`
+deselected rendering a driver that could not update itself. A single render tells
+you close to nothing.
+
+So when you add an `_exclude` entry, add the answer set that exercises it — and
+check the new leg is actually distinct, with `diff -r` against the others. `oss`
+forces `http.lua` and `github-updater.lua` in regardless of `lib_modules`, so a
+leg that deselects `http` alongside `oss` renders identically to `default`.
+
+Rendering locally before you push is still the fast path: CI tells you which leg
+broke, a local render tells you why.
 
 ## Rendering, and the default that lies
 
