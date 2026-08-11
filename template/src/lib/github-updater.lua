@@ -70,8 +70,6 @@ function GitHubUpdater:getOutdatedDriverAssets(repo, driverFilenames, includePre
   if IsEmpty(driverFilenames) then
     return reject(string.format("at least one driver filename is required to check for updates"))
   end
-  -- Unlock the C4Z_ROOT alias; FileSetDir rejects it otherwise.
-  C4:FileSetDir("c29tZXNwZWNpYWxrZXk=++11")
   -- Determine the minimum driver version from the provided filenames; this determines if an update is needed.
   local minDriverVersion
   for _, driverFilename in pairs(driverFilenames) do

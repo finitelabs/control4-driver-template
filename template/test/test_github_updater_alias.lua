@@ -1,5 +1,5 @@
--- Tests that src/lib/github-updater.lua unlocks the C4Z_ROOT alias before
--- anything that depends on it runs.
+-- Tests that src/lib/utils.lua unlocks the C4Z_ROOT alias inside GetDriverVersion,
+-- so the updater's version loop resolves every companion driver's directory.
 --
 -- Run from the template root:
 --   LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
@@ -16,53 +16,29 @@ local function check(name, ok, detail)
   end
 end
 
--- Globals src/lib/utils.lua defines in a driver; it is not loadable here.
-function IsEmpty(value)
-  return value == nil or value == "" or (type(value) == "table" and next(value) == nil)
+--- `src/constants.lua` is driver-specific, so it does not exist in the template itself.
+--- utils.lua reads only HIDE_PROPERTY / SHOW_PROPERTY from it, in CheckMinimumVersion,
+--- which this suite never calls.
+package.preload["constants"] = function()
+  return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 1 }
 end
-function Select(t, ...)
-  for _, k in ipairs({ ... }) do
-    if type(t) ~= "table" then
-      return nil
-    end
-    t = t[k]
-  end
-  return t
-end
-function TableReverse(t)
-  local r = {}
-  for k, v in pairs(t) do
-    r[v] = k
-  end
-  return r
-end
-function TableKeys(t)
-  local r = {}
-  for k in pairs(t) do
-    table.insert(r, k)
-  end
-  return r
-end
-function InRange(n, min, max)
-  return math.max(min, math.min(n, max))
-end
+
+-- utils.lua calls Select and FileRead, which drivers-common-public defines as globals.
+require("drivers-common-public.global.lib")
+require("lib.utils")
 
 JSON = require("JSON")
 local deferred = require("deferred")
-function reject(err)
-  return deferred.new():reject(err)
-end
 
--- Stand-in for utils.GetDriverVersion, which resolves a companion driver's
--- directory through the C4Z_ROOT alias.
+--- Counts calls and drops the parsed version. utils.lua reads it out of driver.xml
+--- through the shim's file API, which serves no such file, so the real return value
+--- is nil and semver would reject it. The alias is what this test is about.
+local realGetDriverVersion = GetDriverVersion
 local getDriverVersionCalls = 0
 local getDriverVersionError = nil
 function GetDriverVersion(filename)
   getDriverVersionCalls = getDriverVersionCalls + 1
-  local basename = filename:match("(.*)%.(.*)")
-  local ok, err = pcall(function()
-    C4:FileSetDir("C4Z_ROOT", basename)
-  end)
+  local ok, err = pcall(realGetDriverVersion, filename)
   if not ok then
     getDriverVersionError = err
     error(err, 0)

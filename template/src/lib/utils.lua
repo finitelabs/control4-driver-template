@@ -78,11 +78,19 @@ function CheckMinimumVersion(statusProperty)
   return true
 end
 
+--- Undocumented Snap One hook: C4:FileSetDir rejects the C4Z_ROOT alias until this key is
+--- passed. Chowmain and Bond gate it on OS 3.3, so it is pcall'd here; a controller that
+--- rejects the key then fails on the alias itself, exactly as it did before this unlock.
+local C4Z_ROOT_UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
+
 --- Gets the version of a driver from its driver.xml file.
 --- @param filename string The filename of the driver.
 --- @return string|nil version The version of the driver, or nil if not found.
 function GetDriverVersion(filename)
   local basename, _ = filename:match("(.*)%.(.*)")
+  pcall(function()
+    C4:FileSetDir(C4Z_ROOT_UNLOCK_KEY)
+  end)
   C4:FileSetDir("C4Z_ROOT", basename)
   return Select(ParseXml(FileRead("driver.xml")) or {}, "devicedata", "version") or nil
 end
