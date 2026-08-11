@@ -7,6 +7,7 @@ local deferred = require("deferred")
 local version = require("version")
 
 require("lib.utils")
+require("drivers-common-public.global.lib")
 
 --- Utility class for updating drivers from GitHub releases.
 --- @class GitHubUpdater

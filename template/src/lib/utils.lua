@@ -7,6 +7,10 @@ local lru = require("lib.lru")
 
 local constants = require("constants")
 
+require("drivers-common-public.global.lib")
+require("drivers-common-public.global.handlers")
+require("drivers-common-public.global.timer")
+
 --- @alias DeviceId integer|string
 
 do

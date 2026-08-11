@@ -4,6 +4,9 @@ local log = require("lib.logging")
 local persist = require("lib.persist")
 local constants = require("constants")
 
+require("drivers-common-public.global.lib")
+require("drivers-common-public.global.handlers")
+
 --- @class Values
 --- @field _callbacks table<string, function?> In-memory registry of OVC callbacks keyed by variable name.
 --- A class representing a collection of named values with optional variable/property support.
