@@ -39,7 +39,71 @@ end
 function C4:FileSetDir() end
 function C4:SendToDevice() end
 function C4:SendToProxy() end
-function C4:SendToNetwork() end
+
+---------------------------------------------------------------------------
+-- Network bindings
+-- Recorded rather than dropped, so a test can assert what a driver opened and
+-- sent without defining these itself. C4:GetBindingAddress is the controller's
+-- own accessor for the address; the frame log has no controller equivalent, so
+-- ShimSentFrames stands in and is named to be unmistakable.
+---------------------------------------------------------------------------
+
+local binding_address = {}
+local binding_port = {}
+local sent_frames = {}
+
+function C4:CreateNetworkConnection(binding, host, _type)
+  binding_address[binding] = host
+end
+
+function C4:GetBindingAddress(binding)
+  return binding_address[binding] or ""
+end
+
+-- Deliberately a no-op: the controller re-resolves the host and re-populates
+-- the address, so clearing it here would model a slot being freed that is not.
+function C4:SetBindingAddress() end
+
+function C4:NetPortOptions(binding, port, _type, _options)
+  binding_port[binding] = port
+end
+
+function C4:NetConnect() end
+function C4:NetDisconnect() end
+
+function C4:SendToNetwork(binding, port, data)
+  sent_frames[#sent_frames + 1] = { binding = binding, port = port, data = data }
+end
+
+--- @return table frames Every frame passed to C4:SendToNetwork, in order.
+function ShimSentFrames()
+  return sent_frames
+end
+
+--- @return table addresses, table ports Keyed by binding id.
+function ShimNetworkBindings()
+  return binding_address, binding_port
+end
+
+local function clear(t)
+  for k in pairs(t) do
+    t[k] = nil
+  end
+end
+
+--- Clear the recorded bindings, leaving the frame log alone. Separate from
+--- ShimResetSentFrames because a test that frees bindings mid-run is usually
+--- still counting frames across that point. Cleared in place so a table a test
+--- already holds stays the live one.
+function ShimResetBindings()
+  clear(binding_address)
+  clear(binding_port)
+end
+
+--- Clear the recorded frames.
+function ShimResetSentFrames()
+  clear(sent_frames)
+end
 function C4:SendUIRequest()
   return ""
 end
@@ -340,50 +404,80 @@ end
 -- Only available when luasocket is installed.
 ---------------------------------------------------------------------------
 
-if has_socket then
-  --- Timer implementation using socket.gettime
-  local timers = {}
-  local timer_id = 0
+local timers = {}
+local timer_id = 0
 
-  function C4:SetTimer(delay_ms, callback, repeating)
-    timer_id = timer_id + 1
-    local id = timer_id
+local function clock()
+  return has_socket and socket.gettime() or 0
+end
 
-    local handle = new_timer_handle(function()
-      if timers[id] then
-        timers[id].cancelled = true
-        timers[id] = nil
-      end
-    end)
+function C4:SetTimer(delay_ms, callback, repeating)
+  timer_id = timer_id + 1
+  local id = timer_id
 
-    local timer = {
-      id = id,
-      delay = delay_ms / 1000,
-      callback = callback,
-      repeating = repeating or false,
-      next_fire = socket.gettime() + (delay_ms / 1000),
-      cancelled = false,
-      handle = handle,
-    }
+  local handle = new_timer_handle(function()
+    if timers[id] then
+      timers[id].cancelled = true
+      timers[id] = nil
+    end
+  end)
 
-    timers[id] = timer
-    return handle
+  timers[id] = {
+    id = id,
+    delay = delay_ms / 1000,
+    callback = callback,
+    repeating = repeating or false,
+    next_fire = clock() + (delay_ms / 1000),
+    cancelled = false,
+    handle = handle,
+  }
+  return handle
+end
+
+--- Fire whatever the clock says is due. Without luasocket there is no clock, so
+--- nothing is ever due and ShimFireTimers is the only way to drive a timer.
+function C4:ProcessTimers()
+  if not has_socket then
+    return
   end
-
-  function C4:ProcessTimers()
-    local now = socket.gettime()
-    for id, timer in pairs(timers) do
-      if not timer.cancelled and now >= timer.next_fire then
-        timer.callback(timer.handle, 0)
-        if timer.repeating then
-          timer.next_fire = now + timer.delay
-        else
-          timers[id] = nil
-        end
+  local now = socket.gettime()
+  for id, timer in pairs(timers) do
+    if not timer.cancelled and now >= timer.next_fire then
+      timer.callback(timer.handle, 0)
+      if timer.repeating then
+        timer.next_fire = now + timer.delay
+      else
+        timers[id] = nil
       end
     end
   end
+end
 
+--- Harness, not a controller API: fire every pending timer now regardless of its
+--- delay, so a test can drive a long timeout without waiting for it. Works on
+--- both branches, which is what lets a test avoid defining its own SetTimer.
+--- The slot is cleared before the callback runs, so a callback that re-arms the
+--- same timer is not immediately fired again.
+function ShimFireTimers()
+  local due = {}
+  for id, timer in pairs(timers) do
+    if not timer.cancelled then
+      due[id] = timer
+    end
+  end
+  for id, timer in pairs(due) do
+    if timers[id] then
+      if timer.repeating then
+        timer.next_fire = clock() + timer.delay
+      else
+        timers[id] = nil
+      end
+      timer.callback(timer.handle, 0)
+    end
+  end
+end
+
+if has_socket then
   --- TCP Client implementation
   local TCPClient = {}
   TCPClient.__index = TCPClient
@@ -538,13 +632,6 @@ if has_socket then
     end
   end
 else
-  -- Stub timer that does nothing (sufficient for module loading). Still real
-  -- userdata, so CancelTimer resolves the handle on this branch too.
-  function C4:SetTimer(delay_ms, callback, repeating)
-    return new_timer_handle(function() end)
-  end
-
-  function C4:ProcessTimers() end
   function C4:CreateTCPClient()
     return setmetatable({}, {
       __index = function()
