@@ -20,33 +20,24 @@ jobs:
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: ""
-            lib_modules: bindings conditionals events http values
-          # Off oss: with oss selected this leg equals default (oss forces http in).
-          - name: no-http
-            distributions: drivercentral
-            readme_build: drivercentral
+          - name: oss-only
+            distributions: oss
+            readme_build: oss
             vendor_modules: ""
-            lib_modules: bindings conditionals events values
-          - name: minimal
-            distributions: drivercentral
-            readme_build: drivercentral
-            vendor_modules: ""
-            lib_modules: ""
+          # No github-updater, version, or release workflow; has cloud-client-byte.
           - name: drivercentral-only
             distributions: drivercentral
             readme_build: drivercentral
             vendor_modules: ""
-            lib_modules: bindings conditionals events http values
-          - name: oss-no-http
-            distributions: oss
-            readme_build: oss
-            vendor_modules: ""
-            lib_modules: bindings conditionals events values
+          # version.lua ships on a non-oss build only when named.
+          - name: version-token
+            distributions: drivercentral
+            readme_build: drivercentral
+            vendor_modules: version
           - name: crypto-bundles
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: bitn crypto noiseprotocol protobuf bthome
-            lib_modules: bindings conditionals events http values
 
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +65,6 @@ jobs:
           DISTRIBUTIONS: ${{ matrix.distributions }}
           README_BUILD: ${{ matrix.readme_build }}
           VENDOR_MODULES: ${{ matrix.vendor_modules }}
-          LIB_MODULES: ${{ matrix.lib_modules }}
         run: |
           copier copy --trust --defaults --vcs-ref HEAD \
             --data project_name=ci-render \
@@ -84,7 +74,6 @@ jobs:
             --data distributions="$DISTRIBUTIONS" \
             --data readme_build="$README_BUILD" \
             --data vendor_modules="$VENDOR_MODULES" \
-            --data lib_modules="$LIB_MODULES" \
             . "$RUNNER_TEMP/render"
 
       # make test only loads modules that call a drivers-common-public global.

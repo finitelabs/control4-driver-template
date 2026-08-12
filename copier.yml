@@ -19,13 +19,7 @@ _exclude:
   - "{% if 'bthome' not in vendor_modules.split() %}vendor/bthome.lua{% endif %}"
   - "{% if 'noiseprotocol' not in vendor_modules.split() %}vendor/noiseprotocol.lua{% endif %}"
   - "{% if 'protobuf' not in vendor_modules.split() %}vendor/protobuf.lua{% endif %}"
-  - "{% if 'bindings' not in lib_modules.split() %}src/lib/bindings.lua{% endif %}"
-  - "{% if 'conditionals' not in lib_modules.split() %}src/lib/conditionals.lua{% endif %}"
-  - "{% if 'events' not in lib_modules.split() %}src/lib/events.lua{% endif %}"
-  - "{% if 'oss' not in distributions.split() and 'http' not in lib_modules.split() %}src/lib/http.lua{% endif %}"
-  - "{% if 'oss' not in distributions.split() and 'http' not in lib_modules.split() %}test/test_http_redact.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_alias.lua{% endif %}"
-  - "{% if 'values' not in lib_modules.split() %}src/lib/values.lua{% endif %}"
 
 project_name:
   type: str
@@ -61,10 +55,5 @@ primary_color:
 
 vendor_modules:
   type: str
-  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol)."
+  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf version). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless."
   default: ""
-
-lib_modules:
-  type: str
-  help: "Space-separated lib modules (available: bindings conditionals events http values)"
-  default: "bindings conditionals events http values"

@@ -18,14 +18,14 @@ below. That is what this file is for.
 
 ## CI renders the template rather than running it
 
-`.github/workflows/template.yml` renders six answer sets and runs each render's
-tests and format checks. Not to be confused with `template/.github/workflows/`,
-which renders *into* driver repos and never runs here.
+`.github/workflows/template.yml` renders several answer sets and runs each
+render's tests and format checks. Not to be confused with
+`template/.github/workflows/`, which renders *into* driver repos and never runs
+here.
 
 Every gating defect so far passed a default render and appeared only under a
 non-default one, so when you add an `_exclude` entry, add the leg that exercises
-it — and check that leg is distinct with `diff -r`. `oss` forces `http.lua` and
-`github-updater.lua` in regardless of `lib_modules`.
+it — and check that leg is distinct with `diff -r`.
 
 ## Rendering, and the default that lies
 
@@ -71,16 +71,15 @@ A template ticket is not done at merge; it is done when the drift is closed.
 
 ## `_exclude` gates files on answers
 
-`copier.yml`'s `_exclude` list drops files that the answers did not select —
-`distributions` controls OSS versus DriverCentral, `vendor_modules` the vendored
-libraries, `lib_modules` the `src/lib/*.lua` set. Adding a file under `template/`
-that `require`s a gated module needs its own `_exclude` entry, or every repo that
-did not select that module renders a file whose dependency is absent.
+`copier.yml`'s `_exclude` list drops files the answers did not select —
+`distributions` controls OSS versus DriverCentral, `vendor_modules` the optional
+vendored libraries. There is no module-to-module gating: every `src/lib/*.lua`
+renders unconditionally, and `gen-squishy` bundles only what a driver actually
+requires, so a rendered-but-unused module is zero bytes in the `.c4z`. A new
+`src/lib` file needs no `_exclude` entry.
 
-The gating is cross-cutting, not one-line-per-file: `src/lib/http.lua` being
-deselected also excludes two tests, and `github-updater.lua` is gated on
-`distributions` while the tests that cover it are gated on both. Check the whole
-list when you move a dependency, not just the entry for the file you touched.
+`github-updater.lua` and its alias test are gated on `oss`, the distribution
+whose update mechanism they are.
 
 `_skip_if_exists` holds `CHANGELOG.md`, so existing repos never receive changes to
 it — only newly created ones do.
