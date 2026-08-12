@@ -4,6 +4,7 @@ local log = require("lib.logging")
 local persist = require("lib.persist")
 
 require("drivers-common-public.global.lib")
+require("lib.utils") -- IsEmpty, TableDeepCopy
 
 --- @class Conditionals
 --- A class representing conditionals.

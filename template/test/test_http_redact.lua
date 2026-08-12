@@ -1,7 +1,8 @@
 -- Tests for the credential redaction in src/lib/http.lua.
 --
 -- Run from the template root:
---   LUA_PATH="$PWD/src/?.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" luajit test/test_http_redact.lua
+--   LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
+--     luajit -e "require('c4_shim')" test/test_http_redact.lua
 
 local pass, fail = 0, 0
 local function check(name, ok, detail)
@@ -14,41 +15,15 @@ local function check(name, ok, detail)
   end
 end
 
--- Minimal C4 surface required to load lib.logging / lib.http. Augments rather
--- than replaces so test/c4_shim.lua survives when this runs under it.
-C4 = C4 or {}
-function C4:ErrorLog() end
-function C4:DebugLog() end
-function C4:GetDeviceID()
-  return 1
-end
-function C4:GetDeviceData()
-  return ""
-end
-function C4:AllowExecute() end
--- Keep in sync with test/c4_shim.lua; .version is parsed, not just read.
-function C4:GetVersionInfo()
-  return { version = "4.2.1.757028-res", builddate = "2026-06-11", buildtime = "23:35:14", buildtype = "" }
-end
--- Provided by src/lib/utils.lua in a driver; it is not loadable here.
-function InRange(v)
-  return v
-end
-function IsEmpty(v)
-  return v == nil or v == ""
+-- The shim supplies the C4 surface. lib.http pulls in lib.utils (IsEmpty,
+-- InRange) and global.lib (tostring_return_period, JSON) through its own
+-- requires, so nothing is restubbed here. lib.utils needs src/constants.lua,
+-- which is driver-owned and absent from a bare template, so it is stubbed.
+require("c4_shim")
+package.preload["constants"] = function()
+  return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 0 }
 end
 
--- vendor/JSON.lua calls this for every number it encodes. Without it any fixture
--- containing a number makes encode throw, and since nearly every assertion below
--- is `not contains(out, secret)`, they would all pass against the error text
--- rather than the payload. Defining it keeps those assertions meaningful.
-function tostring_return_period(value)
-  return tostring(value)
-end
-
--- Global, not local: src/lib/http.lua reads JSON as a runtime global the way the
--- driver environment provides it.
-JSON = require("JSON")
 local Http = require("lib.http")
 
 local redact = Http._redact

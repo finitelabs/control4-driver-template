@@ -94,12 +94,28 @@ if libDir and dcpDir then
     local mod = name:match("^(.+)%.lua$")
     local body = mod and readFile(dcpDir .. "/" .. name)
     if body then
-      for fn in stripComments(body):gmatch("\nfunction%s+([%a_][%w_]*)%s*%(") do
+      -- Leading %s* so indented defs (e.g. globals inside a `do` block) are seen,
+      -- not just column-0 ones. `local function` stays excluded: `local` breaks it.
+      for fn in stripComments(body):gmatch("\n%s*function%s+([%a_][%w_]*)%s*%(") do
         owner[fn] = "drivers-common-public.global." .. mod
       end
     end
   end
   check("the global modules define globals to check for", next(owner) ~= nil)
+
+  -- src/lib modules define globals too (utils.lua's IsEmpty, InRange, ...) that
+  -- siblings call. Map those the same way, so an intra-lib missing require is
+  -- caught as well -- the DRV-97 class one level in. A module defining a global
+  -- is excluded from needing it below via `own`, so self-references don't flag.
+  for _, name in ipairs(ls(libDir)) do
+    local mod = name:match("^(.+)%.lua$")
+    local body = mod and readFile(libDir .. "/" .. name)
+    if body then
+      for fn in stripComments(body):gmatch("\n%s*function%s+([%a_][%w_]*)%s*%(") do
+        owner[fn] = "lib." .. mod
+      end
+    end
+  end
 
   for _, name in ipairs(ls(libDir)) do
     local mod = name:match("^(.+)%.lua$")

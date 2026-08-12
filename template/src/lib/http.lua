@@ -5,6 +5,7 @@ local deferred = require("deferred")
 local log = require("lib.logging")
 
 require("drivers-common-public.global.url")
+require("lib.utils") -- InRange, IsEmpty
 
 --- Maximum timeout for HTTP requests.
 --- @type number
