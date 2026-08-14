@@ -1,6 +1,6 @@
 --- A logging utility module for managing log levels and output modes.
 
-require("drivers-common-public.global.lib") -- tostring_return_period
+require("drivers-common-public.global.lib")
 
 --- A logging utility class with support for multiple log levels and output modes.
 --- @class Log
