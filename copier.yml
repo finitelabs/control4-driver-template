@@ -7,6 +7,8 @@ _jinja_extensions:
 # Skip overwriting these on `copier update` if they already exist
 _skip_if_exists:
   - "CHANGELOG.md"
+  # Seeded with the keys the template lib needs; drivers extend it.
+  - "src/constants.lua"
 
 # Conditionally exclude files based on answers
 _exclude:

@@ -44,16 +44,6 @@ local PROJECT = {
 require("c4_shim")
 ShimSetDevices(PROJECT)
 
---- `src/constants.lua` is driver-specific, so it does not exist in the template
---- itself and `make test` cannot load utils.lua in a bare render. utils.lua
---- reads only HIDE_PROPERTY / SHOW_PROPERTY from it, in CheckMinimumVersion,
---- which this suite never calls -- so stub it unconditionally rather than
---- branching on whether a real one is present. Branching would let the same
---- source report two different truths depending on where it is checked out.
-package.preload["constants"] = function()
-  return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 1 }
-end
-
 require("lib.utils")
 
 --- GetDevice memoizes into an LRU with a 180 second TTL, so a device that

@@ -359,10 +359,6 @@ check("every variable has a distinct id", reported == tracked, reported .. " rep
 section("lib/values.lua under the shim")
 --------------------------------------------------------------------------------
 
--- constants is driver-specific and has no template copy, so it is stubbed here.
-package.preload["constants"] = function()
-  return { SHOW_PROPERTY = 1, HIDE_PROPERTY = 0 }
-end
 require("drivers-common-public.global.handlers") -- OVC and the other handler tables
 require("drivers-common-public.global.lib") -- Select, Serialize, Deserialize
 require("lib.utils") -- IsEmpty, toboolean, tointeger
