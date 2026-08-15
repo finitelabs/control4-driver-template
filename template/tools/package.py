@@ -54,6 +54,8 @@ def make_zip(output_path: Path, inputs: list[str]) -> None:
                         zf.write(f, arcname=f.as_posix())
             elif p.is_file():
                 zf.write(p, arcname=p.name)
+            else:
+                raise FileNotFoundError(f"zip: no such file or directory: {item}")
 
 
 def main() -> int:
