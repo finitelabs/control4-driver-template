@@ -17,12 +17,8 @@ end
 
 -- The shim supplies the C4 surface. lib.http pulls in lib.utils (IsEmpty,
 -- InRange) and global.lib (tostring_return_period, JSON) through its own
--- requires, so nothing is restubbed here. lib.utils needs src/constants.lua,
--- which is driver-owned and absent from a bare template, so it is stubbed.
+-- requires, so nothing is restubbed here.
 require("c4_shim")
-package.preload["constants"] = function()
-  return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 0 }
-end
 
 local Http = require("lib.http")
 

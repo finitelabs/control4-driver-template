@@ -1,0 +1,91 @@
+<devicedata>
+  <name>Example Driver</name>
+  <version/>
+  <manufacturer>Finite Labs</manufacturer>
+  <model>Example Driver</model>
+  <creator>Finite Labs</creator>
+  <control>lua_gen</control>
+  <driver>DriverWorks</driver>
+  <copyright>Copyright 2026 Finite Labs, LLC. All rights reserved.</copyright>
+  <created>01/01/2026 12:00:00 PM</created>
+  <modified/>
+  <minimum_os_version>3.3.0</minimum_os_version>
+  <composer_categories>
+    <category>Other</category>
+  </composer_categories>
+  <conditionals/>
+  <events/>
+  <config>
+    <script file="driver.lua" jit="1"/>
+    <documentation file="www/documentation/index.html"/>
+    <properties>
+      <!-- #ifdef DRIVERCENTRAL -->
+      <property>
+        <name>Cloud Settings</name>
+        <type>LABEL</type>
+        <default>Cloud Settings</default>
+      </property>
+      <property>
+        <name>Cloud Status</name>
+        <default/>
+        <type>STRING</type>
+        <readonly>true</readonly>
+      </property>
+      <property>
+        <name>Automatic Updates</name>
+        <type>LIST</type>
+        <items>
+          <item>Off</item>
+          <item>On</item>
+        </items>
+        <default>On</default>
+      </property>
+      <!-- #endif -->
+      <property>
+        <name>Driver Settings</name>
+        <type>LABEL</type>
+        <default>Driver Settings</default>
+      </property>
+      <property>
+        <name>Driver Status</name>
+        <type>STRING</type>
+        <default/>
+        <readonly>true</readonly>
+      </property>
+      <property>
+        <name>Driver Version</name>
+        <type>STRING</type>
+        <default/>
+        <readonly>true</readonly>
+      </property>
+      <property>
+        <name>Log Level</name>
+        <type>LIST</type>
+        <default>3 - Info</default>
+        <items>
+          <item>0 - Fatal</item>
+          <item>1 - Error</item>
+          <item>2 - Warning</item>
+          <item>3 - Info</item>
+          <item>4 - Debug</item>
+          <item>5 - Trace</item>
+          <item>6 - Ultra</item>
+        </items>
+      </property>
+      <property>
+        <name>Log Mode</name>
+        <type>LIST</type>
+        <default>Off</default>
+        <items>
+          <item>Off</item>
+          <item>Print</item>
+          <item>Log</item>
+          <item>Print and Log</item>
+        </items>
+      </property>
+    </properties>
+  </config>
+  <capabilities/>
+  <proxies/>
+  <connections/>
+</devicedata>

@@ -18,13 +18,6 @@ local function check(name, ok, detail)
   end
 end
 
---- `src/constants.lua` is driver-specific, so it does not exist in the template itself.
---- utils.lua reads only HIDE_PROPERTY / SHOW_PROPERTY from it, in CheckMinimumVersion,
---- which this suite never calls.
-package.preload["constants"] = function()
-  return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 1 }
-end
-
 -- tools/gen-squishy.lua bundles from package.loaded, so github-updater.lua has to require
 -- lib.utils itself rather than relying on a driver's driver.lua to have required it first.
 -- Deliberately no GetDriverVersion stub; requiring lib.github-updater must be enough.

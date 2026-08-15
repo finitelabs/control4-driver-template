@@ -82,9 +82,6 @@ jobs:
         run: |
           LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
           luajit -e '
-            package.preload["constants"] = function()
-              return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 1 }
-            end
             require("c4_shim")
             local failed = {}
             local p = io.popen("ls src/lib")
@@ -109,13 +106,111 @@ jobs:
         working-directory: ${{ runner.temp }}/render
         run: make test
 
-      # vendor/ omitted: the amalgs are not formatted to our style.
       - name: Formatted
         working-directory: ${{ runner.temp }}/render
         run: |
           stylua --check \
             --indent-type Spaces --column-width 120 --line-endings Unix \
             --indent-width 2 --quote-style AutoPreferDouble \
-            src test tools
+            src test tools vendor
           pipx run black --check tools
           pipx run --spec 'mdformat' --spec 'mdformat-gfm' mdformat --check --wrap 80 *.md
+
+  # A render has no driver, so `make build` would build nothing. example-driver/
+  # (repo root, outside template/, so copier never renders it) supplies one.
+  build:
+    name: build (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: default
+            distributions: drivercentral oss
+            vendor_modules: ""
+          - name: crypto-bundles
+            distributions: drivercentral oss
+            vendor_modules: bitn crypto noiseprotocol protobuf bthome
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: leafo/gh-actions-lua@v12
+        with:
+          luaVersion: "luajit-2.1"
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - uses: JohnnyMorganz/stylua-action@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          version: latest
+          args: --version
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxml2-dev libxslt-dev libssl-dev swig \
+            libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
+            libffi-dev fonts-dejavu-core fonts-liberation fonts-noto-core fonts-symbola
+
+      - name: Install copier
+        run: pipx install copier
+
+      - name: Render
+        env:
+          DISTRIBUTIONS: ${{ matrix.distributions }}
+          VENDOR_MODULES: ${{ matrix.vendor_modules }}
+        run: |
+          copier copy --trust --defaults --vcs-ref HEAD \
+            --data project_name=ci-render \
+            --data project_description="Template CI render" \
+            --data github_org=finitelabs \
+            --data readme_driver_slug=example \
+            --data distributions="$DISTRIBUTIONS" \
+            --data readme_build=oss \
+            --data vendor_modules="$VENDOR_MODULES" \
+            . "$RUNNER_TEMP/render"
+
+      - name: Add example driver
+        run: cp -r example-driver/drivers "$RUNNER_TEMP/render/drivers"
+
+      - name: Initialize project (make init)
+        working-directory: ${{ runner.temp }}/render
+        run: make init
+
+      - name: Check formatting (make check)
+        working-directory: ${{ runner.temp }}/render
+        run: make check
+
+      - name: Test (make test)
+        working-directory: ${{ runner.temp }}/render
+        run: make test
+
+      # Build, commit, build again: a dirty tree on the second build means
+      # `make build` is not idempotent.
+      - name: Build is idempotent (make build)
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          git init -q
+          git config user.email ci@example.com
+          git config user.name ci
+          make build
+          git add -A
+          git commit -q -m "first build"
+          make build
+          git diff --exit-code || {
+            echo "::error::make build is not idempotent (tracked files changed on rebuild)"
+            exit 1
+          }
+          UNTRACKED=$(git ls-files --others --exclude-standard)
+          if [ -n "$UNTRACKED" ]; then
+            echo "::error::Untracked files after rebuild:"
+            echo "$UNTRACKED"
+            exit 1
+          fi

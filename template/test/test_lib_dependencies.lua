@@ -27,14 +27,6 @@ local function check(name, ok, detail)
   end
 end
 
---- `src/constants.lua` is driver-specific, so a bare render has none and utils.lua
---- and values.lua cannot load without it. Both read it only inside functions this
---- suite never calls, so stub it unconditionally rather than branching on whether a
---- real one is present.
-package.preload["constants"] = function()
-  return { SHOW_PROPERTY = 0, HIDE_PROPERTY = 1 }
-end
-
 local function dirOf(module)
   local path = package.searchpath(module, package.path)
   return path and path:match("^(.*)[/\\][^/\\]+$")

@@ -53,6 +53,9 @@ jobs:
       - name: Initialize project
         run: make init
 
+      - name: Check formatting
+        run: make check
+
       - name: Test
         run: make test
 

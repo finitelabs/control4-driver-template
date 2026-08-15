@@ -81,8 +81,10 @@ requires, so a rendered-but-unused module is zero bytes in the `.c4z`. A new
 `github-updater.lua` and its alias test are gated on `oss`, the distribution
 whose update mechanism they are.
 
-`_skip_if_exists` holds `CHANGELOG.md`, so existing repos never receive changes to
-it — only newly created ones do.
+`_skip_if_exists` holds `CHANGELOG.md` and `src/constants.lua`, so existing repos
+never receive changes to them — only newly created ones do. This is why the
+template can seed `src/constants.lua` (with the property-visibility keys its lib
+requires) without clobbering the constants a driver has since added.
 
 ## Jinja
 
