@@ -9,8 +9,9 @@ Subcommands:
       Set /devicedata/<version|modified> text in place, preserving the rest of
       the file byte-for-byte. (replaces: xmlstarlet edit --inplace)
 
-  package.py zip <output.zip> <file>...
-      Create a zip of the given files (stored flat, basenames).
+  package.py zip <output.zip> <path>...
+      Create a zip of the given paths. A file is stored flat under its
+      basename; a directory is stored recursively under its own name.
       (replaces: the `zip` CLI)
 """
 
@@ -43,10 +44,15 @@ def xml_set(xml_path: Path, tag: str, value: str) -> None:
     xml_path.write_text(new_text, encoding="utf-8")
 
 
-def make_zip(output_path: Path, files: list[Path]) -> None:
+def make_zip(output_path: Path, paths: list[Path]) -> None:
     with zipfile.ZipFile(output_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for f in files:
-            zf.write(f, arcname=f.name)
+        for p in paths:
+            if p.is_dir():
+                for f in sorted(p.rglob("*")):
+                    if f.is_file():
+                        zf.write(f, arcname=str(Path(p.name) / f.relative_to(p)))
+            else:
+                zf.write(p, arcname=p.name)
 
 
 def main() -> int:
