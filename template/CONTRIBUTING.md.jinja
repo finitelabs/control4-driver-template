@@ -23,43 +23,27 @@ then pull the change in with `copier update`.
 {%- endif %}
 
 **Common libraries (`src/lib/`):**
-{% if 'bindings' in lib_modules.split() %}
+
 - `bindings.lua`: binding management
-{%- endif %}
-{%- if 'conditionals' in lib_modules.split() %}
 - `conditionals.lua`: conditional/programming UI management
-{%- endif %}
-{%- if 'events' in lib_modules.split() %}
 - `events.lua`: event firing and management
-{%- endif %}
-{%- if 'oss' in distributions.split() %}
-- `http.lua`: HTTP client wrapper (used by github-updater)
-{%- elif 'http' in lib_modules.split() %}
 - `http.lua`: HTTP client wrapper
-{%- endif %}
 - `logging.lua`: structured logging with configurable levels
-{%- if 'lru' in lib_modules.split() %}
 - `lru.lua`: LRU cache utility
-{%- endif %}
-{%- if 'persist' in lib_modules.split() %}
 - `persist.lua`: persistent storage abstraction
-{%- endif %}
 - `utils.lua`: general utilities (XML, device queries, table helpers, type
   coercion)
-{%- if 'values' in lib_modules.split() %}
 - `values.lua`: value parsing, coercion, and formatting
-{%- endif %}
 {%- if 'oss' in distributions.split() %}
 - `github-updater.lua`: GitHub Releases self-updater (non-DriverCentral builds)
 {%- endif %}
 
 **Vendor libraries (`vendor/`):**
-{% if 'json' in vendor_modules.split() %}
+
 - `JSON.lua`: JSON encoder/decoder
-{%- endif %}
-{%- if 'deferred' in vendor_modules.split() %}
 - `deferred.lua`: promises/deferred implementation
-{%- endif %}
+- `drivers-common-public/`: Control4's official shared libraries
+- `xml/`: XML parser (xml2lua)
 {%- if 'drivercentral' in distributions.split() or 'drivercentral-dev' in distributions.split() %}
 - `cloud-client-byte.lua`: DriverCentral cloud licensing
 {%- endif %}
@@ -67,12 +51,6 @@ then pull the change in with `copier update`.
 - `version.lua`: semver comparison (used by github-updater)
 {%- elif 'version' in vendor_modules.split() %}
 - `version.lua`: semver comparison
-{%- endif %}
-{%- if 'drivers-common-public' in vendor_modules.split() %}
-- `drivers-common-public/`: Control4's official shared libraries
-{%- endif %}
-{%- if 'xml' in vendor_modules.split() %}
-- `xml/`: XML parser (xml2lua)
 {%- endif %}
 {%- if 'bitn' in vendor_modules.split() %}
 - `bitn.lua`: bit manipulation library

@@ -6,6 +6,7 @@ local constants = require("constants")
 
 require("drivers-common-public.global.lib")
 require("drivers-common-public.global.handlers")
+require("lib.utils")
 
 --- @class Values
 --- @field _callbacks table<string, function?> In-memory registry of OVC callbacks keyed by variable name.

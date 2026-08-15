@@ -22,7 +22,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **github-setup**: checks the GitHub repository against the standard settings and prints the
   drift; with `--apply` it creates the repository if needed and fixes the drift.
 
-### Common Libraries (`src/lib/`, selected via `lib_modules`)
+### Common Libraries (`src/lib/`)
 - **bindings.lua**: binding management (add/remove/query Control4 driver bindings)
 - **conditionals.lua**: conditional/programming UI management
 - **events.lua**: event firing and management
@@ -126,5 +126,4 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
-| `lib_modules` | Space-separated `src/lib` modules to include | `bindings conditionals events http lru persist values` |
-| `vendor_modules` | Space-separated `vendor` modules to include | `json deferred drivers-common-public xml` |
+| `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version) | (empty) |

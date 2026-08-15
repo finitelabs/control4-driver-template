@@ -35,28 +35,17 @@ local function check(name, ok, detail)
   end
 end
 
---- A fake project. Ids outside it are the nameless case: the stub returns
---- nothing at all rather than nil, which is what the controller does and is the
---- difference the fix turns on -- a stub returning nil would let the old code
---- pass here and still throw on hardware.
-local PROJECT = {
-  [2787] = "InfluxDB Data Logger",
-  [2341] = "Master Bathroom Humidity",
-}
-
-function C4:GetDeviceDisplayName(deviceId)
-  local name = PROJECT[deviceId]
-  if name ~= nil then
-    return name
-  end
-end
-
-function C4:GetDeviceVariables(deviceId)
-  if deviceId == 100001 then
-    return { ["2301"] = { name = "MB_HIGH_HUMIDITY_DIFF_THRESHOLD" } }
-  end
-  return { ["1012"] = { name = "HUMIDITY" } }
-end
+-- The shim owns C4:GetDevices / GetDeviceDisplayName / GetDeviceVariables. A
+-- device with no deviceName is the nameless case the fix turns on: the shim
+-- returns no value at all (arity 0), as the controller does, so code that
+-- concatenates the result directly still throws. 100001 is Director's variables
+-- agent -- variables, no name -- and 100000 is the delay agent.
+require("c4_shim")
+ShimSetDevices({
+  [2787] = { deviceName = "InfluxDB Data Logger" },
+  [2341] = { deviceName = "Master Bathroom Humidity", variables = { ["1012"] = { name = "HUMIDITY" } } },
+  [100001] = { variables = { ["2301"] = { name = "MB_HIGH_HUMIDITY_DIFF_THRESHOLD" } } },
+})
 
 --- Capture whatever HandlerDebug prints so the debug line itself can be asserted.
 local captured

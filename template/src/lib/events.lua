@@ -5,6 +5,7 @@ local log = require("lib.logging")
 local persist = require("lib.persist")
 
 require("drivers-common-public.global.lib")
+require("lib.utils")
 
 --- @class Events
 local Events = {}

@@ -355,36 +355,100 @@ end
 -- because AddVariable cannot set one. A device with no variables and a device
 -- that does not exist both give an empty table, and hidden variables are
 -- returned rather than filtered out.
-function C4:GetDeviceVariables(deviceId)
-  local variables = {}
-  if deviceId ~= C4:GetDeviceID() then
-    return variables
+---------------------------------------------------------------------------
+-- Project devices
+-- C4:GetDevices / GetDeviceDisplayName / GetDeviceVariables read a registry a
+-- test populates with ShimSetDevices. An id absent from it is the nameless,
+-- unresolvable case: GetDeviceDisplayName returns no value (arity 0, not nil),
+-- which is what the controller does and what a driver must tolerate.
+---------------------------------------------------------------------------
+
+--- @type table<number, table>
+local shim_devices = {}
+
+--- @param devices table<number, table> id -> { deviceName?, driverFileName?, roomId?, roomName?, variables?, hidden? }
+function ShimSetDevices(devices)
+  shim_devices = devices or {}
+end
+
+function ShimResetDevices()
+  shim_devices = {}
+end
+
+--- Take a device out of every lookup, modelling a transient resolution failure.
+function ShimSetDeviceHidden(deviceId, hidden)
+  local device = shim_devices[tonumber(deviceId)]
+  if device then
+    device.hidden = hidden and true or nil
   end
-  for name, meta in pairs(variable_meta) do
-    variables[meta.id] = {
-      name = name,
-      description = "",
-      value = Variables[name],
-      type = meta.type,
-      readonly = meta.readonly,
-      hidden = meta.hidden,
-    }
+end
+
+function C4:GetDevices(filter)
+  local deviceId = tonumber(filter and filter.DeviceIds)
+  local device = deviceId ~= nil and shim_devices[deviceId] or nil
+  if device == nil or device.hidden then
+    return {}
+  end
+  if filter.C4iNames ~= nil then
+    local matched = false
+    for c4iName in string.gmatch(filter.C4iNames, "([^,]+)") do
+      if c4iName == device.driverFileName then
+        matched = true
+        break
+      end
+    end
+    if not matched then
+      return {}
+    end
+  end
+  return { [deviceId] = device }
+end
+
+function C4:GetDeviceDisplayName(deviceId)
+  local device = shim_devices[tonumber(deviceId)]
+  if device and not device.hidden and device.deviceName ~= nil then
+    return device.deviceName
+  end
+  -- Absent or nameless: return no value, matching the controller.
+end
+
+function C4:GetDeviceVariables(deviceId)
+  local device = shim_devices[tonumber(deviceId)]
+  if device and device.variables then
+    return device.variables
+  end
+  -- The running driver's own variables, as created through C4:AddVariable.
+  local variables = {}
+  if tonumber(deviceId) == tonumber(C4:GetDeviceID()) then
+    for name, meta in pairs(variable_meta) do
+      variables[meta.id] = {
+        name = name,
+        description = "",
+        value = Variables[name],
+        type = meta.type,
+        readonly = meta.readonly,
+        hidden = meta.hidden,
+      }
+    end
   end
   return variables
 end
 
--- Persistence stubs (in-memory storage for testing)
+-- The C4:Persist* SDK methods, backed by an in-memory store. The bare
+-- PersistGetValue/SetValue/DeleteValue globals belong to global/lib.lua, whose
+-- wrappers delegate here when C4.PersistSetValue exists; stubbing the globals
+-- instead would be paved over the moment any module requires global.lib.
 local persist_store = {}
 
-function PersistGetValue(key, encrypted)
+function C4:PersistGetValue(key, encrypted)
   return persist_store[key]
 end
 
-function PersistSetValue(key, value, encrypted)
+function C4:PersistSetValue(key, value, encrypted)
   persist_store[key] = value
 end
 
-function PersistDeleteValue(key)
+function C4:PersistDeleteValue(key)
   persist_store[key] = nil
 end
 
@@ -631,11 +695,11 @@ if has_socket then
     end
   end
 
-  function sleep(seconds)
+  function ShimSleep(seconds)
     socket.sleep(seconds)
   end
 
-  function processEventLoop()
+  function ShimProcessEventLoop()
     C4:ProcessTimers()
     for _, client in pairs(active_clients) do
       if client.DoRead then
@@ -645,9 +709,9 @@ if has_socket then
   end
 
   --- Run the event loop until os.exit() or signal.
-  function runEventLoop()
+  function ShimRunEventLoop()
     while true do
-      processEventLoop()
+      ShimProcessEventLoop()
       socket.sleep(0.01)
     end
   end
@@ -660,9 +724,9 @@ else
     })
   end
 
-  function sleep() end
-  function processEventLoop() end
-  function runEventLoop() end
+  function ShimSleep() end
+  function ShimProcessEventLoop() end
+  function ShimRunEventLoop() end
 end
 
 -- Mirrors the controller rather than accommodating callers. Measured on a dev
