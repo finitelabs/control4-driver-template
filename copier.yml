@@ -22,6 +22,7 @@ _exclude:
   - "{% if 'noiseprotocol' not in vendor_modules.split() %}vendor/noiseprotocol.lua{% endif %}"
   - "{% if 'protobuf' not in vendor_modules.split() %}vendor/protobuf.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_alias.lua{% endif %}"
+  - "{% if 'oss' not in distributions.split() %}test/test_github_updater_self_last.lua{% endif %}"
 
 project_name:
   type: str
