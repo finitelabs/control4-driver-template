@@ -276,3 +276,10 @@ clean: clean-build ## Remove build artifacts and dist
 
 clean-all: clean ## Remove everything (build, dist, deps, venv)
 	rm -rf $(VENV)
+
+# ─── Project-specific ─────────────────────────────────────────────────────────
+# Optional, un-templated targets for this driver (e.g. code generation). Kept in
+# a separate Makefile.local so `copier update` never has to merge them. Included
+# last, so it can add targets and extend stock ones with extra prerequisites
+# (e.g. `test: test-project`) using the variables defined above.
+-include Makefile.local

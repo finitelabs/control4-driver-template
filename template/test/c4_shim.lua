@@ -12,6 +12,123 @@ if not loadstring then
   loadstring = load
 end
 
+-- Minimal lpack-compatible string.pack/string.unpack for the format codes the ZCL
+-- codec uses (all little-endian); the '<' endian marker is accepted and ignored.
+-- Signature AND code semantics match Control4's lpack, verified on a controller
+-- (Lua 5.1): b unsigned8, c signed8 (NOT the 5.3 convention where b is signed),
+-- h/H signed/unsigned16, i/I signed/unsigned32, l/L signed/unsigned long (4 bytes on
+-- the 32-bit Directors; driver code uses i/I so the width is fixed across ILP32/LP64).
+-- B is kept as an unsigned8 alias. This must track the controller, not the 5.3 stdlib
+-- (which LuaJIT lacks anyway), or a test would agree with a driver bug instead of
+-- catching it.
+if not string.pack then
+  local function packInt(v, size, signed)
+    v = (v >= 0) and math.floor(v + 0.5) or math.ceil(v - 0.5) -- round half away from zero
+    v = v % (2 ^ (8 * size))
+    local out = {}
+    for _ = 1, size do
+      out[#out + 1] = string.char(v % 256)
+      v = math.floor(v / 256)
+    end
+    return table.concat(out)
+  end
+  local function unpackInt(data, pos, size, signed)
+    local v = 0
+    for i = 0, size - 1 do
+      v = v + string.byte(data, pos + i) * 2 ^ (8 * i)
+    end
+    if signed and v >= 2 ^ (8 * size - 1) then
+      v = v - 2 ^ (8 * size)
+    end
+    return pos + size, v
+  end
+  local function packFloat(x)
+    if x == 0 then
+      return string.char(0, 0, 0, 0)
+    end
+    local sign = 0
+    if x < 0 then
+      sign = 0x80
+      x = -x
+    end
+    local mant, expo = math.frexp(x) -- x = mant * 2^expo, 0.5 <= mant < 1
+    expo = expo + 126 -- IEEE754 biased exponent (mant in [0.5,1) => 1.f = 2*mant)
+    if expo <= 0 then
+      return string.char(0, 0, 0, sign)
+    elseif expo >= 255 then
+      return string.char(0, 0, 0x80, sign + 0x7F)
+    end
+    mant = math.floor((mant * 2 - 1) * 2 ^ 23 + 0.5)
+    local b1 = mant % 256
+    local b2 = math.floor(mant / 256) % 256
+    local b3 = math.floor(mant / 65536) % 128 + (expo % 2) * 128
+    local b4 = math.floor(expo / 2) + sign
+    return string.char(b1, b2, b3, b4)
+  end
+  local function unpackFloat(data, pos)
+    local b1, b2, b3, b4 = string.byte(data, pos, pos + 3)
+    local sign = (b4 >= 128) and -1 or 1
+    local expo = (b4 % 128) * 2 + math.floor(b3 / 128)
+    local mant = (b3 % 128) * 65536 + b2 * 256 + b1
+    local v
+    if expo == 0 then
+      v = mant / 2 ^ 23 * 2 ^ -126
+    elseif expo == 255 then
+      v = (mant == 0) and math.huge or (0 / 0)
+    else
+      v = (1 + mant / 2 ^ 23) * 2 ^ (expo - 127)
+    end
+    return pos + 4, sign * v
+  end
+  -- code -> { size, signed }. b is UNSIGNED (lpack), c is signed8.
+  local CODE = {
+    b = { 1, false },
+    B = { 1, false },
+    c = { 1, true },
+    h = { 2, true },
+    H = { 2, false },
+    i = { 4, true },
+    I = { 4, false },
+    l = { 4, true },
+    L = { 4, false },
+  }
+  function string.pack(fmt, ...)
+    local args, i, out = { ... }, 0, {}
+    for c in fmt:gmatch(".") do
+      if c == "<" or c == ">" or c == "=" then -- endian marker: ignore (LE)
+      elseif c == "f" then
+        i = i + 1
+        out[#out + 1] = packFloat(args[i])
+      elseif CODE[c] then
+        i = i + 1
+        out[#out + 1] = packInt(args[i], CODE[c][1], CODE[c][2])
+      else
+        error("shim string.pack: unsupported code '" .. c .. "'")
+      end
+    end
+    return table.concat(out)
+  end
+  function string.unpack(data, fmt, pos)
+    pos = pos or 1
+    local out = {}
+    for c in fmt:gmatch(".") do
+      if c == "<" or c == ">" or c == "=" then
+      elseif c == "f" then
+        local v
+        pos, v = unpackFloat(data, pos)
+        out[#out + 1] = v
+      elseif CODE[c] then
+        local v
+        pos, v = unpackInt(data, pos, CODE[c][1], CODE[c][2])
+        out[#out + 1] = v
+      else
+        error("shim string.unpack: unsupported code '" .. c .. "'")
+      end
+    end
+    return pos, (table.unpack or unpack)(out)
+  end
+end
+
 -- Global C4 object shim
 C4 = {}
 Properties = {}

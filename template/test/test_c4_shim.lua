@@ -539,6 +539,44 @@ for _, hasSocket in ipairs({ false, true }) do
 end
 
 --------------------------------------------------------------------------------
+-- string.pack / string.unpack lpack semantics. The shim stands in for Control4's
+-- lpack, so its signedness and widths must match what the controller actually does
+-- (measured on a dev controller: `b` unsigned, `c` signed8, `<L` is 4 bytes). A
+-- shim that got `b` wrong would let the suite agree with a driver bug rather than
+-- catch it - which is exactly what happened with the Xiaomi int8 decode.
+section("string.pack / string.unpack (lpack-compatible)")
+do
+  -- Signedness of the 8-bit codes: this is the one that bit us.
+  check(
+    "b decodes 0xF6 as UNSIGNED 246",
+    select(2, string.unpack("\246", "b", 1)) == 246,
+    select(2, string.unpack("\246", "b", 1))
+  )
+  check(
+    "c decodes 0xF6 as SIGNED -10",
+    select(2, string.unpack("\246", "c", 1)) == -10,
+    select(2, string.unpack("\246", "c", 1))
+  )
+  -- 16/32-bit signedness.
+  check("<h is signed16", select(2, string.unpack(string.char(0xF6, 0xFF), "<h", 1)) == -10)
+  check("<H is unsigned16", select(2, string.unpack(string.char(0xF6, 0xFF), "<H", 1)) == 65526)
+  check("<i is signed32", select(2, string.unpack(string.char(0xF6, 0xFF, 0xFF, 0xFF), "<i", 1)) == -10)
+  check("<I is unsigned32", select(2, string.unpack(string.char(0xF6, 0xFF, 0xFF, 0xFF), "<I", 1)) == 4294967286)
+  -- Round-trip and byte order (little-endian).
+  check("pack/unpack <H round-trips", select(2, string.unpack(string.pack("<H", 300), "<H", 1)) == 300)
+  check(
+    "<I packs 4 little-endian bytes",
+    string.pack("<I", 1) == string.char(1, 0, 0, 0),
+    (string.pack("<I", 1)):byte(1, 4)
+  )
+  -- unpack returns nextPos first (lpack signature), then the value(s).
+  local np = string.unpack(string.char(0, 0), "<H", 1)
+  check("unpack returns nextPos as its first result", np == 3, np)
+  -- float32 round-trips a simple value.
+  check("f round-trips 1.5", select(2, string.unpack(string.pack("f", 1.5), "f", 1)) == 1.5)
+end
+
+--------------------------------------------------------------------------------
 
 print(string.format("\n%d passed, %d failed", pass, fail))
 os.exit(fail == 0 and 0 or 1)
