@@ -1,7 +1,6 @@
--- Rename path in lib/bindings.lua: getOrAddDynamicBinding re-adds a binding under the
--- same id when its name/provider/class changes, and must preserve the installer's wiring
--- across the remove/add. Covers both orientations, the provider-flip skip, and that the
--- re-add keeps the record's original type (not the freshly passed one).
+-- Rename path in lib/bindings.lua: getOrAddDynamicBinding re-adds a binding under the same
+-- id when its name/provider/class changes, and must preserve the installer's wiring across
+-- the remove/add.
 require("c4_shim")
 
 local persist = require("lib.persist")
@@ -109,8 +108,7 @@ do
   )
 end
 
--- 3. provider flip: the old links are not restorable in the new orientation, so skip
---    rather than re-bind them inverted.
+-- 3. provider flip: old links can't be restored inverted, so skip the reconnect.
 store, deviceBindings = {}, {}
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k3", "CONTROL", true, "Old", "RELAY")
@@ -121,8 +119,7 @@ bindings:getOrAddDynamicBinding("ns", "k3", "CONTROL", false, "Old", "RELAY")
 check("provider flip: still re-added the binding", #addCalls == 1)
 check("provider flip: no reconnect (would invert the link)", #bindCalls == 0, #bindCalls)
 
--- 4. type is committed to the id's range: a rename re-adds with the record's own type,
---    not a freshly passed one, so live and persisted types can't diverge.
+-- 4. type: a rename re-adds with the record's own type, not the passed one.
 store, deviceBindings = {}, {}
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k4", "PROXY", true, "Old", "RELAY")

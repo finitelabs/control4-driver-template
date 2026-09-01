@@ -258,12 +258,10 @@ local function isInManagedRange(bindingId)
     or (bindingId >= PROXY_BINDING_START and bindingId <= PROXY_BINDING_END)
 end
 
---- The connection ids declared statically in driver.xml, as a set. They share the id
---- space with dynamic bindings and are returned by GetDeviceBindings but are not in the
---- store, so the managed-range sweep must skip them or it deletes the driver's own static
---- connections on every init. GetDriverConfigInfo("connections") returns the driver.xml
---- connection block as XML at runtime; match the <id> elements so a <facing>/<type> value
---- or a digit inside a connection name is not mistaken for an id.
+--- The static driver.xml connection ids, as a set. They share the dynamic-binding id
+--- space but aren't in the store, so the managed-range sweep must skip them or it deletes
+--- them on every init. GetDriverConfigInfo("connections") returns the block as XML, so
+--- match <id> (a <facing>/<type> value or a digit in a name would else be scraped as one).
 local function staticConnectionIds()
   local set = {}
   local ok, xml = pcall(function()
