@@ -1,11 +1,11 @@
 --- Constants used throughout the driver.
 
 return {
-  --- Constant for showing a property in the UI.
+  --- Show a property in the Composer UI.
   --- @type number
   SHOW_PROPERTY = 0,
 
-  --- Constant for hiding a property in the UI.
+  --- Hide a property in the Composer UI.
   --- @type number
   HIDE_PROPERTY = 1,
 }
