@@ -32,12 +32,8 @@ function Bind(idDeviceProvider, idBindingProvider, idDeviceConsumer, idBindingCo
   return false
 end
 
---- Capture the devices currently connected to one of our bindings. Control4 has no
---- in-place rename, so getOrAddDynamicBinding removes and re-adds a binding under the
---- same id when its name/provider/class changes - and a bare remove/add drops every
---- connection on it, forcing the installer to re-wire by hand. Snapshotting first (it
---- works in either direction: our binding may be the provider or the consumer) lets us
---- reconnect after the re-add.
+--- Capture the devices wired to one of our bindings (as provider or consumer), so a
+--- rename that must remove and re-add the binding can reconnect them afterward.
 --- @param bindingId integer
 --- @return { device: integer, binding: integer }[] connections, boolean provider
 local function snapshotConnections(bindingId)
@@ -61,10 +57,9 @@ local function snapshotConnections(bindingId)
   return conns, info.provider == true
 end
 
---- Reconnect the connections captured by snapshotConnections, after the binding was
---- re-added under the same id. Bind() is a no-op when the link already exists, so this
---- is safe even where Control4 re-attaches a provider-side link on its own (it does not
---- re-attach consumer-side links, which is what this recovers).
+--- Reconnect the connections captured by snapshotConnections. Bind() is a no-op when
+--- the link exists, so this recovers the consumer-side links Control4 drops on a
+--- remove/add without duplicating the provider-side ones it re-attaches itself.
 --- @param bindingId integer
 --- @param provider boolean whether OUR side provides the binding
 --- @param class string the binding's connection class
@@ -163,12 +158,9 @@ function Bindings:getOrAddDynamicBinding(namespace, key, type, provider, display
     self:_saveBindings(bindings)
     C4:AddDynamicBinding(bindingId, type, provider, displayName, class, false, false)
   elseif binding.displayName ~= displayName or binding.provider ~= provider or binding.class ~= class then
-    -- The same key now wants a different name/class - e.g. an instance re-paired
-    -- to a different device, or an early report that built a generic placeholder
-    -- before the model resolved. Control4 has no in-place rename, so re-add under
-    -- the same id so the exposed connection always matches the current reading name
-    -- (the card and the connection must not diverge). Snapshot the wired connections
-    -- first and reconnect after, so the re-add doesn't drop the installer's wiring.
+    -- Name/class changed (re-pair, or a placeholder built before the model resolved).
+    -- Control4 has no in-place rename, so re-add under the same id, snapshotting and
+    -- restoring the wiring so the remove/add doesn't drop it.
     local conns = snapshotConnections(binding.bindingId)
     C4:RemoveDynamicBinding(binding.bindingId)
     binding.provider = provider
