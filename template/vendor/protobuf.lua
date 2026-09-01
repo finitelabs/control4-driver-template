@@ -62,7 +62,7 @@ local function is_list(t)
 end
 
 -- Version
-local VERSION = "v0.6.6"
+local VERSION = "dev"
 
 --- Returns the library version.
 --- @return string version The version string.
@@ -437,6 +437,69 @@ function pb.decode_length_delimited(buffer, pos)
   return data, new_pos + length
 end
 
+--- Returns a map entry's key and value field schemas.
+--- @param entrySchema ProtoMessageSchema The entry message a map field's subschema names.
+--- @return ProtoFieldSchema keyField The entry's key field.
+--- @return ProtoFieldSchema valueField The entry's value field.
+local function map_entry_fields(entrySchema)
+  -- protobuf fixes a synthesized map entry's field numbers: the key is 1, the value 2.
+  return entrySchema.fields[1], entrySchema.fields[2]
+end
+
+--- Returns the protobuf default for a field's type.
+--- @param protoSchema ProtoSchema The complete proto schema.
+--- @param field ProtoFieldSchema The field whose type supplies the default.
+--- @return any value The type's default value.
+local function default_value(protoSchema, field)
+  local dataType = protoSchema.DataType
+  local fieldType = field.type
+  if fieldType == dataType.STRING or fieldType == dataType.BYTES then
+    return ""
+  elseif fieldType == dataType.BOOL then
+    return false
+  elseif fieldType == dataType.MESSAGE then
+    return {}
+  elseif
+    fieldType == dataType.INT64
+    or fieldType == dataType.UINT64
+    or fieldType == dataType.SINT64
+    or fieldType == dataType.FIXED64
+    or fieldType == dataType.SFIXED64
+  then
+    -- Matches decode, which returns these five as Int64 tables rather than numbers.
+    return bit64_new(0, 0)
+  end
+  return 0
+end
+
+--- Encodes a map field as the repeated key/value entry messages it is on the wire.
+--- @param protoSchema ProtoSchema The complete proto schema.
+--- @param field ProtoFieldSchema The map field's schema.
+--- @param field_number integer The field's number.
+--- @param entries table<any, any> The map to encode.
+--- @return string buffer The encoded entries.
+local function encode_map(protoSchema, field, field_number, entries)
+  if type(entries) ~= "table" or bit64_is_int64(entries) then
+    error("Field '" .. field.name .. "' is a map but received a non-table value.")
+  end
+
+  local entrySchema = protoSchema.Message[field.subschema]
+  local keyField, valueField = map_entry_fields(entrySchema)
+  local wire_type = field.wireType
+  --- @cast wire_type integer
+  local key = bit32_to_unsigned(bit32_raw_lshift(field_number, 3)) + wire_type
+
+  local buffer = ""
+  for entry_key, entry_value in pairs(entries) do
+    local entry = pb.encode(protoSchema, entrySchema, {
+      [keyField.name] = entry_key,
+      [valueField.name] = entry_value,
+    })
+    buffer = buffer .. pb.encode_varint(key) .. pb.encode_length_delimited(entry)
+  end
+  return buffer
+end
+
 --- Encodes a message according to a schema.
 --- @param protoSchema ProtoSchema The complete proto schema.
 --- @param messageSchema ProtoMessageSchema The message schema to use for encoding.
@@ -447,7 +510,9 @@ function pb.encode(protoSchema, messageSchema, message)
 
   for field_number, field in pairs(messageSchema.fields) do
     local values = message[field.name]
-    if values ~= nil then
+    if values ~= nil and field.map then
+      buffer = buffer .. encode_map(protoSchema, field, field_number, values)
+    elseif values ~= nil then
       if field.repeated then
         if not is_list(values) or bit64_is_int64(values) then
           error("Field '" .. field.name .. "' is repeated but received a non-list value.")
@@ -507,6 +572,17 @@ function pb.encode(protoSchema, messageSchema, message)
             -- For nested messages
             local nested_message = pb.encode(protoSchema, protoSchema.Message[field.subschema], value)
             buffer = buffer .. pb.encode_length_delimited(nested_message)
+          else
+            -- The tag is already written; without this a non-string/table value
+            -- would emit a bare tag with no length or payload, silently truncating
+            -- the stream instead of failing like the varint/fixed paths do.
+            error(
+              "Field '"
+                .. field.name
+                .. "' is length-delimited (string, bytes, or message) but received a "
+                .. type(value)
+                .. "."
+            )
           end
         else
           error("Unsupported wire type: " .. tostring(field.wireType))
@@ -608,7 +684,22 @@ function pb.decode(protoSchema, messageSchema, buffer)
         error("Unsupported wire type: " .. wire_type)
       end
 
-      if field.repeated then
+      if field.map then
+        if message[field.name] == nil then
+          message[field.name] = {}
+        end
+        local keyField, valueField = map_entry_fields(protoSchema.Message[field.subschema])
+        local entry_key = value[keyField.name]
+        local entry_value = value[valueField.name]
+        -- An entry may omit either side when it holds the type's zero value.
+        if entry_key == nil then
+          entry_key = default_value(protoSchema, keyField)
+        end
+        if entry_value == nil then
+          entry_value = default_value(protoSchema, valueField)
+        end
+        message[field.name][entry_key] = entry_value
+      elseif field.repeated then
         if message[field.name] == nil then
           message[field.name] = {}
         end
@@ -785,6 +876,7 @@ function pb.selftest()
           type = data_type,
           wireType = wire_type,
           repeated = opts.repeated,
+          map = opts.map,
           subschema = opts.subschema,
         },
       },
@@ -1041,6 +1133,12 @@ function pb.selftest()
     assert_eq(dec.text, v, "encode/decode string len=" .. #v)
   end
 
+  -- A non-string/table value on a length-delimited field must raise, not emit a
+  -- bare tag with no payload (which would silently truncate the stream).
+  assert_error(function()
+    pb.encode(Schema, stringSchema, { text = 42 })
+  end, "length%-delimited", "error: number on a length-delimited field")
+
   -- Float
   local floatSchema = make_schema("Float", "value", Schema.DataType.FLOAT, Schema.WireType.FIXED32)
   for _, v in ipairs({ 0.0, 1.0, -1.0, 3.14159, 1e10 }) do
@@ -1225,6 +1323,114 @@ function pb.selftest()
   assert_eq(decP.work.city, "W", "multi-nested work.city")
 
   -- ============================================================================
+  -- MESSAGE ENCODE/DECODE: MAP FIELDS
+  -- ============================================================================
+
+  local function make_entry(name, key_type, key_wire, value_type, value_wire, value_subschema)
+    Schema.Message[name] = {
+      name = name,
+      options = {},
+      fields = {
+        [1] = { name = "key", type = key_type, wireType = key_wire },
+        [2] = { name = "value", type = value_type, wireType = value_wire, subschema = value_subschema },
+      },
+    }
+  end
+
+  local function map_size(t)
+    local n = 0
+    for _ in pairs(t) do
+      n = n + 1
+    end
+    return n
+  end
+
+  -- map<string, int32>
+  make_entry(
+    "CountsEntry",
+    Schema.DataType.STRING,
+    Schema.WireType.LENGTH_DELIMITED,
+    Schema.DataType.INT32,
+    Schema.WireType.VARINT
+  )
+  local countsSchema = make_schema(
+    "Counts",
+    "counts",
+    Schema.DataType.MESSAGE,
+    Schema.WireType.LENGTH_DELIMITED,
+    { map = true, subschema = "CountsEntry" }
+  )
+
+  -- `pb.encode` emits a message's fields in `pairs` order, which differs between Lua
+  -- and LuaJIT, and protobuf accepts a submessage's fields in either order.
+  local framing = "\10\5" -- field 1, LENGTH_DELIMITED, 5 bytes
+  local entryKey = "\10\1" .. "a" -- key = "a"
+  local entryValue = "\16\1" -- value = 1
+  local oneEntry = pb.encode(Schema, countsSchema, { counts = { a = 1 } })
+  assert_eq(
+    oneEntry == framing .. entryKey .. entryValue or oneEntry == framing .. entryValue .. entryKey,
+    true,
+    "map encodes as one length-delimited key/value entry"
+  )
+
+  local counts = { alpha = 1, beta = 2, [""] = 0 }
+  local decC = pb.decode(Schema, countsSchema, pb.encode(Schema, countsSchema, { counts = counts }))
+  assert_eq(map_size(decC.counts), 3, "map<string,int32> entry count")
+  for k, v in pairs(counts) do
+    assert_eq(decC.counts[k], v, "map<string,int32> roundtrip key " .. string.format("%q", k))
+  end
+
+  -- map<int32, string>: a non-string key stays a number through the roundtrip
+  make_entry(
+    "NamesEntry",
+    Schema.DataType.INT32,
+    Schema.WireType.VARINT,
+    Schema.DataType.STRING,
+    Schema.WireType.LENGTH_DELIMITED
+  )
+  local namesSchema = make_schema(
+    "Names",
+    "names",
+    Schema.DataType.MESSAGE,
+    Schema.WireType.LENGTH_DELIMITED,
+    { map = true, subschema = "NamesEntry" }
+  )
+  local decN = pb.decode(Schema, namesSchema, pb.encode(Schema, namesSchema, { names = { [7] = "seven" } }))
+  assert_eq(decN.names[7], "seven", "map<int32,string> numeric key roundtrip")
+
+  -- map<string, Item>: message values recurse through the same entry path
+  make_entry(
+    "ItemsEntry",
+    Schema.DataType.STRING,
+    Schema.WireType.LENGTH_DELIMITED,
+    Schema.DataType.MESSAGE,
+    Schema.WireType.LENGTH_DELIMITED,
+    "Item"
+  )
+  local itemsSchema = make_schema(
+    "Items",
+    "items",
+    Schema.DataType.MESSAGE,
+    Schema.WireType.LENGTH_DELIMITED,
+    { map = true, subschema = "ItemsEntry" }
+  )
+  local decI =
+    pb.decode(Schema, itemsSchema, pb.encode(Schema, itemsSchema, { items = { widget = { name = "W", qty = 9 } } }))
+  assert_eq(decI.items.widget.name, "W", "map<string,Item> message value name")
+  assert_eq(decI.items.widget.qty, 9, "map<string,Item> message value qty")
+
+  -- An empty map contributes no bytes, and so decodes back to no field at all
+  assert_eq(pb.encode(Schema, countsSchema, { counts = {} }), "", "empty map encodes to nothing")
+  assert_eq(pb.decode(Schema, countsSchema, "").counts, nil, "empty map decodes to nil field")
+
+  -- A producer may drop either side of an entry when it holds the zero value, so a
+  -- zero-length entry has to read back as the key and value defaults rather than raise.
+  local decDefaults = pb.decode(Schema, countsSchema, "\10\0")
+  assert_eq(decDefaults.counts[""], 0, "entry omitting key and value applies both defaults")
+  local decDefaultValue = pb.decode(Schema, namesSchema, "\10\2\8\7")
+  assert_eq(decDefaultValue.names[7], "", "entry omitting value applies the value default")
+
+  -- ============================================================================
   -- EDGE CASES
   -- ============================================================================
 
@@ -1268,6 +1474,10 @@ function pb.selftest()
   assert_error(function()
     pb.encode(Schema, noSubSchema, { nested = { foo = 1 } })
   end, "no subschema", "error: nested message without subschema")
+
+  assert_error(function()
+    pb.encode(Schema, countsSchema, { counts = 42 })
+  end, "non%-table", "error: non-table for map field")
 
   -- ============================================================================
   -- SUMMARY
