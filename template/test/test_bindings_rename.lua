@@ -132,5 +132,16 @@ check(
   addCalls[1] and addCalls[1].type
 )
 
+-- 5. class change: like a flip, the old peers can't be re-bound in the new shape.
+store, deviceBindings = {}, {}
+clearCalls()
+bindings:getOrAddDynamicBinding("ns", "k5", "CONTROL", true, "Old", "RELAY")
+local id5 = addCalls[#addCalls].id
+deviceBindings = { [id5] = { isbound = true, provider = true, boundconsumers = { { deviceid = 777, bindingid = 5 } } } }
+clearCalls()
+bindings:getOrAddDynamicBinding("ns", "k5", "CONTROL", true, "Old", "CONTACT_SENSOR")
+check("class change: still re-added the binding", #addCalls == 1)
+check("class change: no reconnect (peer is wired on the old class)", #bindCalls == 0, #bindCalls)
+
 print(string.format("\n%d passed, %d failed", pass, fail))
 os.exit(fail == 0 and 0 or 1)

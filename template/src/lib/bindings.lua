@@ -158,19 +158,22 @@ function Bindings:getOrAddDynamicBinding(namespace, key, type, provider, display
     self:_saveBindings(bindings)
     C4:AddDynamicBinding(bindingId, type, provider, displayName, class, false, false)
   elseif binding.displayName ~= displayName or binding.provider ~= provider or binding.class ~= class then
-    -- Control4 has no in-place rename, so re-add under the same id, snapshotting and
-    -- restoring the wiring so the remove/add doesn't drop it. Re-add with the record's
-    -- own type (its id came from that type's range, and restoreBindings re-adds from it).
-    -- A provider flip can't be restored in the same orientation, so skip the reconnect.
+    -- Control4 has no in-place rename, so re-add under the same id, with the record's own
+    -- type (its id came from that type's range and restoreBindings re-adds from it). Wiring
+    -- is restored only across a name-only rename: a provider flip or class change reshapes
+    -- the link, so the old peers can't be re-bound in the new shape and are dropped (warned).
     local conns, wasProvider = snapshotConnections(binding.bindingId)
+    local restorable = wasProvider == provider and binding.class == class
     C4:RemoveDynamicBinding(binding.bindingId)
     binding.provider = provider
     binding.displayName = displayName
     binding.class = class
     self:_saveBindings(bindings)
     C4:AddDynamicBinding(binding.bindingId, binding.type, provider, displayName, class, false, false)
-    if wasProvider == provider then
+    if restorable then
       restoreConnections(binding.bindingId, provider, class, conns)
+    elseif #conns > 0 then
+      log:warn("Binding '%s' changed shape; %d connection(s) dropped, re-wire in Composer", displayName, #conns)
     end
   end
   return binding
