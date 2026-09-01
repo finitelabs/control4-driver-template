@@ -129,7 +129,9 @@ def process_file(
     # expanded. Raise rather than pass it through as a literal comment (as missing does).
     for line in lines:
         if embed_pattern.match(line):
-            raise ValueError(f"Nested #embed is not supported (in a fragment embedded into {file_path})")
+            raise ValueError(
+                f"Nested #embed is not supported (in a fragment embedded into {file_path})"
+            )
 
     for line in lines:
         # Check for conditional directives
