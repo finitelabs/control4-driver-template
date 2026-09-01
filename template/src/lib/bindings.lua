@@ -255,6 +255,24 @@ local function isInManagedRange(bindingId)
     or (bindingId >= PROXY_BINDING_START and bindingId <= PROXY_BINDING_END)
 end
 
+--- The connection ids declared statically in driver.xml, as a set. They share the id
+--- space with dynamic bindings and are returned by GetDeviceBindings but are not in
+--- the store, so the managed-range sweep must skip them or it deletes the driver's own
+--- static connections on every init. GetDriverConfigInfo("connections") returns them as
+--- a comma-separated id list at runtime, with no per-driver configuration.
+local function staticConnectionIds()
+  local set = {}
+  local ok, csv = pcall(function()
+    return C4:GetDriverConfigInfo("connections")
+  end)
+  if ok and type(csv) == "string" then
+    for id in csv:gmatch("%d+") do
+      set[tonumber(id)] = true
+    end
+  end
+  return set
+end
+
 --- Restores all dynamic bindings from persistent storage. Ensures that all
 --- bindings are re-added and removes unknown bindings within managed ranges.
 ---
@@ -281,10 +299,11 @@ function Bindings:restoreBindings()
       )
     end
   end
-  -- Only remove unknown bindings that are within our managed ranges
-  -- This preserves static bindings defined in driver.xml
+  -- Delete unknown bindings inside our managed ranges, but never the driver's own
+  -- static driver.xml connections, which share the id space (see staticConnectionIds).
+  local static = staticConnectionIds()
   for bindingId, _ in pairs(deviceBindings) do
-    if isInManagedRange(bindingId) then
+    if isInManagedRange(bindingId) and not static[bindingId] then
       log:debug("Deleting unknown binding %s", bindingId)
       C4:RemoveDynamicBinding(bindingId)
     end
