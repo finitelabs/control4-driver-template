@@ -158,17 +158,20 @@ function Bindings:getOrAddDynamicBinding(namespace, key, type, provider, display
     self:_saveBindings(bindings)
     C4:AddDynamicBinding(bindingId, type, provider, displayName, class, false, false)
   elseif binding.displayName ~= displayName or binding.provider ~= provider or binding.class ~= class then
-    -- Name/class changed (re-pair, or a placeholder built before the model resolved).
     -- Control4 has no in-place rename, so re-add under the same id, snapshotting and
-    -- restoring the wiring so the remove/add doesn't drop it.
-    local conns = snapshotConnections(binding.bindingId)
+    -- restoring the wiring so the remove/add doesn't drop it. Re-add with the record's
+    -- own type (its id came from that type's range, and restoreBindings re-adds from it).
+    -- A provider flip can't be restored in the same orientation, so skip the reconnect.
+    local conns, wasProvider = snapshotConnections(binding.bindingId)
     C4:RemoveDynamicBinding(binding.bindingId)
     binding.provider = provider
     binding.displayName = displayName
     binding.class = class
     self:_saveBindings(bindings)
-    C4:AddDynamicBinding(binding.bindingId, type, provider, displayName, class, false, false)
-    restoreConnections(binding.bindingId, provider, class, conns)
+    C4:AddDynamicBinding(binding.bindingId, binding.type, provider, displayName, class, false, false)
+    if wasProvider == provider then
+      restoreConnections(binding.bindingId, provider, class, conns)
+    end
   end
   return binding
 end
@@ -256,17 +259,18 @@ local function isInManagedRange(bindingId)
 end
 
 --- The connection ids declared statically in driver.xml, as a set. They share the id
---- space with dynamic bindings and are returned by GetDeviceBindings but are not in
---- the store, so the managed-range sweep must skip them or it deletes the driver's own
---- static connections on every init. GetDriverConfigInfo("connections") returns them as
---- a comma-separated id list at runtime, with no per-driver configuration.
+--- space with dynamic bindings and are returned by GetDeviceBindings but are not in the
+--- store, so the managed-range sweep must skip them or it deletes the driver's own static
+--- connections on every init. GetDriverConfigInfo("connections") returns the driver.xml
+--- connection block as XML at runtime; match the <id> elements so a <facing>/<type> value
+--- or a digit inside a connection name is not mistaken for an id.
 local function staticConnectionIds()
   local set = {}
-  local ok, csv = pcall(function()
+  local ok, xml = pcall(function()
     return C4:GetDriverConfigInfo("connections")
   end)
-  if ok and type(csv) == "string" then
-    for id in csv:gmatch("%d+") do
+  if ok and type(xml) == "string" then
+    for id in xml:gmatch("<id>(%d+)</id>") do
       set[tonumber(id)] = true
     end
   end
