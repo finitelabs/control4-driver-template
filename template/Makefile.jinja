@@ -39,9 +39,8 @@ endif
 # ─── Help ─────────────────────────────────────────────────────────────────────
 
 .PHONY: help
-# help uses grep -h so that once MAKEFILE_LIST holds more than one file (an
-# -include'd Makefile.local), grep does not prefix `filename:` and shove it into
-# the target-name column.
+# grep -h so that with an -include'd Makefile.local in MAKEFILE_LIST, grep doesn't
+# prefix `filename:` into the target-name column.
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
@@ -281,8 +280,7 @@ clean-all: clean ## Remove everything (build, dist, deps, venv)
 	rm -rf $(VENV)
 
 # ─── Project-specific ─────────────────────────────────────────────────────────
-# Optional, un-templated targets for this driver (e.g. code generation). Kept in
-# a separate Makefile.local so `copier update` never has to merge them. Included
-# last, so it can add targets and extend stock ones with extra prerequisites
-# (e.g. `test: test-project`) using the variables defined above.
+# Optional, un-templated targets for this driver (e.g. codegen), kept in a separate
+# Makefile.local so copier update never has to merge them. Included last so it can add
+# targets and extend stock ones via extra prerequisites (test: test-project).
 -include Makefile.local

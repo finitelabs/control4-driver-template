@@ -4,6 +4,6 @@
 /.lua
 **/http-client.private.env.json
 
-# Python bytecode (tools/ scripts and their tests import each other as modules)
+# Python bytecode
 __pycache__/
 *.pyc

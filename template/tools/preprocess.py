@@ -125,9 +125,8 @@ def process_file(
             expanded_lines.append(line)
     lines = expanded_lines
 
-    # The pre-pass is a single non-recursive sweep, so an #embed that arrives inside an
-    # embedded fragment is never expanded. Raise rather than letting it pass through as a
-    # literal comment, matching the missing-fragment error above.
+    # The pre-pass doesn't recurse, so an #embed inside an embedded fragment is never
+    # expanded. Raise rather than pass it through as a literal comment (as missing does).
     for line in lines:
         if embed_pattern.match(line):
             raise ValueError(f"Nested #embed is not supported (in a fragment embedded into {file_path})")
