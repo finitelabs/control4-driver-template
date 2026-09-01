@@ -126,7 +126,8 @@ def process_file(
     lines = expanded_lines
 
     # The pre-pass doesn't recurse, so an #embed inside an embedded fragment is never
-    # expanded. Raise rather than pass it through as a literal comment (as missing does).
+    # expanded. Raise rather than pass it through as a literal comment, matching the
+    # missing-fragment raise above.
     for line in lines:
         if embed_pattern.match(line):
             raise ValueError(
