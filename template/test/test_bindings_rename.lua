@@ -95,7 +95,8 @@ store, deviceBindings = {}, {}
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k2", "CONTROL", false, "Old", "RELAY")
 local id2 = addCalls[#addCalls].id
-deviceBindings = { [id2] = { isbound = true, provider = false, boundprovider = { bound = { deviceid = 888, bindingid = 3 } } } }
+deviceBindings =
+  { [id2] = { isbound = true, provider = false, boundprovider = { bound = { deviceid = 888, bindingid = 3 } } } }
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k2", "CONTROL", false, "New", "RELAY")
 check("consumer rename: exactly one reconnect", #bindCalls == 1, #bindCalls)
@@ -125,7 +126,11 @@ clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k4", "PROXY", true, "Old", "RELAY")
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k4", "CONTROL", true, "New", "RELAY")
-check("type on rename: re-added with the original type", addCalls[1] and addCalls[1].type == "PROXY", addCalls[1] and addCalls[1].type)
+check(
+  "type on rename: re-added with the original type",
+  addCalls[1] and addCalls[1].type == "PROXY",
+  addCalls[1] and addCalls[1].type
+)
 
 print(string.format("\n%d passed, %d failed", pass, fail))
 os.exit(fail == 0 and 0 or 1)
