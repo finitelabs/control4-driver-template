@@ -22,7 +22,7 @@ end
 -- (which LuaJIT lacks anyway), or a test would agree with a driver bug instead of
 -- catching it.
 if not string.pack then
-  local function packInt(v, size, signed)
+  local function packInt(v, size) -- signedness is irrelevant: two's-complement wrap below
     v = (v >= 0) and math.floor(v + 0.5) or math.ceil(v - 0.5) -- round half away from zero
     v = v % (2 ^ (8 * size))
     local out = {}
@@ -54,11 +54,20 @@ if not string.pack then
     local mant, expo = math.frexp(x) -- x = mant * 2^expo, 0.5 <= mant < 1
     expo = expo + 126 -- IEEE754 biased exponent (mant in [0.5,1) => 1.f = 2*mant)
     if expo <= 0 then
+      -- Underflow: flush to zero. Denormals are out of scope (ZCL floats do not use
+      -- them); unpackFloat still decodes them, so the pair is intentionally asymmetric.
       return string.char(0, 0, 0, sign)
-    elseif expo >= 255 then
-      return string.char(0, 0, 0x80, sign + 0x7F)
     end
     mant = math.floor((mant * 2 - 1) * 2 ^ 23 + 0.5)
+    if mant == 2 ^ 23 then
+      -- Rounding carried the mantissa into the next binade (e.g. 255.999999): the
+      -- implicit leading 1 must increment the exponent, not be masked off b3.
+      mant = 0
+      expo = expo + 1
+    end
+    if expo >= 255 then
+      return string.char(0, 0, 0x80, sign + 0x7F)
+    end
     local b1 = mant % 256
     local b2 = math.floor(mant / 256) % 256
     local b3 = math.floor(mant / 65536) % 128 + (expo % 2) * 128
@@ -101,7 +110,7 @@ if not string.pack then
         out[#out + 1] = packFloat(args[i])
       elseif CODE[c] then
         i = i + 1
-        out[#out + 1] = packInt(args[i], CODE[c][1], CODE[c][2])
+        out[#out + 1] = packInt(args[i], CODE[c][1])
       else
         error("shim string.pack: unsupported code '" .. c .. "'")
       end

@@ -574,6 +574,23 @@ do
   check("unpack returns nextPos as its first result", np == 3, np)
   -- float32 round-trips a simple value.
   check("f round-trips 1.5", select(2, string.unpack(string.pack("f", 1.5), "f", 1)) == 1.5)
+  -- Reference byte vectors (little-endian IEEE754, from struct.pack('<f', x)): pin the
+  -- encoding to the controller's, not just self-consistency.
+  local function fhex(x)
+    return (string.pack("f", x):gsub(".", function(b)
+      return string.format("%02x", b:byte())
+    end))
+  end
+  check("f encodes 0.1 as cdcccc3d", fhex(0.1) == "cdcccc3d", fhex(0.1))
+  check("f encodes 100.25 as 0080c842", fhex(100.25) == "0080c842", fhex(100.25))
+  check("f encodes 255.999999 as 00008043", fhex(255.999999) == "00008043", fhex(255.999999))
+  -- Mantissa rounding that carries into the next binade must bump the exponent, not
+  -- halve the value (regression: 255.999999 encoded as 128.0).
+  check("f 255.999999 -> 256", select(2, string.unpack(string.pack("f", 255.999999), "f", 1)) == 256.0)
+  check("f 65535.99999 -> 65536", select(2, string.unpack(string.pack("f", 65535.99999), "f", 1)) == 65536.0)
+  check("f 0.99999999 -> 1", select(2, string.unpack(string.pack("f", 0.99999999), "f", 1)) == 1.0)
+  check("f -0.99999999 -> -1", select(2, string.unpack(string.pack("f", -0.99999999), "f", 1)) == -1.0)
+  check("f 1e39 saturates to +inf", select(2, string.unpack(string.pack("f", 1e39), "f", 1)) == math.huge)
 end
 
 --------------------------------------------------------------------------------
