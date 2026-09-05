@@ -410,36 +410,36 @@ end
 -- (measured on a dev controller: `b` unsigned, `c` signed8, `<L` is 4 bytes). A
 -- shim that got `b` wrong would let the suite agree with a driver bug rather than
 -- catch it - which is exactly what happened with the Xiaomi int8 decode.
-section("string.pack / string.unpack (lpack-compatible)")
+T.section("string.pack / string.unpack (lpack-compatible)")
 do
   -- Signedness of the 8-bit codes: this is the one that bit us.
-  check(
+  T.check(
     "b decodes 0xF6 as UNSIGNED 246",
     select(2, string.unpack("\246", "b", 1)) == 246,
     select(2, string.unpack("\246", "b", 1))
   )
-  check(
+  T.check(
     "c decodes 0xF6 as SIGNED -10",
     select(2, string.unpack("\246", "c", 1)) == -10,
     select(2, string.unpack("\246", "c", 1))
   )
   -- 16/32-bit signedness.
-  check("<h is signed16", select(2, string.unpack(string.char(0xF6, 0xFF), "<h", 1)) == -10)
-  check("<H is unsigned16", select(2, string.unpack(string.char(0xF6, 0xFF), "<H", 1)) == 65526)
-  check("<i is signed32", select(2, string.unpack(string.char(0xF6, 0xFF, 0xFF, 0xFF), "<i", 1)) == -10)
-  check("<I is unsigned32", select(2, string.unpack(string.char(0xF6, 0xFF, 0xFF, 0xFF), "<I", 1)) == 4294967286)
+  T.check("<h is signed16", select(2, string.unpack(string.char(0xF6, 0xFF), "<h", 1)) == -10)
+  T.check("<H is unsigned16", select(2, string.unpack(string.char(0xF6, 0xFF), "<H", 1)) == 65526)
+  T.check("<i is signed32", select(2, string.unpack(string.char(0xF6, 0xFF, 0xFF, 0xFF), "<i", 1)) == -10)
+  T.check("<I is unsigned32", select(2, string.unpack(string.char(0xF6, 0xFF, 0xFF, 0xFF), "<I", 1)) == 4294967286)
   -- Round-trip and byte order (little-endian).
-  check("pack/unpack <H round-trips", select(2, string.unpack(string.pack("<H", 300), "<H", 1)) == 300)
-  check(
+  T.check("pack/unpack <H round-trips", select(2, string.unpack(string.pack("<H", 300), "<H", 1)) == 300)
+  T.check(
     "<I packs 4 little-endian bytes",
     string.pack("<I", 1) == string.char(1, 0, 0, 0),
     (string.pack("<I", 1)):byte(1, 4)
   )
   -- unpack returns nextPos first (lpack signature), then the value(s).
   local np = string.unpack(string.char(0, 0), "<H", 1)
-  check("unpack returns nextPos as its first result", np == 3, np)
+  T.check("unpack returns nextPos as its first result", np == 3, np)
   -- float32 round-trips a simple value.
-  check("f round-trips 1.5", select(2, string.unpack(string.pack("f", 1.5), "f", 1)) == 1.5)
+  T.check("f round-trips 1.5", select(2, string.unpack(string.pack("f", 1.5), "f", 1)) == 1.5)
   -- Reference byte vectors (little-endian IEEE754, from struct.pack('<f', x)): pin the
   -- encoding to the controller's, not just self-consistency.
   local function fhex(x)
@@ -447,16 +447,16 @@ do
       return string.format("%02x", b:byte())
     end))
   end
-  check("f encodes 0.1 as cdcccc3d", fhex(0.1) == "cdcccc3d", fhex(0.1))
-  check("f encodes 100.25 as 0080c842", fhex(100.25) == "0080c842", fhex(100.25))
-  check("f encodes 255.999999 as 00008043", fhex(255.999999) == "00008043", fhex(255.999999))
+  T.check("f encodes 0.1 as cdcccc3d", fhex(0.1) == "cdcccc3d", fhex(0.1))
+  T.check("f encodes 100.25 as 0080c842", fhex(100.25) == "0080c842", fhex(100.25))
+  T.check("f encodes 255.999999 as 00008043", fhex(255.999999) == "00008043", fhex(255.999999))
   -- Mantissa rounding that carries into the next binade must bump the exponent, not
   -- halve the value (regression: 255.999999 encoded as 128.0).
-  check("f 255.999999 -> 256", select(2, string.unpack(string.pack("f", 255.999999), "f", 1)) == 256.0)
-  check("f 65535.99999 -> 65536", select(2, string.unpack(string.pack("f", 65535.99999), "f", 1)) == 65536.0)
-  check("f 0.99999999 -> 1", select(2, string.unpack(string.pack("f", 0.99999999), "f", 1)) == 1.0)
-  check("f -0.99999999 -> -1", select(2, string.unpack(string.pack("f", -0.99999999), "f", 1)) == -1.0)
-  check("f 1e39 saturates to +inf", select(2, string.unpack(string.pack("f", 1e39), "f", 1)) == math.huge)
+  T.check("f 255.999999 -> 256", select(2, string.unpack(string.pack("f", 255.999999), "f", 1)) == 256.0)
+  T.check("f 65535.99999 -> 65536", select(2, string.unpack(string.pack("f", 65535.99999), "f", 1)) == 65536.0)
+  T.check("f 0.99999999 -> 1", select(2, string.unpack(string.pack("f", 0.99999999), "f", 1)) == 1.0)
+  T.check("f -0.99999999 -> -1", select(2, string.unpack(string.pack("f", -0.99999999), "f", 1)) == -1.0)
+  T.check("f 1e39 saturates to +inf", select(2, string.unpack(string.pack("f", 1e39), "f", 1)) == math.huge)
 end
 
 --------------------------------------------------------------------------------
