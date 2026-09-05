@@ -30,7 +30,13 @@ function F.withShim(opts, body)
     shim = package.loaded["c4_shim"],
     Timer = Timer,
     TimerFunctions = TimerFunctions,
+    shimAccessors = {},
   }
+  for name, value in pairs(_G) do
+    if type(name) == "string" and name:find("^Shim") then
+      saved.shimAccessors[name] = value
+    end
+  end
 
   local now = opts.startTime or 1000
   package.loaded["socket"] = nil
@@ -78,6 +84,11 @@ function F.withShim(opts, body)
   -- reload got its own and restoring C4 restores the originals with it.
   C4, Variables, Properties = saved.C4, saved.Variables, saved.Properties
   Timer, TimerFunctions = saved.Timer, saved.TimerFunctions
+  -- The Shim* accessors are free globals, not C4 methods, so restoring C4 leaves
+  -- the reload's copies in place, closed over the reload's tables.
+  for name, value in pairs(saved.shimAccessors) do
+    _G[name] = value
+  end
 
   return ok, err
 end

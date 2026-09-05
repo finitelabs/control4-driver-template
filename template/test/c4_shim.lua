@@ -245,11 +245,205 @@ end
 function ShimResetSentFrames()
   clear(sent_frames)
 end
+
+---------------------------------------------------------------------------
+-- Dynamic bindings and the connections between them
+-- Shapes and return values were measured on a controller; where the
+-- DriverWorks reference disagrees it is noted at the method. CONTROL and PROXY
+-- surface as type 1 and 2, and removing a binding also drops its connections.
+---------------------------------------------------------------------------
+
+--- @type table<integer, table>
+local dynamic_bindings = {}
+
+--- The driver.xml <connections>, which the get methods return alongside the
+--- dynamic ones.
+--- @type table<integer, table>
+local static_bindings = {}
+
+--- @type { provider: integer, providerBinding: integer, consumer: integer, consumerBinding: integer, class: string }[]
+local connections = {}
+
+local BINDING_TYPE_IDS = { CONTROL = 1, PROXY = 2 }
+
+function C4:AddDynamicBinding(idBinding, strType, bIsProvider, strName, strClass, bHidden, bAutoBind)
+  dynamic_bindings[idBinding] = {
+    id = idBinding,
+    type = strType,
+    provider = bIsProvider,
+    name = strName,
+    class = strClass,
+    hidden = bHidden or false,
+    autoBind = bAutoBind or false,
+  }
+end
+
+local function resolveDeviceId(deviceId)
+  deviceId = tonumber(deviceId)
+  if deviceId == 0 then
+    return tonumber(C4:GetDeviceID())
+  end
+  return deviceId
+end
+
+local function dropConnections(matches)
+  for i = #connections, 1, -1 do
+    if matches(connections[i]) then
+      table.remove(connections, i)
+    end
+  end
+end
+
+function C4:RemoveDynamicBinding(idBinding)
+  dynamic_bindings[idBinding] = nil
+  local me = tonumber(C4:GetDeviceID())
+  dropConnections(function(c)
+    return (c.provider == me and c.providerBinding == idBinding)
+      or (c.consumer == me and c.consumerBinding == idBinding)
+  end)
+end
+
+function C4:Bind(idDeviceProvider, idBindingProvider, idDeviceConsumer, idBindingConsumer, strClass)
+  local provider, consumer = resolveDeviceId(idDeviceProvider), resolveDeviceId(idDeviceConsumer)
+  for _, c in ipairs(connections) do
+    if
+      c.provider == provider
+      and c.providerBinding == idBindingProvider
+      and c.consumer == consumer
+      and c.consumerBinding == idBindingConsumer
+    then
+      return
+    end
+  end
+  connections[#connections + 1] = {
+    provider = provider,
+    providerBinding = idBindingProvider,
+    consumer = consumer,
+    consumerBinding = idBindingConsumer,
+    class = strClass,
+  }
+end
+
+function C4:Unbind(idDeviceConsumer, idBindingConsumer)
+  local consumer = resolveDeviceId(idDeviceConsumer)
+  dropConnections(function(c)
+    return c.consumer == consumer and c.consumerBinding == idBindingConsumer
+  end)
+end
+
+local function boundPeer(deviceId, bindingId, class)
+  return {
+    bindingid = bindingId,
+    deviceid = deviceId,
+    name = C4:GetDeviceDisplayName(deviceId) or ("Device " .. tostring(deviceId)),
+    boundclasses = { class },
+  }
+end
+
+local function bindingRecord(deviceId, binding)
+  local record = {
+    bindingid = binding.id,
+    deviceid = deviceId,
+    name = binding.name,
+    provider = binding.provider == true,
+    type = BINDING_TYPE_IDS[binding.type] or binding.type,
+    bindingclasses = {
+      { class = binding.class, rank = 0, autobind = binding.autoBind == true, excludeids = {} },
+    },
+    isbound = false,
+    flags = 0,
+    binding_info = "",
+  }
+  for _, c in ipairs(connections) do
+    if record.provider and c.provider == deviceId and c.providerBinding == binding.id then
+      record.isbound = true
+      record.boundconsumers = record.boundconsumers or {}
+      record.boundconsumers[#record.boundconsumers + 1] = boundPeer(c.consumer, c.consumerBinding, c.class)
+    elseif not record.provider and c.consumer == deviceId and c.consumerBinding == binding.id then
+      record.isbound = true
+      record.boundprovider = { bound = boundPeer(c.provider, c.providerBinding, c.class) }
+    end
+  end
+  return record
+end
+
+--- Device 0 is deliberately not resolved: the reference says it means the
+--- current device here, a controller returns nothing for it.
+function C4:GetBindingsByDevice(deviceId)
+  local bindings = {}
+  if tonumber(deviceId) == tonumber(C4:GetDeviceID()) then
+    for _, source in ipairs({ static_bindings, dynamic_bindings }) do
+      for _, binding in pairs(source) do
+        bindings[#bindings + 1] = bindingRecord(tonumber(deviceId), binding)
+      end
+    end
+    table.sort(bindings, function(a, b)
+      return a.bindingid < b.bindingid
+    end)
+  end
+  return { bindings = bindings }
+end
+
+--- @return table|nil devices The bound consumers as { [deviceId] = name }. Nil,
+--- not an empty table, when unbound.
+function C4:GetBoundConsumerDevices(deviceId, bindingId)
+  deviceId = resolveDeviceId(deviceId)
+  local devices, found = {}, false
+  for _, c in ipairs(connections) do
+    if c.provider == deviceId and c.providerBinding == bindingId then
+      devices[c.consumer] = C4:GetDeviceDisplayName(c.consumer) or ("Device " .. tostring(c.consumer))
+      found = true
+    end
+  end
+  if not found then
+    return nil
+  end
+  return devices
+end
+
+--- @return integer deviceId The providing device, 0 when unbound. A device id,
+--- not the id/name table the reference documents. Asked about a bound provider
+--- binding, a controller answers with the querying device itself.
+function C4:GetBoundProviderDevice(deviceId, bindingId)
+  deviceId = resolveDeviceId(deviceId)
+  for _, c in ipairs(connections) do
+    if c.consumer == deviceId and c.consumerBinding == bindingId then
+      return c.provider
+    end
+    if c.provider == deviceId and c.providerBinding == bindingId then
+      return deviceId
+    end
+  end
+  return 0
+end
+
+--- @return table bindings Every live dynamic binding, keyed by binding id.
+function ShimDynamicBindings()
+  return dynamic_bindings
+end
+
+--- @return table connections Every live connection, in the order Bind made them.
+function ShimConnections()
+  return connections
+end
+
+--- Seed the driver.xml <connections>, as { id, type, provider, name, class } records.
+function ShimSetStaticBindings(bindings)
+  clear(static_bindings)
+  for _, binding in pairs(bindings or {}) do
+    static_bindings[binding.id] = binding
+  end
+end
+
+--- Clear the recorded dynamic bindings and their connections, in place so a
+--- table a test already holds stays the live one.
+function ShimResetDynamicBindings()
+  clear(dynamic_bindings)
+  clear(connections)
+end
+
 function C4:SendUIRequest()
   return ""
-end
-function C4:GetBindingsByDevice()
-  return {}
 end
 function C4:RegisterVariableListener() end
 function C4:UnregisterVariableListener() end
