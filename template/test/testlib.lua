@@ -126,6 +126,8 @@ end
 
 --- Assert fn() raises with the error attributed to the file calling this, not to
 --- the file that raised. Catches a callee raising at the wrong stack level.
+--- Call it directly from the test file: the expected filename is the immediate
+--- caller's, so wrapping this in a helper asserts against the helper's file.
 function T.raisesAt(name, fn)
   local caller = debug.getinfo(2, "S").short_src:match("([^/\\]+)$")
   local ok, err = pcall(fn)

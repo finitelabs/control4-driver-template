@@ -4,8 +4,7 @@
 -- Run from the driver root:
 --   make test
 -- or:
---   LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
---     luajit -e "require('c4_shim')" test/test_lib_dependencies.lua
+--   ./test/run_test.sh test_lib_dependencies.lua
 --
 -- tools/gen-squishy.lua bundles from package.loaded, so a module nothing
 -- requires is absent from the .c4z and fails as a nil-call in the field.

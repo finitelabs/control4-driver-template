@@ -1,6 +1,12 @@
 -- Rename path in lib/bindings.lua: getOrAddDynamicBinding re-adds a binding under the same
 -- id when its name/provider/class changes, and must preserve the installer's wiring across
 -- the remove/add.
+--
+-- Run from the driver root:
+--   make test
+-- or:
+--   ./test/run_test.sh test_bindings_rename.lua
+
 local T = require("testlib")
 
 require("c4_shim")

@@ -3,9 +3,10 @@
 -- drivers unlock C4Z_ROOT first, and the download write unlocks for itself rather than
 -- inheriting an unlock from the version loop.
 --
--- Run from the template root:
---   LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
---     luajit -e "require('c4_shim')" test/test_github_updater_alias.lua
+-- Run from the driver root:
+--   make test
+-- or:
+--   ./test/run_test.sh test_github_updater_alias.lua
 
 local T = require("testlib")
 

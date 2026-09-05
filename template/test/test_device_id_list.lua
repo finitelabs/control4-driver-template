@@ -14,8 +14,7 @@
 -- Run from the driver root:
 --   make test
 -- or:
---   LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
---     luajit -e "require('c4_shim')" test/test_device_id_list.lua
+--   ./test/run_test.sh test_device_id_list.lua
 
 local T = require("testlib")
 

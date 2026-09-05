@@ -4,8 +4,10 @@
 --   3. Host header omits the default port
 --   4. 64-bit extended-length field uses %016X
 --
--- Run from the template root:
---   LUA_PATH="$PWD/test/?.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" luajit test/test_websocket.lua
+-- Run from the driver root:
+--   make test
+-- or:
+--   ./test/run_test.sh test_websocket.lua
 
 local T = require("testlib")
 

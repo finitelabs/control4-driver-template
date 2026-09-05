@@ -18,8 +18,7 @@
 -- Run from the driver root:
 --   make test
 -- or:
---   LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
---     luajit -e "require('c4_shim')" test/test_watched_variable.lua
+--   ./test/run_test.sh test_watched_variable.lua
 
 require("drivers-common-public.global.lib") -- Select, GetDeviceDisplayNameOrId
 require("drivers-common-public.global.handlers") -- OWVC, ODE, OnWatchedVariableChanged, OnDeviceEvent
