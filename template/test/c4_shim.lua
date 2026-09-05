@@ -144,9 +144,6 @@ Properties = {}
 Variables = {}
 
 -- Stub C4 functions that are called but not needed for testing
-function C4:GetDriverConfigInfo()
-  return nil
-end
 function C4:GetDeviceID()
   return 12345
 end
@@ -261,6 +258,12 @@ local dynamic_bindings = {}
 --- @type table<integer, table>
 local static_bindings = {}
 
+--- The same connections as driver.xml declares them, behind
+--- C4:GetDriverConfigInfo. Separate from the live records above because a
+--- controller keeps listing a connection here after the live binding is gone.
+--- @type table<integer, table>
+local static_manifest = {}
+
 --- @type { provider: integer, providerBinding: integer, consumer: integer, consumerBinding: integer, class: string }[]
 local connections = {}
 
@@ -294,8 +297,10 @@ local function dropConnections(matches)
   end
 end
 
+--- A controller removes a static driver.xml connection as readily as a dynamic one.
 function C4:RemoveDynamicBinding(idBinding)
   dynamic_bindings[idBinding] = nil
+  static_bindings[idBinding] = nil
   local me = tonumber(C4:GetDeviceID())
   dropConnections(function(c)
     return (c.provider == me and c.providerBinding == idBinding)
@@ -417,6 +422,35 @@ function C4:GetBoundProviderDevice(deviceId, bindingId)
   return 0
 end
 
+--- @param section string A driver.xml section. Only "connections" is modelled.
+--- @return string|nil xml The section as XML.
+function C4:GetDriverConfigInfo(section)
+  if section ~= "connections" then
+    return nil
+  end
+  local ids = {}
+  for id in pairs(static_manifest) do
+    ids[#ids + 1] = id
+  end
+  table.sort(ids)
+  local out = { "<connections>" }
+  for _, id in ipairs(ids) do
+    local connection = static_manifest[id]
+    out[#out + 1] = string.format(
+      "<connection><id>%d</id><facing>6</facing><connectionname>%s</connectionname>"
+        .. "<type>%d</type><consumer>%s</consumer>"
+        .. "<classes><class><classname>%s</classname></class></classes></connection>",
+      id,
+      connection.name or "",
+      BINDING_TYPE_IDS[connection.type] or 0,
+      connection.provider and "False" or "True",
+      connection.class or ""
+    )
+  end
+  out[#out + 1] = "</connections>"
+  return table.concat(out)
+end
+
 --- @return table bindings Every live dynamic binding, keyed by binding id.
 function ShimDynamicBindings()
   return dynamic_bindings
@@ -430,8 +464,10 @@ end
 --- Seed the driver.xml <connections>, as { id, type, provider, name, class } records.
 function ShimSetStaticBindings(bindings)
   clear(static_bindings)
+  clear(static_manifest)
   for _, binding in pairs(bindings or {}) do
     static_bindings[binding.id] = binding
+    static_manifest[binding.id] = binding
   end
 end
 

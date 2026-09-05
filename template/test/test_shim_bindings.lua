@@ -203,6 +203,24 @@ do
 end
 
 --------------------------------------------------------------------------------
+T.section("the driver.xml manifest")
+do
+  ShimResetDynamicBindings()
+  ShimSetStaticBindings({ { id = 5012, type = "PROXY", provider = true, name = "Humidity", class = "HUMIDITY" } })
+  C4:AddDynamicBinding(10, "CONTROL", true, "Valve", "RELAY")
+
+  local xml = C4:GetDriverConfigInfo("connections")
+  T.contains("a declared connection is rendered under <id>", xml, "<id>5012</id>")
+  T.contains("with the fields a controller returns alongside it", xml, "<connectionname>Humidity</connectionname>")
+  T.excludes("a dynamic binding is not in the manifest", xml, "<id>10</id>")
+  T.falsy("a section the shim does not model returns nil", C4:GetDriverConfigInfo("proxies"))
+
+  C4:RemoveDynamicBinding(5012)
+  T.falsy("removing a static connection drops the live binding", recordFor(ME, 5012))
+  T.contains("but leaves it declared in the manifest", C4:GetDriverConfigInfo("connections"), "<id>5012</id>")
+end
+
+--------------------------------------------------------------------------------
 T.section("device ids the controller does not resolve")
 do
   ShimResetDynamicBindings()
