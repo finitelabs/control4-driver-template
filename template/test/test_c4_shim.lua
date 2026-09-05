@@ -466,9 +466,8 @@ local function withShim(hasSocket, body)
   -- gets its own and restoring C4 restores the originals along with it.
   C4, Variables, Properties = saved.C4, saved.Variables, saved.Properties
   Timer, TimerFunctions = saved.Timer, saved.TimerFunctions
-  -- The Shim* accessors are free globals, not C4 methods, so restoring C4 does
-  -- not bring them back: the reload's copies close over the reload's tables and
-  -- would report on a shim no C4 method writes to any more.
+  -- The Shim* accessors are free globals, not C4 methods, so restoring C4 leaves
+  -- the reload's copies in place, closed over the reload's tables.
   for name, value in pairs(saved.shimAccessors) do
     _G[name] = value
   end
@@ -606,9 +605,6 @@ do
 end
 
 --------------------------------------------------------------------------------
--- Dynamic bindings. Before these existed the shim had no AddDynamicBinding at
--- all, so building any capability that declares one died with "attempt to call
--- method 'AddDynamicBinding' (a nil value)" and no test could cover that path.
 section("dynamic bindings")
 do
   ShimResetDynamicBindings()

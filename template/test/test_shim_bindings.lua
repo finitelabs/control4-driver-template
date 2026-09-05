@@ -2,11 +2,9 @@
 --
 -- lib/bindings.lua reads bindings back as much as it declares them: the rename
 -- path snapshots connections out of GetBindingsByDevice and re-Binds them, and
--- Bind() asks GetBoundConsumerDevices whether a link already exists. A stub
--- that only records Add/Remove lets all of that go green while doing nothing,
--- so the shapes below were read off a dev controller and are pinned here.
--- Where the DriverWorks reference disagrees with the controller, the
--- controller wins and the divergence is named in the check.
+-- Bind() asks GetBoundConsumerDevices whether a link already exists. The read
+-- shapes pinned here were measured on a dev controller; where the DriverWorks
+-- reference disagrees, the controller wins and the check names the divergence.
 --
 -- Run from the template root:
 --   LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
@@ -27,8 +25,8 @@ local function section(name)
   print("\n[" .. name .. "]")
 end
 
---- Nil-safe nested lookup, so a shim regression reports a FAIL naming the
---- check rather than crashing the run on the first missing field.
+--- Nil-safe nested lookup, so a shim regression FAILs the check rather than
+--- crashing the run on the first missing field.
 local function at(value, ...)
   for _, key in ipairs({ ... }) do
     if type(value) ~= "table" then
@@ -42,7 +40,6 @@ end
 local ME = C4:GetDeviceID()
 local CONSUMER = 987
 
---- The record for one binding id, or nil.
 local function recordFor(deviceId, bindingId)
   for _, record in ipairs(C4:GetBindingsByDevice(deviceId).bindings or {}) do
     if record.bindingid == bindingId then
@@ -203,9 +200,8 @@ do
   ShimResetDynamicBindings()
   C4:AddDynamicBinding(10, "CONTROL", true, "Valve", "RELAY")
 
-  -- The reference says a device id of 0 is the current device here too, but a
-  -- controller answers with nothing; a shim that resolved it would pass code
-  -- that reads back empty on hardware.
+  -- The reference says a device id of 0 is the current device here too; a
+  -- controller answers with nothing.
   check("GetBindingsByDevice does not resolve device 0", countBindings(0) == 0)
   check("another device's bindings are not ours", countBindings(CONSUMER) == 0)
 end
