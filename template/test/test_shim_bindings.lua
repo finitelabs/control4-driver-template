@@ -187,14 +187,15 @@ do
     { name = "Serial", type = 1 }
   )
 
+  local live = ShimDynamicBindings()
+  T.truthy("the held table carries the declared binding before the reset", next(live))
+
   ShimResetDynamicBindings()
   T.check(
     "reset clears the dynamic bindings but not the statics",
     countBindings(ME) == 1 and recordFor(ME, 1) ~= nil,
     countBindings(ME)
   )
-
-  local live = ShimDynamicBindings()
   T.check("reset clears in place, so a held table stays live", next(live) == nil and live == ShimDynamicBindings())
 
   ShimSetStaticBindings({})

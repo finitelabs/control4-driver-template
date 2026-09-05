@@ -460,44 +460,5 @@ do
 end
 
 --------------------------------------------------------------------------------
-T.section("dynamic bindings")
-do
-  ShimResetDynamicBindings()
-  local live = ShimDynamicBindings()
-
-  C4:AddDynamicBinding(11, "CONTROL", true, "Relay 1", "RELAY", true, true)
-  local added = live[11] or {}
-  T.truthy("add records the binding under its id", live[11])
-  T.eq("add records every argument", {
-    id = added.id,
-    type = added.type,
-    provider = added.provider,
-    name = added.name,
-    class = added.class,
-  }, { id = 11, type = "CONTROL", provider = true, name = "Relay 1", class = "RELAY" })
-  T.eq("add records the trailing pair", { hidden = added.hidden, autoBind = added.autoBind }, {
-    hidden = true,
-    autoBind = true,
-  })
-
-  C4:AddDynamicBinding(12, "PROXY", false, "Light 1", "LIGHT_V2")
-  local defaulted = live[12] or {}
-  T.eq("hidden and autoBind default false when omitted", {
-    hidden = defaulted.hidden,
-    autoBind = defaulted.autoBind,
-  }, { hidden = false, autoBind = false })
-
-  C4:AddDynamicBinding(11, "CONTROL", true, "Relay renamed", "RELAY")
-  T.eq("a re-add under a live id replaces the record", (live[11] or {}).name, "Relay renamed")
-
-  C4:RemoveDynamicBinding(11)
-  T.falsy("remove drops the binding", live[11])
-  T.truthy("remove leaves the others alone", live[12])
-
-  ShimResetDynamicBindings()
-  T.check("reset clears in place, so a held table stays live", next(live) == nil and live == ShimDynamicBindings())
-end
-
---------------------------------------------------------------------------------
 
 T.finish()

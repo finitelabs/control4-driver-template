@@ -402,7 +402,8 @@ function C4:GetBoundConsumerDevices(deviceId, bindingId)
 end
 
 --- @return integer deviceId The providing device, 0 when unbound. A device id,
---- not the id/name table the reference documents.
+--- not the id/name table the reference documents. Asked about a bound provider
+--- binding, a controller answers with the querying device itself.
 function C4:GetBoundProviderDevice(deviceId, bindingId)
   deviceId = resolveDeviceId(deviceId)
   for _, c in ipairs(connections) do
