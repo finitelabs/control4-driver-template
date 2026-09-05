@@ -1,6 +1,14 @@
 -- Rename path in lib/bindings.lua: getOrAddDynamicBinding re-adds a binding under the same
 -- id when its name/provider/class changes, and must preserve the installer's wiring across
 -- the remove/add.
+--
+-- Run from the driver root:
+--   make test
+-- or:
+--   ./test/run_test.sh test_bindings_rename.lua
+
+local T = require("testlib")
+
 require("c4_shim")
 
 local persist = require("lib.persist")
@@ -52,16 +60,6 @@ function C4:Bind(dp, bp, dc, bc, class)
   bindCalls[#bindCalls + 1] = { dp = dp, bp = bp, dc = dc, bc = bc, class = class }
 end
 
-local pass, fail = 0, 0
-local function check(name, ok, detail)
-  if ok then
-    pass = pass + 1
-    print("  ok   " .. name)
-  else
-    fail = fail + 1
-    print("  FAIL " .. name .. (detail ~= nil and ("  [" .. tostring(detail) .. "]") or ""))
-  end
-end
 local function clearCalls()
   for _, t in ipairs({ addCalls, removeCalls, bindCalls }) do
     for i = #t, 1, -1 do
@@ -78,12 +76,12 @@ local id1 = addCalls[#addCalls].id
 deviceBindings = { [id1] = { isbound = true, provider = true, boundconsumers = { { deviceid = 777, bindingid = 5 } } } }
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k1", "CONTROL", true, "New", "RELAY")
-check("provider rename: removed the old id", removeCalls[1] == id1, removeCalls[1])
-check("provider rename: re-added with the new name", addCalls[1] and addCalls[1].name == "New")
-check("provider rename: exactly one reconnect", #bindCalls == 1, #bindCalls)
+T.check("provider rename: removed the old id", removeCalls[1] == id1, removeCalls[1])
+T.check("provider rename: re-added with the new name", addCalls[1] and addCalls[1].name == "New")
+T.check("provider rename: exactly one reconnect", #bindCalls == 1, #bindCalls)
 do
   local b = bindCalls[1]
-  check(
+  T.check(
     "provider rename: re-bound in the original direction (me -> peer)",
     b and b.dp == 100 and b.bp == id1 and b.dc == 777 and b.bc == 5,
     b and (b.dp .. "/" .. b.bp .. " -> " .. b.dc .. "/" .. b.bc)
@@ -99,10 +97,10 @@ deviceBindings =
   { [id2] = { isbound = true, provider = false, boundprovider = { bound = { deviceid = 888, bindingid = 3 } } } }
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k2", "CONTROL", false, "New", "RELAY")
-check("consumer rename: exactly one reconnect", #bindCalls == 1, #bindCalls)
+T.check("consumer rename: exactly one reconnect", #bindCalls == 1, #bindCalls)
 do
   local c = bindCalls[1]
-  check(
+  T.check(
     "consumer rename: re-bound in the original direction (peer -> me)",
     c and c.dp == 888 and c.bp == 3 and c.dc == 100 and c.bc == id2,
     c and (c.dp .. "/" .. c.bp .. " -> " .. c.dc .. "/" .. c.bc)
@@ -117,8 +115,8 @@ local id3 = addCalls[#addCalls].id
 deviceBindings = { [id3] = { isbound = true, provider = true, boundconsumers = { { deviceid = 777, bindingid = 5 } } } }
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k3", "CONTROL", false, "Old", "RELAY")
-check("provider flip: still re-added the binding", #addCalls == 1)
-check("provider flip: no reconnect (would invert the link)", #bindCalls == 0, #bindCalls)
+T.check("provider flip: still re-added the binding", #addCalls == 1)
+T.check("provider flip: no reconnect (would invert the link)", #bindCalls == 0, #bindCalls)
 
 -- 4. type: a rename re-adds with the record's own type, not the passed one.
 store, deviceBindings = {}, {}
@@ -126,7 +124,7 @@ clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k4", "PROXY", true, "Old", "RELAY")
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k4", "CONTROL", true, "New", "RELAY")
-check(
+T.check(
   "type on rename: re-added with the original type",
   addCalls[1] and addCalls[1].type == "PROXY",
   addCalls[1] and addCalls[1].type
@@ -140,8 +138,7 @@ local id5 = addCalls[#addCalls].id
 deviceBindings = { [id5] = { isbound = true, provider = true, boundconsumers = { { deviceid = 777, bindingid = 5 } } } }
 clearCalls()
 bindings:getOrAddDynamicBinding("ns", "k5", "CONTROL", true, "Old", "CONTACT_SENSOR")
-check("class change: still re-added the binding", #addCalls == 1)
-check("class change: no reconnect (peer is wired on the old class)", #bindCalls == 0, #bindCalls)
+T.check("class change: still re-added the binding", #addCalls == 1)
+T.check("class change: no reconnect (peer is wired on the old class)", #bindCalls == 0, #bindCalls)
 
-print(string.format("\n%d passed, %d failed", pass, fail))
-os.exit(fail == 0 and 0 or 1)
+T.finish()
