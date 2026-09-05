@@ -606,6 +606,42 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- Dynamic bindings. Before these existed the shim had no AddDynamicBinding at
+-- all, so building any capability that declares one died with "attempt to call
+-- method 'AddDynamicBinding' (a nil value)" and no test could cover that path.
+section("dynamic bindings")
+do
+  ShimResetDynamicBindings()
+  local live = ShimDynamicBindings()
+
+  C4:AddDynamicBinding(11, "CONTROL", true, "Relay 1", "RELAY", true, true)
+  local b = live[11]
+  check("add records the binding under its id", b ~= nil)
+  check(
+    "add records every argument",
+    b and b.id == 11 and b.type == "CONTROL" and b.provider == true and b.name == "Relay 1" and b.class == "RELAY",
+    b and (tostring(b.type) .. "/" .. tostring(b.name) .. "/" .. tostring(b.class))
+  )
+  check("add records the trailing pair", b and b.hidden == true and b.autoBind == true)
+
+  C4:AddDynamicBinding(12, "PROXY", false, "Light 1", "LIGHT_V2")
+  check(
+    "hidden and autoBind default false when omitted",
+    live[12] and live[12].hidden == false and live[12].autoBind == false
+  )
+
+  C4:AddDynamicBinding(11, "CONTROL", true, "Relay renamed", "RELAY")
+  check("a re-add under a live id replaces the record", live[11].name == "Relay renamed", live[11].name)
+
+  C4:RemoveDynamicBinding(11)
+  check("remove drops the binding", live[11] == nil)
+  check("remove leaves the others alone", live[12] ~= nil)
+
+  ShimResetDynamicBindings()
+  check("reset clears in place, so a held table stays live", next(live) == nil and live == ShimDynamicBindings())
+end
+
+--------------------------------------------------------------------------------
 
 print(string.format("\n%d passed, %d failed", pass, fail))
 os.exit(fail == 0 and 0 or 1)

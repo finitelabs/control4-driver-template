@@ -245,6 +245,44 @@ end
 function ShimResetSentFrames()
   clear(sent_frames)
 end
+
+---------------------------------------------------------------------------
+-- Dynamic bindings
+-- Modelled on the controller's binding table: one record per id, so a re-add
+-- under a live id replaces it. Argument order is the DriverWorks signature
+-- C4:AddDynamicBinding(idBinding, strType, bIsProvider, strName, strClass,
+-- bHidden, bAutoBind), whose trailing pair is optional and defaults false.
+---------------------------------------------------------------------------
+
+local dynamic_bindings = {}
+
+function C4:AddDynamicBinding(idBinding, strType, bIsProvider, strName, strClass, bHidden, bAutoBind)
+  dynamic_bindings[idBinding] = {
+    id = idBinding,
+    type = strType,
+    provider = bIsProvider,
+    name = strName,
+    class = strClass,
+    hidden = bHidden or false,
+    autoBind = bAutoBind or false,
+  }
+end
+
+function C4:RemoveDynamicBinding(idBinding)
+  dynamic_bindings[idBinding] = nil
+end
+
+--- @return table bindings Every live dynamic binding, keyed by binding id.
+function ShimDynamicBindings()
+  return dynamic_bindings
+end
+
+--- Clear the recorded dynamic bindings. Cleared in place so a table a test
+--- already holds stays the live one.
+function ShimResetDynamicBindings()
+  clear(dynamic_bindings)
+end
+
 function C4:SendUIRequest()
   return ""
 end
