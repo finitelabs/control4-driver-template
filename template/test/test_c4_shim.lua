@@ -420,7 +420,13 @@ local function withShim(hasSocket, body)
     shim = package.loaded["c4_shim"],
     Timer = Timer,
     TimerFunctions = TimerFunctions,
+    shimAccessors = {},
   }
+  for name, value in pairs(_G) do
+    if type(name) == "string" and name:find("^Shim") then
+      saved.shimAccessors[name] = value
+    end
+  end
 
   local now = 1000
   package.loaded["socket"] = nil
@@ -460,6 +466,12 @@ local function withShim(hasSocket, body)
   -- gets its own and restoring C4 restores the originals along with it.
   C4, Variables, Properties = saved.C4, saved.Variables, saved.Properties
   Timer, TimerFunctions = saved.Timer, saved.TimerFunctions
+  -- The Shim* accessors are free globals, not C4 methods, so restoring C4 does
+  -- not bring them back: the reload's copies close over the reload's tables and
+  -- would report on a shim no C4 method writes to any more.
+  for name, value in pairs(saved.shimAccessors) do
+    _G[name] = value
+  end
 
   if not ok then
     check("shim reload (luasocket " .. tostring(hasSocket) .. ")", false, err)
