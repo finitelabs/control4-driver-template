@@ -515,10 +515,20 @@ end
 -- output, so a broken FFI binding fails instead of agreeing with itself.
 T.section("C4:Hash / C4:Encrypt / C4:Decrypt")
 do
-  local backendErr = select(2, C4:Hash("SHA256", ""))
-  if C4:Hash("SHA256", "") == nil then
-    -- Loud on purpose: a silent skip here reads exactly like a pass.
-    T.check("SKIPPED: no crypto backend, digest assertions did not run", false, backendErr)
+  -- Refusing an encoding is argument validation with no crypto in it, so it is
+  -- asserted outside the backend gate below, where it is the only part of the
+  -- contract a backend-less host can still observe. The one BASE64 hash caller
+  -- in the vendored tree is module/websocket.lua:605, which no test reaches.
+  local base64Digest, base64Err = C4:Hash("SHA1", "abc", { return_encoding = "BASE64" })
+  T.falsy("BASE64 is refused rather than returned as hex", base64Digest)
+  T.contains("and the reason names the encoding", base64Err, "BASE64")
+
+  if not C4.SHIM_HAS_CRYPTO then
+    -- Same shape as the lib/values.lua skip above: visible, so it cannot read as
+    -- a pass, but not a failure, because a driver that never calls C4:Hash
+    -- should not need libcrypto to run its suite. The template's own CI asserts
+    -- the backend resolves, so the mock stays covered where it is developed.
+    print("  skip no crypto backend on this host, digest and cipher assertions did not run")
   else
     T.eq("MD5 of abc", C4:Hash("MD5", "abc"), "900150983CD24FB0D6963F7D28E17F72")
     T.eq("SHA1 of abc", C4:Hash("SHA1", "abc"), "A9993E364706816ABA3E25717850C26C9CD0D89D")

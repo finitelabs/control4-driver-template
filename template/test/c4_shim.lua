@@ -1275,14 +1275,26 @@ if has_ffi then
   end
 end
 
+--- Whether the FFI crypto backend resolved. False under plain Lua, and on a host
+--- with no loadable CommonCrypto/libcrypto.
+C4.SHIM_HAS_CRYPTO = crypto_backend ~= nil
+
 local function to_hex(s)
   return (s:gsub(".", function(c)
     return string.format("%02X", c:byte())
   end))
 end
 
---- C4:Hash(algorithm, data, options) — supports raw ("NONE") and hex returns.
+--- C4:Hash(algorithm, data, options) — raw ("NONE") or, with no return_encoding,
+--- hex. Any other value is refused rather than answered in hex, since the shim
+--- has never been measured against one and a wrong-encoding digest still looks
+--- like a digest. Checked ahead of the backend, so the refusal also holds on a
+--- host with no crypto at all.
 function C4:Hash(algorithm, data, options)
+  local encoding = type(options) == "table" and options.return_encoding or nil
+  if encoding ~= nil and string.upper(encoding) ~= "NONE" then
+    return nil, "C4 shim: return_encoding " .. tostring(encoding) .. " is not modelled (only NONE, or absent for hex)"
+  end
   if not crypto_backend then
     return nil, "C4 shim: no crypto backend (requires LuaJIT + CommonCrypto/libcrypto)"
   end
@@ -1290,7 +1302,7 @@ function C4:Hash(algorithm, data, options)
   if not raw then
     return nil, err
   end
-  if type(options) == "table" and string.upper(options.return_encoding or "") == "NONE" then
+  if encoding ~= nil then
     return raw
   end
   return to_hex(raw)

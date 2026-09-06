@@ -102,6 +102,23 @@ jobs:
             print("every src/lib module loads")
           '
 
+      # test_c4_shim.lua skips its crypto assertions when no FFI backend loads,
+      # so on a runner without one `make test` would go green having tested
+      # nothing. The template is where that mock is developed, so require the
+      # backend here; driver repos keep the skip.
+      - name: The FFI crypto backend resolves
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
+          luajit -e '
+            require("c4_shim")
+            if not C4.SHIM_HAS_CRYPTO then
+              io.stderr:write("no FFI crypto backend: the c4_shim crypto assertions would have skipped\n")
+              os.exit(1)
+            end
+            print("FFI crypto backend resolved")
+          '
+
       - name: make test
         working-directory: ${{ runner.temp }}/render
         run: make test
