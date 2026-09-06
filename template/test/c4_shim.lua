@@ -765,6 +765,34 @@ end
 -- that does not exist both give an empty table, and hidden variables are
 -- returned rather than filtered out.
 ---------------------------------------------------------------------------
+-- Project temperature scale
+-- The controller answers with the whole word, "CELSIUS" or "FAHRENHEIT", never
+-- an initial, so a driver that never normalizes still reads as correct against
+-- an initial. Celsius by default because callers idiomatically end `... or "F"`:
+-- under a Fahrenheit default that yields "F" whether their normalization works
+-- or not, and the test cannot tell the two apart.
+---------------------------------------------------------------------------
+
+local DEFAULT_TEMPERATURE_SCALE = "CELSIUS"
+local temperature_scale = DEFAULT_TEMPERATURE_SCALE
+
+function C4:GetTemperatureScale()
+  return temperature_scale
+end
+
+--- Harness, not a controller API: C4 is userdata on a controller, so assigning
+--- the scale there raises rather than taking effect. Named to be unmistakable.
+function ShimSetTemperatureScale(scale)
+  temperature_scale = scale
+end
+
+--- Restore the default. A scale a test leaves set carries into every later test
+--- in the process, and under Fahrenheit a scale assertion can no longer fail.
+function ShimResetTemperatureScale()
+  temperature_scale = DEFAULT_TEMPERATURE_SCALE
+end
+
+---------------------------------------------------------------------------
 -- Project devices
 -- C4:GetDevices / GetDeviceDisplayName / GetDeviceVariables read a registry a
 -- test populates with ShimSetDevices. An id absent from it is the nameless,
