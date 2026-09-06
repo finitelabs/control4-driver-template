@@ -577,5 +577,19 @@ do
 end
 
 --------------------------------------------------------------------------------
+T.section("C4:GetTemperatureScale")
+--------------------------------------------------------------------------------
+
+-- Measured on a dev controller: a Fahrenheit project answers "FAHRENHEIT", so
+-- the whole word, not an initial, is what a driver has to normalize.
+T.eq("defaults to the Celsius whole word", C4:GetTemperatureScale(), "CELSIUS")
+
+ShimSetTemperatureScale("FAHRENHEIT")
+T.eq("reports a scale a test set, as a whole word", C4:GetTemperatureScale(), "FAHRENHEIT")
+
+ShimSetTemperatureScale("CELSIUS")
+T.eq("and flips back", C4:GetTemperatureScale(), "CELSIUS")
+
+--------------------------------------------------------------------------------
 
 T.finish()
