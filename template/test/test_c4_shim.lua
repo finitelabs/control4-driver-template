@@ -460,5 +460,112 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- Color conversion scales. The two reference pairs were measured on a CA-1
+-- running OS 3.4; the rest pin the scale boundaries that a driver would notice.
+-- RGB is 0-255 and unrounded, HSV is h 0-360 / s 0-100 / v 0-100. A shim on the
+-- 0-1 RGB scale, or rounding to integers, would let a driver that scales wrong
+-- pass here and wash out the color on hardware.
+T.section("C4:ColorHSVtoRGB / C4:ColorRGBtoHSV")
+do
+  --- Round-trip through a fixed number of decimals, so a comparison is not at
+  --- the mercy of the last float bit.
+  local function approx(got, want)
+    return math.abs(got - want) < 0.001
+  end
+
+  local r, g, b = C4:ColorHSVtoRGB(120, 75, 100)
+  T.check("HSV(120,75,100) -> R 63.75", approx(r, 63.75), r)
+  T.check("HSV(120,75,100) -> G 255", approx(g, 255), g)
+  T.check("HSV(120,75,100) -> B 63.75", approx(b, 63.75), b)
+  T.check("returns RGB unrounded", r ~= math.floor(r), r)
+
+  local h, s, v = C4:ColorRGBtoHSV(64, 255, 64)
+  T.check("RGB(64,255,64) -> H 120", approx(h, 120), h)
+  T.check("RGB(64,255,64) -> S 74.902", approx(s, 74.902), s)
+  T.check("RGB(64,255,64) -> V 100", approx(v, 100), v)
+
+  -- Hue sector boundaries: each primary sits at the start of its own sector.
+  T.eq("HSV(0,100,100) is pure red", { C4:ColorHSVtoRGB(0, 100, 100) }, { 255, 0, 0 })
+  T.eq("HSV(120,100,100) is pure green", { C4:ColorHSVtoRGB(120, 100, 100) }, { 0, 255, 0 })
+  T.eq("HSV(240,100,100) is pure blue", { C4:ColorHSVtoRGB(240, 100, 100) }, { 0, 0, 255 })
+  -- 360 wraps to 0 rather than falling off the last sector and returning black.
+  T.eq("hue 360 wraps to hue 0", { C4:ColorHSVtoRGB(360, 100, 100) }, { 255, 0, 0 })
+
+  -- Value scales the whole triple, so half value is half the 0-255 range.
+  T.eq("value 50 halves the RGB range", { C4:ColorHSVtoRGB(240, 100, 50) }, { 0, 0, 127.5 })
+
+  T.eq("RGB(255,0,0) -> H 0 S 100 V 100", { C4:ColorRGBtoHSV(255, 0, 0) }, { 0, 100, 100 })
+  T.eq("RGB(0,0,255) -> H 240", { C4:ColorRGBtoHSV(0, 0, 255) }, { 240, 100, 100 })
+  -- Greys have no hue and no saturation, but keep their value.
+  T.eq("white is S 0 V 100", { C4:ColorRGBtoHSV(255, 255, 255) }, { 0, 0, 100 })
+  T.eq("black is all zero", { C4:ColorRGBtoHSV(0, 0, 0) }, { 0, 0, 0 })
+
+  -- Hue is never negative: the red sector wraps through 360 rather than to -60.
+  local negH = C4:ColorRGBtoHSV(255, 0, 128)
+  T.check("hue below the red sector wraps to 0-360", negH >= 0 and negH <= 360, negH)
+
+  -- nil is treated as 0 rather than raising, matching the other shim accessors.
+  T.eq("nil arguments read as zero", { C4:ColorHSVtoRGB() }, { 0, 0, 0 })
+end
+
+--------------------------------------------------------------------------------
+-- Crypto. Backed by CommonCrypto or libcrypto through the LuaJIT FFI, so it is
+-- absent under plain Lua and on a host with no loadable libcrypto. The digests
+-- are pinned to published reference vectors rather than to the shim's own
+-- output, so a broken FFI binding fails instead of agreeing with itself.
+T.section("C4:Hash / C4:Encrypt / C4:Decrypt")
+do
+  local backendErr = select(2, C4:Hash("SHA256", ""))
+  if C4:Hash("SHA256", "") == nil then
+    -- Loud on purpose: a silent skip here reads exactly like a pass.
+    T.check("SKIPPED: no crypto backend, digest assertions did not run", false, backendErr)
+  else
+    T.eq("MD5 of abc", C4:Hash("MD5", "abc"), "900150983CD24FB0D6963F7D28E17F72")
+    T.eq("SHA1 of abc", C4:Hash("SHA1", "abc"), "A9993E364706816ABA3E25717850C26C9CD0D89D")
+    T.eq("SHA256 of abc", C4:Hash("SHA256", "abc"), "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD")
+    T.eq(
+      "SHA256 of the empty string",
+      C4:Hash("SHA256", ""),
+      "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+    )
+
+    -- Hex is upper case and twice the digest length; drivers slice these by
+    -- byte offset, so the width is part of the contract.
+    T.check("hex is upper case", C4:Hash("SHA256", "abc"):upper() == C4:Hash("SHA256", "abc"))
+    T.check("SHA256 hex is 64 chars", #C4:Hash("SHA256", "abc") == 64)
+
+    -- return_encoding NONE gives the raw digest, which is what lib/klap.lua
+    -- slices for its keys. Hex would silently double every offset.
+    local raw = C4:Hash("SHA256", "abc", { return_encoding = "NONE" })
+    T.check("NONE returns 32 raw bytes", #raw == 32, #raw)
+    T.check("NONE is not the hex string", raw ~= C4:Hash("SHA256", "abc"))
+
+    -- An unsupported digest returns nil plus a reason rather than a wrong hash.
+    T.check("an unsupported algorithm returns nil", C4:Hash("SHA512", "abc") == nil)
+    T.contains("and says which one", select(2, C4:Hash("SHA512", "abc")), "SHA512")
+
+    -- AES-128-CBC with PKCS7: 5 bytes pad up to one block, and the round trip
+    -- recovers the plaintext exactly.
+    local key, iv = string.rep("k", 16), string.rep("i", 16)
+    local ciphertext, encryptErr = C4:Encrypt("AES-128-CBC", key, iv, "hello")
+    -- Named failure rather than a length-of-nil error, so a backend whose
+    -- digests work but whose cipher does not still reports which half broke.
+    T.truthy("encrypt returns a ciphertext", ciphertext, encryptErr)
+    ciphertext = ciphertext or ""
+    T.check("PKCS7 pads 5 bytes to one 16-byte block", #ciphertext == 16, #ciphertext)
+    T.eq("decrypt reverses encrypt", C4:Decrypt("AES-128-CBC", key, iv, ciphertext), "hello")
+    T.neq("ciphertext is not the plaintext", ciphertext, "hello")
+
+    -- Everything outside raw AES-128-CBC is refused rather than quietly
+    -- mis-encrypted: SaltedEncrypt in global/lib.lua asks for AES-256-CBC with
+    -- no iv, and a shim that guessed would hand back an unusable result.
+    T.check("AES-256-CBC is refused", C4:Encrypt("AES-256-CBC", key, iv, "x") == nil)
+    T.contains("and says why", select(2, C4:Encrypt("AES-256-CBC", key, iv, "x")), "AES-128-CBC")
+    T.check("a key that is not 16 bytes is refused", C4:Encrypt("AES-128-CBC", "short", iv, "x") == nil)
+    T.check("a nil iv is refused", C4:Encrypt("AES-128-CBC", key, nil, "x") == nil)
+  end
+end
+
+--------------------------------------------------------------------------------
 
 T.finish()
