@@ -587,8 +587,8 @@ T.eq("defaults to the Celsius whole word", C4:GetTemperatureScale(), "CELSIUS")
 ShimSetTemperatureScale("FAHRENHEIT")
 T.eq("reports a scale a test set, as a whole word", C4:GetTemperatureScale(), "FAHRENHEIT")
 
-ShimSetTemperatureScale("CELSIUS")
-T.eq("and flips back", C4:GetTemperatureScale(), "CELSIUS")
+ShimResetTemperatureScale()
+T.eq("and resets back to the default", C4:GetTemperatureScale(), "CELSIUS")
 
 --------------------------------------------------------------------------------
 

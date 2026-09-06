@@ -773,7 +773,8 @@ end
 -- or not, and the test cannot tell the two apart.
 ---------------------------------------------------------------------------
 
-local temperature_scale = "CELSIUS"
+local DEFAULT_TEMPERATURE_SCALE = "CELSIUS"
+local temperature_scale = DEFAULT_TEMPERATURE_SCALE
 
 function C4:GetTemperatureScale()
   return temperature_scale
@@ -783,6 +784,12 @@ end
 --- the scale there raises rather than taking effect. Named to be unmistakable.
 function ShimSetTemperatureScale(scale)
   temperature_scale = scale
+end
+
+--- Restore the default. A scale a test leaves set carries into every later test
+--- in the process, and under Fahrenheit a scale assertion can no longer fail.
+function ShimResetTemperatureScale()
+  temperature_scale = DEFAULT_TEMPERATURE_SCALE
 end
 
 ---------------------------------------------------------------------------
