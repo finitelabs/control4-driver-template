@@ -165,12 +165,12 @@ do
 end
 
 --------------------------------------------------------------------------------
-T.section("Same host, DIFFERENT ports, both live (home-connect multi-bridge)")
+T.section("Same host, DIFFERENT ports, both live")
 --------------------------------------------------------------------------------
 do
   resetBindings()
-  local a = WebSocket:new("ws://192.168.1.50:8581/socket.io/?a=1")
-  local b = WebSocket:new("ws://192.168.1.50:8582/socket.io/?b=1")
+  local a = WebSocket:new("ws://multi.example.com:9001/ws?a=1")
+  local b = WebSocket:new("ws://multi.example.com:9002/ws?b=1")
   T.check("distinct ports get distinct bindings", a.netBinding ~= b.netBinding, a.netBinding .. " vs " .. b.netBinding)
   T.check(
     "each socket owns its own callbacks",
@@ -185,11 +185,11 @@ T.section("Concurrent socket to the same endpoint does not steal the cache slot"
 --------------------------------------------------------------------------------
 do
   resetBindings()
-  -- A transient second socket (home-connect opens one per plugin install) must
-  -- not re-point the endpoint at its own binding, which would orphan the
-  -- long-lived socket's slot for the controller's lifetime.
+  -- A transient second connection to the same endpoint must not re-point that
+  -- endpoint at its own binding, which would orphan the long-lived socket's
+  -- slot for the controller's lifetime.
   local main = WebSocket:new("wss://same.example.com/ws?main=1")
-  local transient = WebSocket:new("wss://same.example.com/ws?install=1")
+  local transient = WebSocket:new("wss://same.example.com/ws?transient=1")
   T.check("concurrent sockets are not merged", main.netBinding ~= transient.netBinding, main.netBinding)
   T.check("first socket keeps its callbacks", WebSocket.Sockets[main.netBinding] == main)
 
@@ -218,7 +218,7 @@ do
   -- slot per overlap. The list reclaims the freed transient binding.
   local main = WebSocket:new("wss://busy.example.com/ws?main=1")
   for i = 1, 6 do
-    local transient = WebSocket:new("wss://busy.example.com/ws?install=" .. i)
+    local transient = WebSocket:new("wss://busy.example.com/ws?transient=" .. i)
     simulateClose(transient) -- each finishes before the next begins
   end
   T.check("long-lived socket keeps its own binding", WebSocket.Sockets[main.netBinding] == main, main.netBinding)
@@ -246,7 +246,7 @@ do
   T.check("wss default 443 omits port", hostHeaderOf("wss://a.example.com/ws") == "a.example.com")
   T.check("ws default 80 omits port", hostHeaderOf("ws://b.example.com/ws") == "b.example.com")
   T.check("wss non-default keeps port", hostHeaderOf("wss://c.example.com:8443/ws") == "c.example.com:8443")
-  T.check("ws non-default keeps port", hostHeaderOf("ws://d.example.com:8581/ws") == "d.example.com:8581")
+  T.check("ws non-default keeps port", hostHeaderOf("ws://d.example.com:8081/ws") == "d.example.com:8081")
 end
 
 T.finish()
