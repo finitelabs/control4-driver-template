@@ -85,7 +85,7 @@ then pull the change in with `copier update`.
 - `.gitignore`, `LICENSE`, `CONTRIBUTING.md`
 - `requirements.txt`, the build-time Python dependency list
 - `test/testlib.lua`, `test/c4_fixtures.lua`, `test/c4_shim.lua`,
-  `test/run_test.sh`
+  `test/run_test.sh`, and the `test/test_*.lua` suites covering shared code
 - `.copier-answers.yml`, which Copier maintains; never edit it by hand
 
 ### What's Driver-Specific (Yours to Edit)
@@ -99,6 +99,8 @@ then pull the change in with `copier update`.
   that
 - Any additional `src/` modules specific to this driver
 - Any additional `vendor/` libraries specific to this driver
+- `test/` suites written for this driver, and the local support files they
+  require (`test/c4_local.lua`, `test/<prefix>_fixtures.lua`)
 
 `README.md` is in neither list: it is **generated**. `make build` rewrites it
 from the driver's `www/documentation/index.md`, so edit the source doc, not the
@@ -220,7 +222,7 @@ T.eq("the name of the case", got, want)
 T.finish()
 ```
 
-Three modules, split by what they depend on:
+Three shared modules, split by what they depend on:
 
 - **`testlib.lua`** is the harness: assertions, grouping, and the pass/fail
   pipeline. Plain Lua, no Control4 in it. Always required.
@@ -270,8 +272,25 @@ runs `fn` with `print` collected and returns `ok, err, output`, and
   write and completes the connect synchronously. Read `.writes`, then
   `.restore()`.
 
-Anything genuinely specific to one driver stays in that driver's test file.
-Promote it here only once a second suite needs it.
+### Driver-local test support
+
+Support code specific to this driver stays in this repo. Two files mirror the
+shared pair above, split by what the code is *about*:
+
+- **`test/c4_local.lua`** for environment seams: a `C4:*` method, or a bare
+  global the driver code calls, that the shim does not provide. Reach for this
+  instead of adding to `c4_shim.lua`, which the template owns, so anything local
+  in there becomes merge surface on every `copier update`.
+- **`test/<prefix>_fixtures.lua`** for domain fixtures: mocks shaped like this
+  driver's own protocol or API, parallel to `c4_fixtures.lua`. Use a short
+  prefix taken from the driver name.
+
+Both `require("c4_shim")` and build on the C4 environment rather than replacing
+it. Neither runner needs telling about them: `make test` collects only
+`test_*.lua`, and both put `test/` on `LUA_PATH`, so `require("c4_local")`
+resolves on its own.
+
+Promote either one into the template only once a second driver needs it.
 
 ## Preprocessor Directives
 
