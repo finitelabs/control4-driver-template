@@ -618,6 +618,12 @@ T.raises("a nil description is refused", function()
   C4:AddEvent(9, "Button: press", nil)
 end, "description should be a string")
 
+-- Level 2, so the raise names the line that passed the nil. restoreEvents()
+-- replays persisted records, and that caller is the one worth pointing at.
+T.raisesAt("a rejected event blames the caller, not the shim", function()
+  C4:AddEvent(9, nil, "Fired on a press")
+end)
+
 ShimResetEvents()
 T.eq("reset clears every declaration", next(ShimEvents()), nil)
 
