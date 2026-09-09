@@ -826,6 +826,12 @@ function ShimGetEvents()
   return events
 end
 
+--- Restore the empty registry. Declarations a test leaves behind carry into
+--- every later test in the same process.
+function ShimResetEvents()
+  events = {}
+end
+
 ---------------------------------------------------------------------------
 -- Project devices
 -- C4:GetDevices / GetDeviceDisplayName / GetDeviceVariables read a registry a
