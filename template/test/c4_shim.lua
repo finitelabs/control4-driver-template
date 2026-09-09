@@ -822,7 +822,7 @@ function C4:FireEventByID(idEvent) end
 
 --- The events the driver has declared, keyed by event id.
 --- @return table<integer, { name: string, description: string }> events
-function ShimGetEvents()
+function ShimEvents()
   return events
 end
 

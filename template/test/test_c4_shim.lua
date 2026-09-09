@@ -597,18 +597,18 @@ T.section("C4:AddEvent / C4:DeleteEvent / C4:FireEventByID")
 C4:AddEvent(7, "Button: press", "Fired on a press")
 C4:AddEvent(8, "Button: long_press", "Fired on a long press")
 
-T.eq("records a declared event by id", ShimGetEvents()[7].name, "Button: press")
-T.eq("keeps its description", ShimGetEvents()[7].description, "Fired on a press")
+T.eq("records a declared event by id", ShimEvents()[7].name, "Button: press")
+T.eq("keeps its description", ShimEvents()[7].description, "Fired on a press")
 
 -- Firing is one-way on a controller, so the shim accepts it and records nothing.
 -- The assertion is that a driver firing an event does not disturb the
 -- declarations, which is the half a test can read back.
 C4:FireEventByID(7)
-T.eq("firing leaves the declaration alone", ShimGetEvents()[7].name, "Button: press")
+T.eq("firing leaves the declaration alone", ShimEvents()[7].name, "Button: press")
 
 C4:DeleteEvent(7)
-T.eq("delete removes it", ShimGetEvents()[7], nil)
-T.eq("and leaves the others", ShimGetEvents()[8].name, "Button: long_press")
+T.eq("delete removes it", ShimEvents()[7], nil)
+T.eq("and leaves the others", ShimEvents()[8].name, "Button: long_press")
 
 -- Measured on a controller: a nil in either position raises, a number does not.
 T.raises("a nil name is refused", function()
@@ -619,7 +619,7 @@ T.raises("a nil description is refused", function()
 end, "description should be a string")
 
 ShimResetEvents()
-T.eq("reset clears every declaration", next(ShimGetEvents()), nil)
+T.eq("reset clears every declaration", next(ShimEvents()), nil)
 
 --------------------------------------------------------------------------------
 
