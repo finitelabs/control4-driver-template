@@ -805,6 +805,12 @@ end
 local events = {}
 
 function C4:AddEvent(idEvent, strName, strDescription)
+  -- Measured on a controller: a nil name or description raises with these
+  -- messages, while a number in either position is accepted, so the rule is
+  -- "not nil" rather than "string". restoreEvents() replays persisted records,
+  -- where a field can go missing, and that raise lands inside OnDriverLateInit.
+  assert(strName ~= nil, "name should be a string")
+  assert(strDescription ~= nil, "description should be a string")
   events[idEvent] = { name = strName, description = strDescription }
 end
 
@@ -818,6 +824,12 @@ function C4:FireEventByID(idEvent) end
 --- @return table<integer, { name: string, description: string }> events
 function ShimGetEvents()
   return events
+end
+
+--- Declarations a test leaves behind carry into every later test in the process,
+--- where they turn a count assertion into a false pass.
+function ShimResetEvents()
+  events = {}
 end
 
 ---------------------------------------------------------------------------

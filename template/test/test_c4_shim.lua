@@ -610,7 +610,16 @@ C4:DeleteEvent(7)
 T.eq("delete removes it", ShimGetEvents()[7], nil)
 T.eq("and leaves the others", ShimGetEvents()[8].name, "Button: long_press")
 
-C4:DeleteEvent(8)
+-- Measured on a controller: a nil in either position raises, a number does not.
+T.raises("a nil name is refused", function()
+  C4:AddEvent(9, nil, "Fired on a press")
+end, "name should be a string")
+T.raises("a nil description is refused", function()
+  C4:AddEvent(9, "Button: press", nil)
+end, "description should be a string")
+
+ShimResetEvents()
+T.eq("reset clears every declaration", next(ShimGetEvents()), nil)
 
 --------------------------------------------------------------------------------
 
