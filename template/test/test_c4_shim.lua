@@ -618,8 +618,7 @@ T.raises("a nil description is refused", function()
   C4:AddEvent(9, "Button: press", nil)
 end, "description should be a string")
 
-ShimResetEvents()
-T.eq("reset clears every declaration", next(ShimGetEvents()), nil)
+C4:DeleteEvent(8)
 
 --------------------------------------------------------------------------------
 

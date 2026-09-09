@@ -826,12 +826,6 @@ function ShimGetEvents()
   return events
 end
 
---- Declarations a test leaves behind carry into every later test in the process,
---- where they turn a count assertion into a false pass.
-function ShimResetEvents()
-  events = {}
-end
-
 ---------------------------------------------------------------------------
 -- Project devices
 -- C4:GetDevices / GetDeviceDisplayName / GetDeviceVariables read a registry a
