@@ -1014,10 +1014,11 @@ local BINARY_MARKER = "__b64"
 --- Sentinel value for nil (since Lua tables can't store nil values).
 local NIL_SENTINEL = "__null__"
 
---- JSON has no NaN or infinity literal. JSON.lua emits `null` for all three, and
---- a decoded `null` is a Lua `nil` indistinguishable from a key that was never
---- set, so a non-finite number would arrive at the far side of a driver-to-driver
---- hop as "absent". They travel as sentinels instead, like NIL_SENTINEL.
+--- JSON has no NaN or infinity literal. JSON.lua emits `null` for a NaN, which
+--- decodes to a Lua `nil` indistinguishable from a key that was never set, and
+--- `1e+9999` for the infinities, which is out of range for a double and so is
+--- parser-dependent on the far side of a driver-to-driver hop. They travel as
+--- sentinels instead, like NIL_SENTINEL.
 local NAN_SENTINEL = "__nan__"
 local POS_INF_SENTINEL = "__inf__"
 local NEG_INF_SENTINEL = "__-inf__"
