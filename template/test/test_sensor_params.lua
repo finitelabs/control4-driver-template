@@ -1,16 +1,11 @@
 -- Tests for the temperature/humidity binding payload helpers in src/lib/utils.lua.
+-- The key sets pinned here are an interop contract with drivers we do not own.
+-- Regression test for DRV-121.
 --
 -- Run from the driver root:
 --   make test
 -- or:
 --   ./test/run_test.sh test_sensor_params.lua
---
--- The keys here are an interop contract with drivers we do not own. Control4's
--- C4-THERM reads a bound sensor from CELSIUS, concatenates TIMESTAMP unguarded
--- (it errors at its driver.lua:2982 when absent), and drops a reading older
--- than os.time() - 900. YoLink sensors send CELSIUS and FAHRENHEIT and no
--- VALUE. Our own drivers have sent VALUE and SCALE. Every assertion below
--- pins one of those shapes. Regression test for DRV-121.
 
 local T = require("testlib")
 

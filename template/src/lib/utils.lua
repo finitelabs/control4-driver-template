@@ -1035,14 +1035,9 @@ end
 
 --- Build the VALUE_CHANGED params for a sensor binding.
 ---
---- Control4's C4-THERM thermostat reads a bound temperature sensor from
---- CELSIUS, concatenates TIMESTAMP unguarded (errors at its driver.lua:2982
---- when absent), and discards a reading older than os.time() - 900. Emitting
---- every key keeps strict consumers and VALUE/SCALE consumers both working.
----
---- VALUE stays in the scale it was measured in so existing consumers are
---- unaffected; CELSIUS and FAHRENHEIT are added only when the scale names a
---- temperature.
+--- C4-THERM reads a bound sensor from CELSIUS, requires TIMESTAMP, and drops
+--- readings older than 15 minutes; VALUE/SCALE consumers read the rest. VALUE
+--- stays in the measured scale so existing consumers are unaffected.
 --- @param value number The measured value.
 --- @param scale string|nil The scale of `value` (e.g. "CELSIUS", "PERCENT").
 --- @return table params
@@ -1061,9 +1056,7 @@ function SensorValueParams(value, scale)
 end
 
 --- Read a Celsius temperature out of VALUE_CHANGED params, accepting every key
---- convention in use: CELSIUS, FAHRENHEIT, or VALUE carrying a SCALE. Providers
---- disagree on which they send, so a consumer reading only one of them silently
---- ingests nothing from the rest.
+--- convention in use: CELSIUS, FAHRENHEIT, or VALUE carrying a SCALE.
 --- @param tParams table|nil The params as received.
 --- @param defaultScale string The scale to read VALUE in when SCALE is absent. Sensor bindings report Celsius; the thermostat proxy sends Fahrenheit.
 --- @return number|nil celsius
