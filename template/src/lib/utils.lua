@@ -845,13 +845,26 @@ function toboolean(val)
   return false
 end
 
+--- Converts a value to a finite number.
+--- `tonumber` passes NaN and infinity straight through, so a caller's `or`
+--- fallback never fires for them.
+--- @param value any The value to convert. Can be a number or a string that represents a number.
+--- @return number|nil number The number when it is finite, or `nil` otherwise.
+function tofinite(value)
+  value = tonumber(value)
+  if value == nil or value ~= value or value == math.huge or value == -math.huge then
+    return nil
+  end
+  return value
+end
+
 --- Converts a value to a valid integer.
 --- Rounds fractional numbers and validates string representations.
 --- @param value any The value to convert to an integer. Can be a number or a string that represents a number.
 --- @return integer|nil int Returns the rounded integer if the conversion is successful, or `nil` if the value cannot be converted.
 --- @overload fun(value: number): integer
 function tointeger(value)
-  value = tonumber(value)
+  value = tofinite(value)
   if value == nil then
     return nil
   end
@@ -1001,6 +1014,14 @@ local BINARY_MARKER = "__b64"
 --- Sentinel value for nil (since Lua tables can't store nil values).
 local NIL_SENTINEL = "__null__"
 
+--- JSON has no NaN or infinity literal. JSON.lua emits `null` for all three, and
+--- a decoded `null` is a Lua `nil` indistinguishable from a key that was never
+--- set, so a non-finite number would arrive at the far side of a driver-to-driver
+--- hop as "absent". They travel as sentinels instead, like NIL_SENTINEL.
+local NAN_SENTINEL = "__nan__"
+local POS_INF_SENTINEL = "__inf__"
+local NEG_INF_SENTINEL = "__-inf__"
+
 --- Check if a byte is binary (unsafe for transport).
 --- Safe: 0x09 (tab), 0x0A (LF), 0x0D (CR), 0x20-0x7E (printable ASCII)
 --- @param b number The byte value
@@ -1044,9 +1065,24 @@ local function encodeBinaryStrings(value)
     return NIL_SENTINEL
   end
   local t = type(value)
+  if t == "number" then
+    if value ~= value then
+      return NAN_SENTINEL
+    elseif value == math.huge then
+      return POS_INF_SENTINEL
+    elseif value == -math.huge then
+      return NEG_INF_SENTINEL
+    end
+  end
   if t == "string" then
-    -- Encode if binary OR if it equals the sentinel (to avoid collision)
-    if needsBase64(value) or value == NIL_SENTINEL then
+    -- Encode if binary OR if it equals a sentinel (to avoid collision)
+    if
+      needsBase64(value)
+      or value == NIL_SENTINEL
+      or value == NAN_SENTINEL
+      or value == POS_INF_SENTINEL
+      or value == NEG_INF_SENTINEL
+    then
       return { [BINARY_MARKER] = C4:Base64Encode(value) }
     end
     return value
@@ -1069,6 +1105,15 @@ end
 local function decodeBinaryStrings(value)
   if value == NIL_SENTINEL then
     return nil
+  end
+  if value == NAN_SENTINEL then
+    return 0 / 0
+  end
+  if value == POS_INF_SENTINEL then
+    return math.huge
+  end
+  if value == NEG_INF_SENTINEL then
+    return -math.huge
   end
   if type(value) ~= "table" then
     return value
