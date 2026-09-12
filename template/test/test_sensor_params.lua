@@ -100,9 +100,9 @@ end
 T.section("A bare VALUE is read in the caller's default scale")
 --------------------------------------------------------------------------------
 do
-  -- The two call sites disagree on purpose: a TEMPERATURE_VALUE sensor binding
-  -- reports Celsius, while the thermostat proxy's SET_SETPOINT_* sends
-  -- Fahrenheit. A single shared default would silently mis-convert one of them.
+  -- Each caller names the scale its own bare VALUE arrives in. A thermostat
+  -- proxy setpoint carries CELSIUS, FAHRENHEIT and KELVIN together, so it
+  -- returns before the default is read.
   T.eq("a sensor consumer reads Celsius", CelsiusFromParams({ VALUE = 21.5 }, "CELSIUS"), 21.5)
   T.eq("a setpoint handler reads Fahrenheit", CelsiusFromParams({ VALUE = 70.7 }, "F"), 21.5)
 end

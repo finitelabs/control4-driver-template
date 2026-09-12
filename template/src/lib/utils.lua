@@ -1071,7 +1071,9 @@ end
 --- Read a Celsius temperature out of VALUE_CHANGED params, accepting every key
 --- convention in use: CELSIUS, FAHRENHEIT, or VALUE carrying a SCALE.
 --- @param tParams table|nil The params as received.
---- @param defaultScale string The scale to read VALUE in when SCALE is absent. Sensor bindings report Celsius; the thermostat proxy sends Fahrenheit.
+--- @param defaultScale string The scale to read VALUE in when SCALE is absent
+--- or blank. A thermostat proxy setpoint carries CELSIUS, FAHRENHEIT and KELVIN
+--- together, so only a bare VALUE, as a sensor binding sends, reaches it.
 --- @return number|nil celsius
 function CelsiusFromParams(tParams, defaultScale)
   local celsius = tonumber_expect_period(Select(tParams, "CELSIUS"))
