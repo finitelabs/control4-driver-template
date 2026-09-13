@@ -627,6 +627,103 @@ end)
 ShimResetEvents()
 T.eq("reset clears every declaration", next(ShimEvents()), nil)
 
+T.section("C4:ParseXml")
+--------------------------------------------------------------------------------
+
+-- The shape thermostatV2 hands a driver in SET_PRESETS: a list whose per-preset
+-- field values ride as escaped XML inside an attribute.
+local presetsXml = '<?xml version="1.0"?><!-- proxy --><presets>'
+  .. '<preset name="Night" preset_fields="&lt;fields&gt;&lt;field id=&quot;setpoint_c&quot;&gt;20&lt;/field&gt;&lt;/fields&gt;"/>'
+  .. "<preset name='Day &amp; Evening' previous_name=\"Day\"><note>kept</note></preset>"
+  .. "</presets>"
+
+local root = C4:ParseXml(presetsXml)
+T.check("returns the root node", root ~= nil and root.Name == "presets", root and root.Name)
+T.check("strips the prolog and comments", root ~= nil and #root.ChildNodes == 2, root and #root.ChildNodes)
+
+local night = root and root.ChildNodes[1]
+T.check("keeps child order", night ~= nil and night.Name == "preset" and night.Attributes.name == "Night")
+T.check("a self-closing node has no children", night ~= nil and #night.ChildNodes == 0)
+T.check(
+  "unescapes an attribute so nested XML is re-parsable",
+  night ~= nil and night.Attributes.preset_fields == '<fields><field id="setpoint_c">20</field></fields>',
+  night and night.Attributes.preset_fields
+)
+local fields = night and C4:ParseXml(night.Attributes.preset_fields)
+T.check("the nested XML parses in turn", fields ~= nil and fields.ChildNodes[1].Attributes.id == "setpoint_c")
+
+local day = root and root.ChildNodes[2]
+T.check(
+  "single-quoted attributes and entities",
+  day ~= nil and day.Attributes.name == "Day & Evening",
+  day and day.Attributes.name
+)
+T.check("double-quoted attributes on the same node", day ~= nil and day.Attributes.previous_name == "Day")
+T.check("child nodes of a paired tag", day ~= nil and #day.ChildNodes == 1 and day.ChildNodes[1].Name == "note")
+
+local nested = C4:ParseXml("<a><a><b/></a><b/></a>")
+T.check("same-name nesting closes at the matching depth", nested ~= nil and #nested.ChildNodes == 2)
+T.check("the inner node keeps its own child", nested ~= nil and #nested.ChildNodes[1].ChildNodes == 1)
+
+T.check("C4:ParseXml colon call works", C4:ParseXml("<x/>").Name == "x")
+T.check("C4.ParseXml with C4 receiver works", C4.ParseXml(C4, "<x/>").Name == "x")
+T.check("C4.ParseXml dot call with string works", C4.ParseXml("<x/>").Name == "x")
+T.check("an empty string yields nil", C4:ParseXml("") == nil)
+T.check("a non-string yields nil", C4:ParseXml(nil) == nil)
+
+-- Text content tests
+local soap = C4:ParseXml('<c4soap><param name="LEVEL">42</param><param name="MODE">HEAT</param></c4soap>')
+local args = {}
+for _, v in pairs(soap.ChildNodes) do
+  args[v.Attributes.name] = v.Value
+end
+T.eq("text content exposed as Value", args.LEVEL, "42")
+T.eq("text content exposed as Value", args.MODE, "HEAT")
+
+local selfClose = C4:ParseXml("<x/>")
+T.eq("self-closing node has no Value", selfClose.Value, nil)
+
+local withChildren = C4:ParseXml("<a><b/></a>")
+T.eq("node with children has no Value", withChildren.Value, nil)
+
+local escaped = C4:ParseXml("<v>a &amp; b</v>")
+T.eq("entity-unescaped text content", escaped.Value, "a & b")
+
+-- Quote-aware tag scanning tests
+local quoteAttr = C4:ParseXml('<rule cond="a > b" other="z"/>')
+T.check(
+  "unescaped > in double-quoted attr",
+  quoteAttr ~= nil and quoteAttr.Attributes.cond == "a > b" and quoteAttr.Attributes.other == "z"
+)
+
+local gtEntity = C4:ParseXml('<rule cond="a &gt; b"/>')
+T.check("gt entity unescapes to >", gtEntity ~= nil and gtEntity.Attributes.cond == "a > b")
+
+local pairedWithGt = C4:ParseXml('<r a=">"><c/></r>')
+T.check(
+  "paired tag with > in attr finds child",
+  pairedWithGt ~= nil and #pairedWithGt.ChildNodes == 1 and pairedWithGt.ChildNodes[1].Name == "c"
+)
+
+-- Numeric character reference tests
+local eacute = C4:ParseXml("<v>&#233;</v>")
+T.eq("&#233; decodes to UTF-8 e-acute", eacute.Value, string.char(0xC3, 0xA9))
+
+local rsquo = C4:ParseXml("<v>&#8217;</v>")
+T.eq("&#8217; decodes to UTF-8 right single quote", rsquo.Value, string.char(0xE2, 0x80, 0x99))
+
+local apos = C4:ParseXml("<v>&#x27;</v>")
+T.eq("&#x27; decodes to '", apos.Value, "'")
+
+local a = C4:ParseXml("<v>&#x41;</v>")
+T.eq("&#x41; decodes to A", a.Value, "A")
+
+local big = C4:ParseXml("<v>&#99999999;</v>")
+T.eq("&#99999999; stays literal", big.Value, "&#99999999;")
+
+local zero = C4:ParseXml("<v>&#0;</v>")
+T.eq("&#0; stays literal", zero.Value, "&#0;")
+
 --------------------------------------------------------------------------------
 
 T.finish()

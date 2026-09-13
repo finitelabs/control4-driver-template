@@ -649,6 +649,180 @@ function C4:ColorRGBtoHSV(r, g, b)
   return h, s, mx * 100
 end
 
+--- Minimal XML parser mirroring what C4:ParseXml returns: a node with Attributes
+--- (name -> value) and ChildNodes (ordered). Attribute values are entity-unescaped
+--- so nested XML carried in an attribute (preset_fields) is re-parsable; the
+--- quote-aware scanner skips '>' inside quoted attribute values.
+--- No mixed content, CDATA or namespaces.
+local XML_ENTITIES = { lt = "<", gt = ">", amp = "&", quot = '"', apos = "'" }
+
+local function utf8_encode(cp)
+  if cp < 0 or cp > 0x10FFFF then
+    return nil
+  end
+  if cp < 0x80 then
+    return string.char(cp)
+  elseif cp < 0x800 then
+    return string.char(0xC0 + math.floor(cp / 0x40), 0x80 + (cp % 0x40))
+  elseif cp < 0x10000 then
+    return string.char(0xE0 + math.floor(cp / 0x1000), 0x80 + (math.floor(cp / 0x40) % 0x40), 0x80 + (cp % 0x40))
+  else
+    return string.char(
+      0xF0 + math.floor(cp / 0x40000),
+      0x80 + (math.floor(cp / 0x1000) % 0x40),
+      0x80 + (math.floor(cp / 0x40) % 0x40),
+      0x80 + (cp % 0x40)
+    )
+  end
+end
+
+local function xml_unescape(text)
+  return (
+    text:gsub("&(#?%w+);", function(entity)
+      if entity:sub(1, 1) == "#" then
+        local numStr = entity:sub(2)
+        local isHex = numStr:sub(1, 1) == "x" or numStr:sub(1, 1) == "X"
+        local cp = nil
+        if isHex then
+          cp = tonumber(numStr:sub(2), 16)
+        else
+          cp = tonumber(numStr, 10)
+        end
+        if cp and cp > 0 and cp <= 0x10FFFF and not (cp >= 0xD800 and cp <= 0xDFFF) then
+          return utf8_encode(cp)
+        end
+        return ("&" .. entity .. ";")
+      end
+      return XML_ENTITIES[entity] or ("&" .. entity .. ";")
+    end)
+  )
+end
+
+local function xml_attributes(raw)
+  local attrs = {}
+  for name, value in raw:gmatch('([%w_:%-%.]+)%s*=%s*"([^"]*)"') do
+    attrs[name] = xml_unescape(value)
+  end
+  for name, value in raw:gmatch("([%w_:%-%.]+)%s*=%s*'([^']*)'") do
+    if attrs[name] == nil then
+      attrs[name] = xml_unescape(value)
+    end
+  end
+  return attrs
+end
+
+local function find_next_tag(body, start_pos)
+  local tagStart = body:find("<", start_pos)
+  if not tagStart then
+    return nil
+  end
+  local i = tagStart + 1
+  local len = #body
+  while i <= len do
+    local ch = body:sub(i, i)
+    if ch == ">" then
+      return tagStart, i
+    elseif ch == '"' or ch == "'" then
+      local quote = ch
+      i = i + 1
+      while i <= len do
+        if body:sub(i, i) == quote then
+          break
+        end
+        i = i + 1
+      end
+    end
+    i = i + 1
+  end
+  return nil
+end
+
+local function xml_parse_children(body)
+  local nodes = {}
+  local pos = 1
+  while true do
+    local openStart, openEnd = find_next_tag(body, pos)
+    if not openStart then
+      break
+    end
+    local afterOpen = body:sub(openStart + 1, openEnd - 1)
+    local closingSlash = afterOpen:sub(1, 1) == "/"
+    local rest = closingSlash and afterOpen:sub(2) or afterOpen
+    local nameMatch = rest:match("^([%w_:%-%.]+)")
+    if not nameMatch then
+      pos = openEnd + 1
+      goto next_iter
+    end
+    local name = nameMatch
+    local tagRest = rest:sub(#name + 1)
+
+    if closingSlash then
+      pos = openEnd + 1
+      goto next_iter
+    end
+
+    if tagRest:sub(-1) == "/" then
+      nodes[#nodes + 1] = { Name = name, Attributes = xml_attributes(tagRest:sub(1, -2)), ChildNodes = {} }
+      pos = openEnd + 1
+    else
+      -- Walk to the matching close tag, counting same-name nesting.
+      local depth, searchPos, closeStart, closeEnd = 1, openEnd + 1, nil, nil
+      while true do
+        local tagStart, tagEnd = find_next_tag(body, searchPos)
+        if not tagStart then
+          break
+        end
+        local inner = body:sub(tagStart + 1, tagEnd - 1)
+        local isClosing = inner:sub(1, 1) == "/"
+        local restTag = isClosing and inner:sub(2) or inner
+        local tagName = restTag:match("^([%w_:%-%.]+)")
+        if not tagName then
+          searchPos = tagEnd + 1
+          goto next_search
+        end
+        if tagName == name then
+          if isClosing then
+            depth = depth - 1
+            if depth == 0 then
+              closeStart, closeEnd = tagStart, tagEnd
+              break
+            end
+          else
+            if restTag:sub(-1) ~= "/" then
+              depth = depth + 1
+            end
+          end
+        end
+        ::next_search::
+        searchPos = tagEnd + 1
+      end
+
+      local inner = closeStart and body:sub(openEnd + 1, closeStart - 1) or ""
+      local childNodes = xml_parse_children(inner)
+      local node = { Name = name, Attributes = xml_attributes(tagRest), ChildNodes = childNodes }
+      if #childNodes == 0 and inner:match("^%s*$") == nil then
+        node.Value = xml_unescape(inner)
+      end
+      nodes[#nodes + 1] = node
+      pos = closeEnd and (closeEnd + 1) or (openEnd + 1)
+    end
+    ::next_iter::
+  end
+  return nodes
+end
+
+-- Handle both C4:ParseXml() and C4.ParseXml(...) calling styles
+function C4:ParseXml(xml, ...)
+  if type(self) == "string" and xml == nil then
+    xml = self
+  end
+  if type(xml) ~= "string" or xml == "" then
+    return nil
+  end
+  local body = xml:gsub("<%?.-%?>", ""):gsub("<!%-%-.-%-%->", "")
+  return xml_parse_children(body)[1]
+end
+
 --- Generate a UUID (simplified version)
 local uuid_counter = 0
 function C4:UUID(prefix)
