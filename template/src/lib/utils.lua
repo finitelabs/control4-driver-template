@@ -1028,7 +1028,7 @@ function TemperatureScaleLetter(scale)
 end
 
 --- Convert a temperature to Celsius from the scale it was reported in.
---- @param value number The temperature.
+--- @param value number The temperature; non-finite yields nil.
 --- @param scale string|nil The scale of `value`; not a temperature scale yields nil.
 --- @return number|nil celsius
 function ToCelsius(value, scale)
@@ -1036,12 +1036,14 @@ function ToCelsius(value, scale)
     return nil
   end
   local letter = TemperatureScaleLetter(scale)
+  -- round() multiplies before flooring, so even a finite input near the top of
+  -- the double range converts to an infinity.
   if letter == "C" then
-    return value
+    return tofinite(value)
   elseif letter == "F" then
-    return f2c(value)
+    return tofinite(f2c(value))
   elseif letter == "K" then
-    return round(value - 273.15, 1)
+    return tofinite(round(value - 273.15, 1))
   end
   return nil
 end
@@ -1051,10 +1053,15 @@ end
 --- C4-THERM reads a bound sensor from CELSIUS, requires TIMESTAMP, and drops
 --- readings older than 15 minutes; VALUE/SCALE consumers read the rest. VALUE
 --- stays in the measured scale so existing consumers are unaffected.
+--- A non-finite measurement is dropped rather than published, so the params come
+--- back carrying SCALE and TIMESTAMP only, exactly as a nil one does.
 --- @param value number The measured value.
 --- @param scale string|nil The scale of `value` (e.g. "CELSIUS", "PERCENT").
 --- @return table params
 function SensorValueParams(value, scale)
+  if type(value) == "number" and tofinite(value) == nil then
+    value = nil
+  end
   local params = {
     VALUE = value,
     SCALE = scale,
@@ -1063,7 +1070,7 @@ function SensorValueParams(value, scale)
   local celsius = ToCelsius(value, scale)
   if celsius ~= nil then
     params.CELSIUS = celsius
-    params.FAHRENHEIT = c2f(celsius)
+    params.FAHRENHEIT = tofinite(c2f(celsius))
   end
   return params
 end
@@ -1074,17 +1081,19 @@ end
 --- @param defaultScale string The scale to read VALUE in when SCALE is absent
 --- or blank. A thermostat proxy setpoint carries CELSIUS, FAHRENHEIT and KELVIN
 --- together, so only a bare VALUE, as a sensor binding sends, reaches it.
---- @return number|nil celsius
+--- @return number|nil celsius A finite Celsius reading, or nil.
 function CelsiusFromParams(tParams, defaultScale)
-  local celsius = tonumber_expect_period(Select(tParams, "CELSIUS"))
+  -- tonumber_expect_period parses "nan", and an overflowing literal such as
+  -- "1e999", into a NaN or an infinity rather than nil.
+  local celsius = tofinite(tonumber_expect_period(Select(tParams, "CELSIUS")))
   if celsius ~= nil then
     return celsius
   end
-  local fahrenheit = tonumber_expect_period(Select(tParams, "FAHRENHEIT"))
+  local fahrenheit = tofinite(tonumber_expect_period(Select(tParams, "FAHRENHEIT")))
   if fahrenheit ~= nil then
-    return f2c(fahrenheit)
+    return ToCelsius(fahrenheit, "F")
   end
-  local value = tonumber_expect_period(Select(tParams, "VALUE"))
+  local value = tofinite(tonumber_expect_period(Select(tParams, "VALUE")))
   if value == nil then
     return nil
   end
