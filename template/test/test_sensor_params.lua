@@ -159,10 +159,7 @@ end
 T.section("A non-finite reading never reaches a consumer")
 --------------------------------------------------------------------------------
 
--- Run under LuaJIT, which is what make test, run_test.sh and a controller all
--- use. Only there does tonumber parse "nan", "inf" and "-inf"; Lua 5.4 and 5.5
--- return nil for the three, so those cases would pass on a stock interpreter
--- without ever reaching the guard. "1e999" overflows on every interpreter.
+-- Needs LuaJIT: stock Lua 5.4+ returns nil from tonumber("nan").
 local NAN = 0 / 0
 local INF = math.huge
 
@@ -170,9 +167,7 @@ local function isNonFinite(value)
   return type(value) == "number" and (value ~= value or value == INF or value == -INF)
 end
 
--- Each case is stated once and run twice: here against the shipped helpers, and
--- again below with the fix reverted. `leaks` marks a case the revert must send
--- back to a non-finite value; the rest are controls it must leave alone.
+-- Each case runs twice: as shipped, then reverted. `leaks` marks what the revert must break.
 local CASES = {}
 
 local function drops(label, thunk)
@@ -187,7 +182,6 @@ local function keeps(label, thunk, want)
   CASES[#CASES + 1] = { label = label, thunk = thunk, want = want, leaks = false }
 end
 
--- CelsiusFromParams, every branch, reached by each spelling tonumber accepts.
 for _, text in ipairs({ "nan", "inf", "-inf", "1e999" }) do
   drops(string.format("a CELSIUS of %q", text), function()
     return CelsiusFromParams({ CELSIUS = text }, "CELSIUS")
@@ -203,8 +197,6 @@ for _, text in ipairs({ "nan", "inf", "-inf", "1e999" }) do
   end)
 end
 
--- The same branches reached by a real non-finite number: a driver that parsed
--- the payload itself, or read it off a proxy, hands one over directly.
 for _, spelling in ipairs({ { "a NaN", NAN }, { "an infinity", INF }, { "a negative infinity", -INF } }) do
   local name, number = spelling[1], spelling[2]
   drops("a CELSIUS that is " .. name, function()
@@ -230,9 +222,7 @@ for _, spelling in ipairs({ { "a NaN", NAN }, { "an infinity", INF }, { "a negat
   end)
 end
 
--- A finite input can still convert to an infinity, so guarding the parse alone
--- would not have been enough: round() multiplies by ten before flooring, which
--- overflows for anything within a decade of the top of the double range.
+-- A finite input can still overflow in the conversion.
 drops("a Fahrenheit reading at the top of the double range", function()
   return CelsiusFromParams({ FAHRENHEIT = 1e308 }, "CELSIUS")
 end)
@@ -240,8 +230,6 @@ drops("a Kelvin reading at the top of the double range", function()
   return CelsiusFromParams({ VALUE = 1e308, SCALE = "KELVIN" }, "CELSIUS")
 end)
 
--- SensorValueParams: a non-finite measurement publishes no number at all, not
--- even in VALUE, which is the key a non-temperature consumer reads.
 for _, spelling in ipairs({ { "a NaN", NAN }, { "an infinity", INF }, { "a negative infinity", -INF } }) do
   local name, number = spelling[1], spelling[2]
   for _, key in ipairs({ "VALUE", "CELSIUS", "FAHRENHEIT" }) do
@@ -249,8 +237,6 @@ for _, spelling in ipairs({ { "a NaN", NAN }, { "an infinity", INF }, { "a negat
       return SensorValueParams(number, "CELSIUS")[key]
     end)
   end
-  -- A non-temperature scale never had CELSIUS or FAHRENHEIT, so VALUE is the
-  -- only key that discriminates on a humidity binding.
   drops(string.format("publishing %s as a percentage: VALUE", name), function()
     return SensorValueParams(number, "PERCENT").VALUE
   end)
@@ -260,14 +246,12 @@ drops("what the producer drops, the reader cannot resurrect", function()
   return CelsiusFromParams(SensorValueParams(NAN, "CELSIUS"), "CELSIUS")
 end)
 
--- An unreadable key has always fallen through to the next one; a non-finite one
--- now joins the non-numeric ones rather than short-circuiting the whole read.
+-- A non-finite key falls through to the next one, as a non-numeric key does.
 prefers("a non-finite CELSIUS falls through to a finite FAHRENHEIT", function()
   return CelsiusFromParams({ CELSIUS = "nan", FAHRENHEIT = "70.7" }, "CELSIUS")
 end, 21.5)
 
--- Controls. The comma case is the one at risk from this change: tofinite parses
--- with tonumber, so it must wrap tonumber_expect_period rather than replace it.
+-- Controls. tofinite must wrap tonumber_expect_period, or "21,5" stops parsing.
 keeps("a finite CELSIUS still reads", function()
   return CelsiusFromParams({ CELSIUS = "21.5" }, "CELSIUS")
 end, 21.5)
@@ -301,7 +285,6 @@ end, 0)
 keeps("a non-numeric VALUE is passed through as before", function()
   return SensorValueParams("warm", "PERCENT").VALUE
 end, "warm")
--- The measurement itself is finite and stays; only the conversion is dropped.
 keeps("a reading at the top of the double range keeps its own VALUE", function()
   return SensorValueParams(1e308, "FAHRENHEIT").VALUE
 end, 1e308)
@@ -338,9 +321,7 @@ end
 T.section("Reverting the fix brings every non-finite value back")
 --------------------------------------------------------------------------------
 
--- tofinite is the whole fix: each guarded site used tonumber before, which
--- returns a NaN or an infinity unchanged. Swapping the global back is therefore
--- the exact revert, and every site resolves it per call, so nothing is reloaded.
+-- Swapping tofinite back to tonumber is the exact revert.
 do
   local real = tofinite
   _G.tofinite = tonumber
