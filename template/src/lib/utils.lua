@@ -1028,7 +1028,7 @@ function TemperatureScaleLetter(scale)
 end
 
 --- Convert a temperature to Celsius from the scale it was reported in.
---- @param value number The temperature; non-finite yields nil.
+--- @param value number The temperature.
 --- @param scale string|nil The scale of `value`; not a temperature scale yields nil.
 --- @return number|nil celsius
 function ToCelsius(value, scale)
@@ -1036,8 +1036,7 @@ function ToCelsius(value, scale)
     return nil
   end
   local letter = TemperatureScaleLetter(scale)
-  -- round() multiplies before flooring, so even a finite input near the top of
-  -- the double range converts to an infinity.
+  -- The conversions can overflow a finite input to infinity.
   if letter == "C" then
     return tofinite(value)
   elseif letter == "F" then
@@ -1053,8 +1052,7 @@ end
 --- C4-THERM reads a bound sensor from CELSIUS, requires TIMESTAMP, and drops
 --- readings older than 15 minutes; VALUE/SCALE consumers read the rest. VALUE
 --- stays in the measured scale so existing consumers are unaffected.
---- A non-finite measurement is dropped rather than published, so the params come
---- back carrying SCALE and TIMESTAMP only, exactly as a nil one does.
+--- A non-finite value is dropped, as a nil one is.
 --- @param value number The measured value.
 --- @param scale string|nil The scale of `value` (e.g. "CELSIUS", "PERCENT").
 --- @return table params
@@ -1081,10 +1079,9 @@ end
 --- @param defaultScale string The scale to read VALUE in when SCALE is absent
 --- or blank. A thermostat proxy setpoint carries CELSIUS, FAHRENHEIT and KELVIN
 --- together, so only a bare VALUE, as a sensor binding sends, reaches it.
---- @return number|nil celsius A finite Celsius reading, or nil.
+--- @return number|nil celsius
 function CelsiusFromParams(tParams, defaultScale)
-  -- tonumber_expect_period parses "nan", and an overflowing literal such as
-  -- "1e999", into a NaN or an infinity rather than nil.
+  -- tonumber parses "nan" and "1e999" as non-finite numbers, not nil.
   local celsius = tofinite(tonumber_expect_period(Select(tParams, "CELSIUS")))
   if celsius ~= nil then
     return celsius
