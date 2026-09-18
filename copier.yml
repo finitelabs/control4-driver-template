@@ -21,6 +21,7 @@ _exclude:
   - "{% if 'bthome' not in vendor_modules.split() %}vendor/bthome.lua{% endif %}"
   - "{% if 'noiseprotocol' not in vendor_modules.split() %}vendor/noiseprotocol.lua{% endif %}"
   - "{% if 'protobuf' not in vendor_modules.split() %}vendor/protobuf.lua{% endif %}"
+  - "{% if not diagnostics %}src/lib/diagnostics.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_alias.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_self_last.lua{% endif %}"
 
@@ -59,4 +60,14 @@ primary_color:
 vendor_modules:
   type: str
   help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf version). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless."
+  default: ""
+
+diagnostics:
+  type: bool
+  help: "Include src/lib/diagnostics.lua: a memory census and error-capture module that ships to InfluxDB. DriverCentral builds only; other distributions get an inert stub with the same surface. Requires the INFLUXDB_URL and INFLUXDB_TOKEN build secrets, so set build_secrets alongside it."
+  default: false
+
+build_secrets:
+  type: str
+  help: "Space-separated environment variable names substituted into %%SECRET:NAME%% placeholders at build time. Each must exist as a repository Actions secret of the same name, and locally in the environment or a repo-root .env. A driver using lib.diagnostics needs 'INFLUXDB_URL INFLUXDB_TOKEN'."
   default: ""
