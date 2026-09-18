@@ -28,6 +28,10 @@ then pull the change in with `copier update`.
 
 - `bindings.lua`: binding management
 - `conditionals.lua`: conditional/programming UI management
+{%- if diagnostics %}
+- `diagnostics.lua`: memory census and error capture, shipped to InfluxDB. Only
+  in DriverCentral builds; other builds get an inert stub with the same surface
+{%- endif %}
 - `events.lua`: event firing and management
 - `http.lua`: HTTP client wrapper
 - `logging.lua`: structured logging with configurable levels
@@ -208,6 +212,29 @@ preprocessor recognizes three distributions: `drivercentral` and
 `drivercentral-dev` (which both define `DRIVERCENTRAL`, the latter also
 `DRIVERCENTRAL_DEV`) and `oss` (which defines `OSS`). Any other token in the
 answers file fails the build.
+{%- if build_secrets %}
+
+### Build Secrets
+
+Credentials are kept out of the source tree as `%%SECRET:NAME%%` placeholders,
+substituted during the preprocess step from the environment variable of the same
+name. This build needs: {% for secret in build_secrets.split() %}`{{ secret }}`{% if not loop.last %}, {% endif %}{% endfor %}.
+
+Substitution runs after the `#ifdef` pass, so a placeholder inside a branch your
+distribution strips never needs a value. A placeholder that survives into the
+build output fails the build, naming the file and the variable, rather than
+packaging a driver that would authenticate with the literal placeholder.
+
+For local builds, put them in a `.env` at the repo root (gitignored):
+
+```
+{% for secret in build_secrets.split() %}{{ secret }}=value-here
+{% endfor %}```
+
+A real environment variable takes precedence over `.env`. In CI they come from
+repository Actions secrets of the same name, which must be set separately, via
+`gh secret set {{ build_secrets.split()[0] }}` or the repository settings.
+{%- endif %}
 
 ## Writing Tests
 

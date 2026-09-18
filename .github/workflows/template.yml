@@ -20,24 +20,42 @@ jobs:
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: ""
+            diagnostics: false
+            build_secrets: ""
           - name: oss-only
             distributions: oss
             readme_build: oss
             vendor_modules: ""
+            diagnostics: false
+            build_secrets: ""
           # No github-updater, version, or release workflow; has cloud-client-byte.
           - name: drivercentral-only
             distributions: drivercentral
             readme_build: drivercentral
             vendor_modules: ""
+            diagnostics: false
+            build_secrets: ""
           # version.lua ships on a non-oss build only when named.
           - name: version-token
             distributions: drivercentral
             readme_build: drivercentral
             vendor_modules: version
+            diagnostics: false
+            build_secrets: ""
           - name: crypto-bundles
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: bitn crypto noiseprotocol protobuf bthome
+            diagnostics: false
+            build_secrets: ""
+          # Dual-distribution so the same file is exercised both as the real module
+          # and as the stub it compiles down to for oss.
+          - name: diagnostics
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: ""
+            diagnostics: true
+            build_secrets: INFLUXDB_URL INFLUXDB_TOKEN
 
     steps:
       - uses: actions/checkout@v4
@@ -65,6 +83,8 @@ jobs:
           DISTRIBUTIONS: ${{ matrix.distributions }}
           README_BUILD: ${{ matrix.readme_build }}
           VENDOR_MODULES: ${{ matrix.vendor_modules }}
+          DIAGNOSTICS: ${{ matrix.diagnostics }}
+          BUILD_SECRETS: ${{ matrix.build_secrets }}
         run: |
           copier copy --trust --defaults --vcs-ref HEAD \
             --data project_name=ci-render \
@@ -74,6 +94,8 @@ jobs:
             --data distributions="$DISTRIBUTIONS" \
             --data readme_build="$README_BUILD" \
             --data vendor_modules="$VENDOR_MODULES" \
+            --data diagnostics="$DIAGNOSTICS" \
+            --data build_secrets="$BUILD_SECRETS" \
             . "$RUNNER_TEMP/render"
 
       # make test only loads modules that call a drivers-common-public global.
@@ -122,6 +144,71 @@ jobs:
       - name: make test
         working-directory: ${{ runner.temp }}/render
         run: make test
+
+      # Both branches of diagnostics.lua are present in the raw file, so it has to be
+      # the real one that a non-preprocessed load reaches. Nothing else in the suite
+      # distinguishes them: the stub answers the whole public surface.
+      - name: A raw load of lib.diagnostics gets the real module, not the stub
+        if: matrix.name == 'diagnostics'
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
+          luajit -e '
+            require("c4_shim")
+            local diagnostics = require("lib.diagnostics")
+            if rawget(diagnostics, "_censusInterval") == nil then
+              io.stderr:write("a raw load reached the stub branch, not the real module\n")
+              os.exit(1)
+            end
+            print("raw load executes the DRIVERCENTRAL branch")
+          '
+
+      - name: Build secrets resolve, and an unresolved one fails the build
+        if: matrix.name == 'diagnostics'
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          # preprocess.py copytrees drivers/ unconditionally; a bare render has none.
+          mkdir -p drivers
+
+          # oss strips the branch holding the placeholders, so it needs no secrets.
+          ./tools/preprocess.py --oss
+
+          if output=$(./tools/preprocess.py --drivercentral 2>&1); then
+            echo "::error::drivercentral built with no secrets set"
+            exit 1
+          fi
+          echo "$output" | grep -q 'src/lib/diagnostics.lua: INFLUXDB_TOKEN' || {
+            echo "::error::the failure did not name the file and variable"
+            echo "$output"
+            exit 1
+          }
+
+          INFLUXDB_URL=https://example.invalid INFLUXDB_TOKEN=dummy ./tools/preprocess.py --drivercentral
+
+          # Matches a whole placeholder, not the bare prefix: the module's runtime guard
+          # contains the prefix as a literal and a looser pattern flags that line.
+          if grep -RE '%%SECRET:[A-Za-z_][A-Za-z0-9_]*%%' build/; then
+            echo "::error::a placeholder survived into the build output"
+            exit 1
+          fi
+
+          grep -q 'secrets.INFLUXDB_TOKEN' .github/workflows/build.yml || {
+            echo "::error::build.yml is missing the secrets env block"
+            exit 1
+          }
+
+      - name: Without the answer there is no diagnostics module and no secrets env block
+        if: matrix.name != 'diagnostics'
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          if [ -e src/lib/diagnostics.lua ]; then
+            echo "::error::diagnostics.lua rendered without being asked for"
+            exit 1
+          fi
+          if grep -q 'secrets.INFLUXDB' .github/workflows/build.yml; then
+            echo "::error::build.yml carries a secrets env block with no build_secrets"
+            exit 1
+          fi
 
       - name: Formatted
         working-directory: ${{ runner.temp }}/render

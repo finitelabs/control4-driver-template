@@ -6,7 +6,13 @@ import json
 import os
 import shutil
 import re
+import sys
 from pathlib import Path
+
+# The name charset is shared by the substitution and the scan, so anything that can be
+# substituted can also be reported when it is not. Cannot collide with the __VAR__ /
+# %%VAR%% variant substitution, whose names are \w+ and so never contain a colon.
+SECRET_PATTERN = re.compile(r"%%SECRET:([A-Za-z_][A-Za-z0-9_]*)%%")
 
 
 def process_file(
@@ -253,6 +259,87 @@ def replace_template_variables(file_path: Path, variables: dict) -> None:
         f.write(content)
 
 
+def load_dotenv(repo_root: Path) -> None:
+    """
+    Seed the environment from a repo-root .env so local builds resolve secrets without
+    exporting them by hand. Uses setdefault, so a real environment variable always wins.
+
+    Args:
+        repo_root: Repository root to look for .env in
+    """
+    dotenv_path = repo_root / ".env"
+    if not dotenv_path.is_file():
+        return
+
+    with open(dotenv_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            name, separator, value = line.partition("=")
+            if not separator:
+                continue
+            os.environ.setdefault(name.strip(), value.strip())
+
+
+def substitute_secrets(build_dir: Path) -> None:
+    """
+    Replace %%SECRET:NAME%% placeholders in the build output with the environment
+    variable of the same name. A name with no variable set is left in place for
+    scan_unresolved_secrets to report.
+
+    Args:
+        build_dir: Build directory to walk
+    """
+
+    def replace(match: re.Match) -> str:
+        value = os.environ.get(match.group(1))
+        return match.group(0) if value is None else value
+
+    for root, _, files in os.walk(build_dir):
+        for filename in files:
+            file_path = Path(root) / filename
+            try:
+                with open(file_path, "tr", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception:
+                continue
+
+            substituted = SECRET_PATTERN.sub(replace, content)
+            if substituted != content:
+                with open(file_path, "w", encoding="utf-8") as f:
+                    f.write(substituted)
+
+
+def scan_unresolved_secrets(build_dir: Path) -> list[str]:
+    """
+    Find %%SECRET:NAME%% placeholders that survived substitution. A survivor means the
+    build would ship a placeholder where a credential belongs, so the caller fails the
+    build rather than packaging it.
+
+    Args:
+        build_dir: Build directory to walk
+
+    Returns:
+        List of "<path relative to build_dir>: NAME" strings, one per placeholder found
+    """
+    unresolved = []
+
+    for root, _, files in os.walk(build_dir):
+        for filename in files:
+            file_path = Path(root) / filename
+            try:
+                with open(file_path, "tr", encoding="utf-8") as f:
+                    content = f.read()
+            except Exception:
+                continue
+
+            for name in sorted(set(SECRET_PATTERN.findall(content))):
+                unresolved.append(f"{file_path.relative_to(build_dir)}: {name}")
+
+    return sorted(unresolved)
+
+
 def compute_cross_product(dimensions: list[list[dict]]) -> list[dict]:
     """
     Compute the cross-product of multiple variant dimensions.
@@ -473,6 +560,18 @@ def main():
 
     # Copy and process src directory
     process_directory(build_dir, conditions, variant_map)
+
+    # After the conditionals, so a placeholder inside a branch this distribution
+    # strips is gone rather than demanding a credential the build does not need.
+    load_dotenv(repo_root)
+    substitute_secrets(build_dir)
+    unresolved = scan_unresolved_secrets(build_dir)
+    if unresolved:
+        print(f"Error: unresolved build secrets in {build_dir}:")
+        for entry in unresolved:
+            print(f"  {entry}")
+        print("Set each name in the environment or in a repo-root .env, then rebuild.")
+        sys.exit(1)
 
     print(f"Build completed successfully. Output in {build_dir}")
 
