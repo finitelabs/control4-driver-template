@@ -181,9 +181,8 @@ on a clean tree until something has populated `build/`.
 1. **Format**: stylua (Lua), black (Python), mdformat (Markdown)
 1. **Preprocess**: resolve `#ifdef`/`#ifndef` directives per distribution
 1. **Generate squishy**: create squish manifests from .c4zproj files
-1. **Update driver.xml**: stamp version and modified timestamp. The version is
-   the build date, except on a tag build, where it is the tag's own date so the
-   shipped c4z is never older than the release that carries it
+1. **Update driver.xml**: stamp modified timestamp, and version from the build
+   date or, on a tag build, from the tag
 1. **Generate docs**: Markdown -> HTML -> PDF, plus README
 1. **Package**: run driverpackager to create .c4z files
 1. **Zip**: bundle the c4z, docs and source folders per distribution

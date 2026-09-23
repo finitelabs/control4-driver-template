@@ -19,8 +19,7 @@ jobs:
           echo "Waiting for Build workflow to complete for $GITHUB_SHA..."
           deadline=$(( $(date +%s) + WAIT_MINUTES * 60 ))
           while true; do
-            # Tagging a commit already built on main leaves two Build runs at this
-            # SHA, and only the tag's own run stamps the c4z with the tag's version.
+            # Tagging a commit already built on main leaves two Build runs at this SHA.
             run_id=$(gh run list \
               --repo "$GITHUB_REPOSITORY" \
               --workflow build.yml \
