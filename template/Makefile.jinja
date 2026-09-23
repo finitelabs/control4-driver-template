@@ -147,6 +147,12 @@ gen-squishy: ## Auto-generate squishy files from .c4zproj
 
 # ─── Driver XML ───────────────────────────────────────────────────────────────
 
+# github-updater.lua compares this against the release tag and re-offers, forever,
+# any release whose c4z reads older, so a tag build overrides it with the tag's own
+# date. The runner clock is UTC, which would otherwise stamp an evening Central tag
+# as the next day and outrank the release after it.
+DRIVER_VERSION ?= $(shell date +'%Y%m%d')
+
 .PHONY: update-xml update-xml-version update-xml-modified
 update-xml: update-xml-version update-xml-modified ## Stamp version + modified in driver.xml
 
@@ -154,7 +160,7 @@ update-xml-version: $(VENV_STAMP)
 	@for build in $(DISTRIBUTIONS); do \
 		for driver_dir in build/$$build/drivers/*/; do \
 			$(VENV_PY) tools/package.py xml-set \
-				"$${driver_dir}driver.xml" version "$$(date +'%Y%m%d')"; \
+				"$${driver_dir}driver.xml" version "$(DRIVER_VERSION)"; \
 		done; \
 	done
 
