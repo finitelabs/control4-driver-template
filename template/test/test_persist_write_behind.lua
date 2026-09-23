@@ -164,30 +164,33 @@ T.eq("and a later set inside defer writes at once", calls, { "set Hot", "set Hot
 
 -- ── lib/values.lua ───────────────────────────────────────────────────────────
 
-T.section("values: frame updates wait, a new or deleted value is written at once")
+T.section("values: an update waits unless it adds or removes a variable")
 T.unload("^lib%.persist$", "^lib%.values$")
 local persist = require("lib.persist")
 local values = require("lib.values")
 values:update("Setting", "a", "STRING")
+values:update("Json", "{}")
 values:setWriteBehind(60000)
 reset()
 
 persist:defer(function()
   values:update("Setting", "b", "STRING")
   values:update("Setting", "c", "STRING")
+  values:update("Json", '{"x":1}')
+  values:update("Json2", "{}")
 end)
-T.eq("an update to an existing value waits", calls, {})
+T.eq("updates and a new value with no variable wait", calls, {})
 T.eq("the variable is current", Variables["Setting"], "c")
 
 persist:defer(values.update, values, "Reading", "1", "NUMBER")
 T.eq("a new variable is written at once", calls, { "set Values" })
-T.eq("with the waiting update in it", stored("Values").Setting.value, "c")
+T.eq("with the waiting updates in it", stored("Values").Setting.value, "c")
 
-persist:defer(values.update, values, "Reading", "1", "STRING")
-T.eq("so is a retyped one", #calls, 2)
+persist:defer(values.update, values, "Reading", "1")
+T.eq("so is a variable becoming a plain value", #calls, 2)
 
 persist:defer(values.update, values, "Setting", "d", "STRING")
-values:update("Reading", "2", "STRING")
+values:update("Json", '{"x":2}')
 T.eq("an update outside defer writes at once", #calls, 3)
 T.eq("and carries the waiting update", stored("Values").Setting.value, "d")
 
@@ -196,8 +199,12 @@ values:flush()
 T.eq("values:flush writes it", stored("Values").Setting.value, "e")
 
 reset()
+persist:defer(values.delete, values, "Json")
+T.eq("deleting a value with no variable waits", calls, {})
 persist:defer(values.delete, values, "Setting")
-T.eq("a delete is written at once", calls, { "set Values" })
+T.eq("deleting a variable is written at once", calls, { "set Values" })
+persist:defer(values.update, values, "Setting", "f", "STRING")
+T.eq("and so is bringing it back", #calls, 2)
 
 C4.PersistSetValue, C4.PersistDeleteValue, C4.SetTimer = realSet, realDelete, realSetTimer
 

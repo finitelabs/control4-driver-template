@@ -23,6 +23,11 @@ local VALUES_PERSIST_KEY = "Values"
 --- @type string
 local LEGACY_PLACEHOLDER_PREFIX = "__deleted__"
 
+--- Whether restore adds a visible variable for this record.
+local function isVariable(record)
+  return record ~= nil and record.varType ~= nil and not record.deleted
+end
+
 local function ovcKey(name)
   -- Convert the name to a valid OVC variable name by replacing spaces with underscores
   return string.gsub(name, "%s+", "_")
@@ -178,9 +183,9 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
       suffix = propertySuffix,
       writable = writable,
     }
-    -- Restore rebuilds the variables, and their ids, from which records exist and
-    -- their types, so a change to either is written now even under write-behind.
-    self:_saveValues(values, not existing or existing.deleted or existing.varType ~= varType)
+    -- Restore rebuilds the variable ids from the records, so adding or removing a
+    -- variable is written now even under write-behind.
+    self:_saveValues(values, isVariable(existing) ~= (varType ~= nil))
   end
 
   -- C4 BOOL variables expect "0"/"1", not "true"/"false".
@@ -239,6 +244,7 @@ function Values:delete(name)
 
   log:debug("Deleting value %s at index %d", name, values[name].index)
 
+  local wasVariable = isVariable(values[name])
   if values[name].varType == nil then
     values[name] = nil -- never a variable, so it holds no id slot
   else
@@ -249,7 +255,7 @@ function Values:delete(name)
 
   -- Trim trailing deleted values (they don't need placeholders)
   values = self:_trimDeletedTail(values)
-  self:_saveValues(values, true)
+  self:_saveValues(values, wasVariable)
 
   -- Remove the OVC handler and delete the variable
   OVC[ovcKey(name)] = nil
@@ -267,8 +273,8 @@ function Values:delete(name)
 end
 
 --- Opts the values in to write-behind (see lib.persist): an update made inside
---- `persist:defer()` reaches storage at most once per `ms`, unless it adds, deletes
---- or retypes a value. A nil or non-positive `ms` restores write-through.
+--- `persist:defer()` reaches storage at most once per `ms`, unless it adds or
+--- removes a variable. A nil or non-positive `ms` restores write-through.
 --- @param ms number? The flush interval in milliseconds.
 --- @return void
 function Values:setWriteBehind(ms)
