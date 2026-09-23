@@ -153,7 +153,9 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
       suffix = propertySuffix,
       writable = writable,
     }
-    self:_saveValues(values)
+    -- Restore rebuilds the variables, and their ids, from which records exist and
+    -- their types, so a change to either is written now even under write-behind.
+    self:_saveValues(values, not existing or existing.deleted or existing.varType ~= varType)
   end
 
   -- C4 BOOL variables expect "0"/"1", not "true"/"false".
@@ -217,7 +219,7 @@ function Values:delete(name)
 
   -- Trim trailing deleted values (they don't need placeholders)
   values = self:_trimDeletedTail(values)
-  self:_saveValues(values)
+  self:_saveValues(values, true)
 
   -- Remove the OVC handler and delete the variable
   OVC[ovcKey(name)] = nil
@@ -232,6 +234,23 @@ function Values:delete(name)
     -- The best we can do to delete a property is to hide it
     C4:SetPropertyAttribs(name, constants.HIDE_PROPERTY)
   end
+end
+
+--- Opts the values in to write-behind (see lib.persist): an update made inside
+--- `persist:defer()` reaches storage at most once per `ms`, unless it adds, deletes
+--- or retypes a value. A nil or non-positive `ms` restores write-through.
+--- @param ms number? The flush interval in milliseconds.
+--- @return void
+function Values:setWriteBehind(ms)
+  log:trace("Values:setWriteBehind(%s)", ms)
+  persist:setWriteBehind(VALUES_PERSIST_KEY, ms)
+end
+
+--- Writes any update still waiting under write-behind to storage now.
+--- @return void
+function Values:flush()
+  log:trace("Values:flush()")
+  persist:flush(VALUES_PERSIST_KEY)
 end
 
 --- Retrieves all values from persistent storage.
@@ -287,10 +306,14 @@ end
 --- Saves the values to persistent storage.
 --- @private
 --- @param values table<string, Value>? The values table to save, nil clears storage.
+--- @param durable boolean? Write to storage now even under write-behind.
 --- @diagnostic disable-next-line: unused
-function Values:_saveValues(values)
-  log:trace("Values:_saveValues(%s)", values)
+function Values:_saveValues(values, durable)
+  log:trace("Values:_saveValues(%s, %s)", values, durable)
   persist:set(VALUES_PERSIST_KEY, not IsEmpty(values) and values or nil)
+  if durable then
+    persist:flush(VALUES_PERSIST_KEY)
+  end
 end
 
 --- Retrieves the next available value ID. Always returns max(existing indices) + 1
