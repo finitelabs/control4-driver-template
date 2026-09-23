@@ -10,6 +10,7 @@ require("lib.utils")
 
 --- @class Values
 --- @field _callbacks table<string, function?> In-memory registry of OVC callbacks keyed by variable name.
+--- @field _migrated boolean? Whether getValues has moved legacy placeholders this session.
 --- A class representing a collection of named values with optional variable/property support.
 local Values = {}
 Values.__index = Values
@@ -17,6 +18,10 @@ Values.__index = Values
 --- Persistent storage key for values.
 --- @type string
 local VALUES_PERSIST_KEY = "Values"
+
+--- Name prefix under which a legacy placeholder keeps its id slot.
+--- @type string
+local LEGACY_PLACEHOLDER_PREFIX = "__deleted__"
 
 local function ovcKey(name)
   -- Convert the name to a valid OVC variable name by replacing spaces with underscores
@@ -37,6 +42,26 @@ end
 --- @field suffix string? Optional suffix for property display (e.g., " °C", " %")
 --- @field writable boolean? Whether the variable accepts writes from programming. Persisted so restore can recreate the C4 variable with the correct readOnly flag.
 --- @field deleted boolean? If true, the value slot is reserved but the variable is hidden (preserves ID ordering)
+
+--- Deleting a value with no variable used to leave a deleted record, which restore
+--- added as a hidden STRING variable. Each such slot moves to a reserved name, so a
+--- later value of the old name cannot take it and shift the variable ids after it.
+--- @param values table<string, Value> The values table, changed in place.
+--- @return boolean moved True if any record moved.
+local function moveLegacyPlaceholders(values)
+  local legacy = {}
+  for name, value in pairs(values) do
+    if value.deleted and value.varType == nil then
+      table.insert(legacy, name)
+    end
+  end
+  for _, name in ipairs(legacy) do
+    values[name].varType = "STRING"
+    values[LEGACY_PLACEHOLDER_PREFIX .. name] = values[name]
+    values[name] = nil
+  end
+  return #legacy > 0
+end
 
 --- Creates a new Values instance.
 --- @return Values values A new Values instance.
@@ -198,9 +223,10 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
   return changed
 end
 
---- Deletes a value. The value is marked as deleted to preserve its index slot
---- for variable ID ordering. On next restore, a hidden placeholder will be created.
---- Trailing deleted values are trimmed since they don't affect subsequent IDs.
+--- Deletes a value. A value with a variable is marked as deleted to preserve its
+--- index slot for variable ID ordering, and restore creates a hidden placeholder
+--- for it; a value without one is removed. Trailing deleted values are trimmed
+--- since they don't affect subsequent IDs.
 --- @param name string The name of the value to delete.
 --- @return void
 function Values:delete(name)
@@ -213,9 +239,13 @@ function Values:delete(name)
 
   log:debug("Deleting value %s at index %d", name, values[name].index)
 
-  -- Mark as deleted to preserve the index slot for variable ID ordering
-  values[name].deleted = true
-  values[name].value = nil
+  if values[name].varType == nil then
+    values[name] = nil -- never a variable, so it holds no id slot
+  else
+    -- Mark as deleted to preserve the index slot for variable ID ordering
+    values[name].deleted = true
+    values[name].value = nil
+  end
 
   -- Trim trailing deleted values (they don't need placeholders)
   values = self:_trimDeletedTail(values)
@@ -258,7 +288,14 @@ end
 --- @diagnostic disable-next-line: unused
 function Values:getValues()
   log:trace("Values:getValues()")
-  return persist:get(VALUES_PERSIST_KEY, {}) or {}
+  local values = persist:get(VALUES_PERSIST_KEY, {}) or {}
+  if not self._migrated then
+    self._migrated = true
+    if moveLegacyPlaceholders(values) then
+      self:_saveValues(values)
+    end
+  end
+  return values
 end
 
 --- Retrieves a value by name.
