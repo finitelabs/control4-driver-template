@@ -385,6 +385,17 @@ for _, mode in ipairs(MODES) do
       values:update("B", "back", "STRING")
       T.eq("B returns at its id" .. (aside and ", whatever names the driver uses" or ""), H.visible().B, 1002)
     end
+    values = fresh(mode)
+    values:update("A", "1", "STRING")
+    values:update("__values_aside__", "2", "STRING") -- 1002
+    values:update("1002", "n", "STRING") -- 1003, named "1002"
+    values:delete("__values_aside__")
+    values:update("__values_aside__", "back", "STRING")
+    T.eq("so does a name the library steps a variable aside to", H.visible(), {
+      A = 1001,
+      __values_aside__ = 1002,
+      ["1002"] = 1003,
+    })
 
     values = fresh(mode)
     values:update("A", "1", "STRING")

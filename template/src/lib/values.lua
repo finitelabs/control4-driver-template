@@ -33,7 +33,7 @@ local MAX_ID_TRIES = 1000
 local RECHECK_MS = 1000
 
 --- Name a variable of ours holds while another variable is added at the id its name spells (a "_"
---- is added while a variable has it).
+--- is added while a variable, or the name being added, has it).
 local ASIDE_NAME = "__values_aside__"
 
 --- @class Value
@@ -906,7 +906,7 @@ function Values:_addAt(values, id, name, strValue, varType, readOnly, own)
   if not added then
     -- A variable of ours named like this id blocks the add; it steps aside under a name no variable has.
     local holder, asideName = values[tostring(id)], ASIDE_NAME
-    while Variables[asideName] ~= nil do
+    while Variables[asideName] ~= nil or asideName == name do
       asideName = asideName .. "_"
     end
     if
