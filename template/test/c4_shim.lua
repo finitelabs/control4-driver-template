@@ -597,7 +597,10 @@ function C4:FileGetOpenedHandles()
   for fh, file in pairs(openFiles) do
     handles[fh] = file.name
   end
-  return next(handles) and handles or nil
+  -- The controller returns no value at all when nothing is open (measured on 4.3.0).
+  if next(handles) then
+    return handles
+  end
 end
 
 function C4:FileDelete(name, subpath)

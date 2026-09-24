@@ -767,6 +767,7 @@ T.section("C4 file API")
 
 -- Measured on a dev controller (OS 4.3.0) in a lab driver's sandbox.
 T.eq("nothing is open to start with", C4:FileGetOpenedHandles(), nil)
+T.eq("with nothing open it returns no value at all", select("#", C4:FileGetOpenedHandles()), 0)
 
 local fh = C4:FileOpen("shim_a.bin")
 T.check("FileOpen creates a file and returns a handle", type(fh) == "number" and fh >= 0, tostring(fh))
@@ -809,6 +810,7 @@ T.eq("FileDelete returns true when it deletes", C4:FileDelete("shim_a.bin"), tru
 T.eq("the file is gone", C4:FileExists("shim_a.bin"), false)
 T.eq("FileDelete of a missing file returns false", C4:FileDelete("shim_a.bin"), false)
 T.eq("nothing is left open", C4:FileGetOpenedHandles(), nil)
+T.eq("and it returns no value at all again", select("#", C4:FileGetOpenedHandles()), 0)
 
 fh = C4:FileOpen("shim_e.bin")
 T.eq("a count past the data returns the count", C4:FileWrite(fh, 4, "ab"), 4)
