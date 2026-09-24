@@ -769,6 +769,50 @@ for _, older in ipairs({ "v0.9.28", "F3" }) do
   T.eq("which a restart keeps", H.visible(), { B = 1005, E = 1002, F = 1003 })
 end
 
+for _, mode in ipairs(MODES) do
+  local cases = {
+    { "after a deleted name", { "A", "B", "Z", "Y" }, "A", { "Z", "Y" } },
+    { "around one that kept its id", { "C", "B", "D" }, nil, { "C", "D" } },
+  }
+  for _, case in ipairs(cases) do
+    T.section(mode.label .. ": ids an older build's rewrite dropped, then a restart first, " .. case[1])
+    H.mode(mode.rename)
+    H.wipe()
+    local values = H.load("restart")
+    for _, name in ipairs(case[2]) do
+      values:update(name, name, "STRING")
+    end
+    if case[3] then
+      values:delete(case[3])
+    end
+    local old = H.load("update", "v0.9.28")
+    for _, name in ipairs(case[4]) do
+      old:update(name, name .. "2", "STRING") -- the older build rewrites the record without its id
+    end
+    local want, raw = H.visible(), blobCopy()
+    ShimRestartDirector()
+    setBlob(raw)
+    H.load("restart")
+    T.eq("each comes back where Director had it", H.visible(), want)
+  end
+
+  T.section(mode.label .. ": after a restart, live records with no free id of their own get new ones in index order")
+  H.mode(mode.rename)
+  H.wipe()
+  local blob = {}
+  for i = 1, 6 do
+    blob["Z" .. (7 - i)] = { index = i, varType = "STRING", value = "z" } -- restore order would give them 1001-1006
+    blob["K" .. i] = { index = 6 + i, id = 1000 + i, varType = "STRING", value = "k" }
+  end
+  C4:PersistSetValue("Values", Serialize(blob))
+  H.load("restart")
+  local got = {}
+  for i = 1, 6 do
+    got[i] = H.visible()["Z" .. (7 - i)]
+  end
+  T.eq("so they follow the order an older build restores them in", got, { 1007, 1008, 1009, 1010, 1011, 1012 })
+end
+
 T.section("without a rename: a deleted name's id is held when an older build left its name at another id")
 H.mode(false)
 H.wipe()

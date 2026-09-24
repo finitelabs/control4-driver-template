@@ -1024,6 +1024,13 @@ function Values:_learn(values, restarted, director)
     if pending and not anyId then
       self:_restoreAsOlderBuild(values, estimated, rows)
     end
+    -- A downgrade's rewrite drops a record's id: it takes the id the older build's restart gives it, if free.
+    for _, row in ipairs(rows) do
+      local id = estimated[row.name]
+      if isLive(row.record) and row.record.id == nil and id ~= nil and ownerOf(values, id) == nil then
+        row.record.id = id
+      end
+    end
   else
     director = director or self:_directorVariables()
     if (director == nil or not self:_learnIds(values, director, estimated)) and pending then
@@ -1211,6 +1218,11 @@ function Values:_restoreRenamed(values)
       table.insert(names, name)
     end
   end
+  -- A record with no id gets the next one, so they go in the order an older build restores them.
+  table.sort(names, function(a, b)
+    local ia, ib = values[a].index or 0, values[b].index or 0
+    return ia < ib or (ia == ib and a < b)
+  end)
   for _, name in ipairs(names) do
     self:_restoreOne(values, name)
   end
