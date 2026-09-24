@@ -28,7 +28,9 @@
 --- Every `set()` writes to the controller's storage at once. A key that changes often
 --- can opt in to write-behind: its writes made inside `defer()` update the cache at
 --- once and reach storage at most once per interval. Writes outside `defer()`, and
---- deletes, still go out at once; `flush()` writes whatever is pending.
+--- deletes, still go out at once; `flush()` writes whatever is pending. The scope
+--- covers everything `defer()` runs synchronously, including promise callbacks it
+--- resolves, so a write there that must be durable needs a `flush()`.
 ---
 --- ```lua
 --- persist:setWriteBehind("Readings", 60000)
