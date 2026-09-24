@@ -1315,24 +1315,40 @@ end
 -- PersistGetValue/SetValue/DeleteValue globals belong to global/lib.lua, whose
 -- wrappers delegate here when C4.PersistSetValue exists; stubbing the globals
 -- instead would be paved over the moment any module requires global.lib.
--- As on 4.3.0: a value keeps its type, a string is cut at its first NUL, a plain "" deletes and an
--- encrypted one is ignored. The controller rejects a nil encrypted flag; here it is false.
+-- As on 4.3.0: a number or boolean keeps its type, but a NaN comes back as text and a number past
+-- the 64-bit range is clamped (1e300 and inf read back as 2^64, -inf as -2^63). A string is cut at
+-- its first NUL, a plain "" deletes and an encrypted one is ignored. The controller rejects a nil
+-- encrypted flag; here it is false.
 local persist_store = {}
 
--- A read under the other flag returns ciphertext; reversal stands in for the length-keeping cipher.
+-- Stands in for the controller's length-keeping cipher, whose output is bytes, not text.
+local function persist_cipher(data)
+  return (
+    data:reverse():gsub(".", function(c)
+      local b = c:byte()
+      return string.char(b < 128 and b + 128 or b - 128)
+    end)
+  )
+end
+
+-- A read under the other flag returns the ciphertext, or the value base64-decoded and deciphered.
 function C4:PersistGetValue(key, encrypted)
   local entry = persist_store[key]
   if entry == nil or entry.encrypted == (encrypted == true) then
     return entry and entry.value
   elseif entry.encrypted then
-    return base64_encode_impl(tostring(entry.value):reverse())
+    return base64_encode_impl(persist_cipher(tostring(entry.value)))
   end
-  return base64_decode_impl(tostring(entry.value)):reverse()
+  return persist_cipher(base64_decode_impl(tostring(entry.value)))
 end
 
 function C4:PersistSetValue(key, value, encrypted)
   if type(value) == "string" then
     value = value:match("^[^%z]*")
+  elseif value ~= value then
+    value = '{":number:":null}'
+  elseif type(value) == "number" then
+    value = math.max(math.min(value, 2 ^ 64), -2 ^ 63)
   end
   if value ~= "" then
     persist_store[key] = { value = value, encrypted = encrypted == true }

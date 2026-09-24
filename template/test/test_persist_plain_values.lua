@@ -70,16 +70,17 @@ local STRINGS = {
   { "true" },
 }
 
--- Each with the JSON it is stored as.
+-- Each with the JSON it is stored as; `kept` is what Director keeps when an older build
+-- stores it raw.
 local SCALARS = {
   { 12.5, "12.5" },
   { 66568, "66568" },
   { 0, "0" },
   { -3, "-3" },
   { 100, "100" },
-  { 1e300, "1e+300" },
-  { math.huge, "1e+9999" },
-  { -math.huge, "-1e+9999" },
+  { 1e300, "1e+300", kept = 2 ^ 64 },
+  { math.huge, "1e+9999", kept = 2 ^ 64 },
+  { -math.huge, "-1e+9999", kept = -2 ^ 63 },
   { true, "true" },
   { false, "false" },
   -- JSON:encode would keep 14 significant digits of these.
@@ -183,7 +184,7 @@ for i, case in ipairs(STRINGS) do
   T.eq("  where a shipped build read", legacyGet("L" .. i, false), (not case.lost) and case[1] or nil)
 end
 
-T.section("an older build's numbers, booleans, tables and encrypted strings read back")
+T.section("an older build's numbers, booleans, tables and encrypted strings read back as Director kept them")
 for i, case in ipairs(SCALARS) do
   legacySet("LN" .. i, case[1], false)
 end
@@ -191,15 +192,14 @@ legacySet("LTbl", tbl, false)
 legacySet("LEnc", "Living Room", true)
 q = reload()
 for i, case in ipairs(SCALARS) do
-  local got = q:get("LN" .. i, "<default>")
-  T.check(label(case[1]), got == case[1], "got " .. label(got))
+  local got, kept = q:get("LN" .. i, "<default>"), case.kept or case[1]
+  T.check(label(case[1]) .. " as " .. label(kept), got == kept, "got " .. label(got))
 end
 T.eq("a table", q:get("LTbl"), tbl)
 T.eq("an encrypted string", q:get("LEnc", nil, true), "Living Room")
 
 T.section("an older build's NaN reads as the default, as it did")
--- Measured on 4.3.0: Director hands back a NaN stored raw as this text.
-PersistSetValue("LNan", '{":number:":null}', false)
+legacySet("LNan", 0 / 0, false)
 T.eq("the default", reload():get("LNan", "<default>"), "<default>")
 T.eq("  where a shipped build read nothing", legacyGet("LNan", false), nil)
 
