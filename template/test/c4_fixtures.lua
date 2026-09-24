@@ -146,16 +146,19 @@ end
 
 --- A zip archive laid out as the driver packager writes one, with every file stored
 --- uncompressed. CRCs are left zero: lib.zip does not read them.
---- @param files { [1]: string, [2]: string }[] Ordered { name, contents } pairs.
+--- @param files { [1]: string, [2]: string, extra?: string, centralExtra?: string, comment?: string }[]
+--- Ordered { name, contents } pairs, each with optional extra fields for its local header and its
+--- central directory entry, and a comment for the latter.
 --- @return string
 function F.zip(files)
   local body, central = {}, {}
   local offset = 0
   for _, file in ipairs(files) do
     local name, contents = file[1], file[2]
+    local extra, centralExtra, comment = file.extra or "", file.centralExtra or "", file.comment or ""
     local sizes = littleEndian(0, 4) .. littleEndian(#contents, 4) .. littleEndian(#contents, 4)
     local header = "PK\3\4" .. littleEndian(20, 2) .. littleEndian(0, 8) .. sizes .. littleEndian(#name, 2)
-    header = header .. littleEndian(0, 2) .. name
+    header = header .. littleEndian(#extra, 2) .. name .. extra
     table.insert(body, header .. contents)
     table.insert(
       central,
@@ -165,9 +168,13 @@ function F.zip(files)
         .. littleEndian(0, 8)
         .. sizes
         .. littleEndian(#name, 2)
-        .. littleEndian(0, 12)
+        .. littleEndian(#centralExtra, 2)
+        .. littleEndian(#comment, 2)
+        .. littleEndian(0, 8)
         .. littleEndian(offset, 4)
         .. name
+        .. centralExtra
+        .. comment
     )
     offset = offset + #header + #contents
   end
