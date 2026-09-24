@@ -799,9 +799,7 @@ function Values:_clearName(values, name, record)
     return false -- another record's hold, named by its number as this name is
   end
   C4:DeleteVariable(found.id)
-  if found.id == record.id then
-    return false
-  elseif canRename() and record.id == nil and found.hidden then
+  if canRename() and record.id == nil and found.hidden and owner == nil then
     record.id = found.id -- the name's old placeholder: it comes back at that id
     return true
   end
@@ -1171,11 +1169,7 @@ function Values:_learnIds(values, director, estimated)
     if variable ~= nil and isLive(record) and canRename() then
       if variable.hidden then
         self._unhide[name] = true
-      elseif
-        variable.name ~= name
-        and variable.name == tostring(record.id)
-        and not rename(record.id, name)
-      then
+      elseif variable.name ~= name and variable.name == tostring(record.id) and not rename(record.id, name) then
         log:error("Variable %s could not be named %s", record.id, name) -- a numeric name stored under its id
       end
     end

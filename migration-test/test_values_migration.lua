@@ -740,6 +740,35 @@ for _, mode in ipairs(MODES) do
   T.eq("and its id is not handed out", H.visible(), { A = 1001, B = 1003, N = 1004 })
 end
 
+for _, older in ipairs({ "v0.9.28", "F3" }) do
+  T.section("with a rename: a returning name takes no id another record keeps, after a downgrade to " .. older)
+  H.mode(true)
+  H.wipe()
+  local values = H.load("restart")
+  for _, name in ipairs({ "C", "E", "B", "F" }) do
+    values:update(name, name, "STRING") -- 1001 to 1004
+  end
+  values:delete("E")
+  values:delete("B")
+  local old = H.load("update", older)
+  old:update("C", "{}") -- the older build makes C plain
+  H.load("restart", older) -- E(h)=1001, B(h)=1002, F=1003: B's id is F's now
+  values = H.load("update")
+  values:update("B", "b", "STRING")
+  local owners, shared = {}, {}
+  for name, record in pairs(H.blob()) do
+    if record.id ~= nil and owners[record.id] ~= nil then
+      table.insert(shared, record.id)
+    end
+    owners[record.id or 0] = name
+  end
+  T.eq("no two records share an id", shared, {})
+  values:update("E", "e", "STRING")
+  T.eq("E comes back at its id", H.visible().E, 1002)
+  H.load("restart")
+  T.eq("which a restart keeps", H.visible(), { B = 1005, E = 1002, F = 1003 })
+end
+
 T.section("without a rename: an id that is only a guess is not held when its name is deleted")
 H.mode(false)
 H.wipe()
