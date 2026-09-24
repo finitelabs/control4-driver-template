@@ -806,6 +806,10 @@ for _, mode in ipairs(MODES) do
   setBlob(raw)
   values = H.load("restart")
   T.eq("switched by a restart, its place is held by number", H.snapshot(), "1001=A, 1002=1002(h), 1003=B")
+  warnings = {}
+  H.load("update")
+  values = H.load("update")
+  T.eq("which no load reports as taken", warnings, {})
   values:update("", "e3", "STRING")
   values:update("N", "n", "STRING")
   H.load("restart")
@@ -1380,6 +1384,19 @@ for _, mode in ipairs(MODES) do
     T.eq("and a restart", H.visible(), { A = 1001, B = 1004, C = 1003 })
   end
 end
+
+T.section("without a rename: the id of a variable that is not ours is not reported as taken on every load")
+H.mode(false)
+H.wipe()
+local own = H.load("restart", "v0.9.28")
+own:update("A", "a", "STRING")
+C4:AddVariable("Own", "", "STRING", true, false) -- 1002, the driver's own
+H.load("update")
+warnings = {}
+own = H.load("update")
+own:update("N", "n", "STRING")
+T.eq("nothing is logged", warnings, {})
+T.eq("and no id moves", H.visible(), { A = 1001, Own = 1002, N = 1003 })
 
 T.section("with a rename: a variable an older build left hidden is shown at its next update")
 H.mode(true)

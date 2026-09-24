@@ -1318,10 +1318,11 @@ function Values:_restoreByName(values, restarted)
   for _, id in ipairs(ids) do
     local name = owner[id]
     local record = name and values[name]
-    if isLive(record) then
+    if isLive(record) and name ~= "" then
       self:_restoreOne(values, name)
+      -- Not added at its id: held instead, so no later name takes it.
       if record.id == id and Variables[directorName(name, record)] == nil and not self:_hold(id) then
-        log:warn("Variable id %s of %s is taken by another variable", id, name) -- else held: no later name takes it
+        log:warn("Variable id %s of %s is taken by another variable", id, name)
       end
     elseif record ~= nil or restarted then
       local held = Variables[tostring(id)] ~= nil
@@ -1330,7 +1331,9 @@ function Values:_restoreByName(values, restarted)
         held = found ~= nil and found.id == id
       end
       if not held and not self:_hold(id, record and record.varType) then
-        log:warn("Variable id %s%s is taken by another variable", id, name and (" of " .. name) or "")
+        -- A placeholder reserves the id of a variable that is not ours, so that one is expected there.
+        local report = record ~= nil and record.placeholder and log.debug or log.warn
+        report(log, "Variable id %s%s is taken by another variable", id, name and (" of " .. name) or "")
         self._unheld[id] = true
       end
     end
