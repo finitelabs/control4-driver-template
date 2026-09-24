@@ -643,6 +643,19 @@ for _, mode in ipairs(MODES) do
   T.eq("a new name keeps it too, its id in storage at once", H.recordIds().Ext, 1003)
   T.eq("and no variable is added", H.count(), 3)
 
+  if R then
+    T.section(L .. ": a visible variable of the name at another name's id is not taken over")
+    values = fresh(mode)
+    values:update("A", "1", "STRING")
+    values:update("Y", "2", "STRING")
+    values:delete("Y")
+    values = H.load("update")
+    C4:AddVariable("X", "x", "STRING", true, false) -- by name, outside lib/values: Y's 1002
+    values:update("X", "x", "STRING")
+    values:update("Y", "back", "STRING")
+    holds("Y keeps its id", { A = 1001, X = 1003, Y = 1002 })
+  end
+
   T.section(L .. ": a hidden variable carrying a new name is not taken over")
   values = fresh(mode)
   values:update("A", "1", "STRING")

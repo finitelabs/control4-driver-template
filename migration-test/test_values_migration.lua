@@ -693,6 +693,25 @@ for _, mode in ipairs(MODES) do
     T.eq("and a new name takes no id a name had", H.visible().N, fresh)
   end
 
+  T.section(mode.label .. ": a variable the driver added itself, reserved at the switch, is taken over by its name")
+  H.mode(mode.rename)
+  H.wipe()
+  old = H.load("restart", "v0.9.28")
+  old:update("A", "1", "STRING")
+  old:update("B", "2", "STRING")
+  C4:AddVariable("X", "x", "STRING", false, false) -- 1003, outside lib/values
+  values = H.load("update")
+  values:update("X", "managed", "STRING")
+  local owners = {}
+  for name, record in pairs(H.blob()) do
+    if record.id == 1003 then
+      table.insert(owners, name)
+    end
+  end
+  T.eq("its id has one record", owners, { "X" })
+  H.load("restart")
+  T.eq("which a restart keeps", H.visible(), { A = 1001, B = 1002, X = 1003 })
+
   T.section(mode.label .. ": a hidden variable the older build added in a downgrade gives way to its name")
   H.mode(mode.rename)
   H.wipe()

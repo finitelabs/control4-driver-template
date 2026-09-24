@@ -648,9 +648,16 @@ function Values:_applyVariable(values, name, record, existing, strValue)
     local idBefore = record.id
     if record.id == nil then
       local found = self:_findVariable(name)
-      if found ~= nil and found.hidden then
-        present = nil -- an older build's placeholder: the record gets a variable of its own
+      local holderName, holder
+      if found ~= nil then
+        holderName, holder = ownerOf(values, found.id)
+      end
+      if found ~= nil and (found.hidden or (holder ~= nil and not holder.placeholder)) then
+        present = nil -- an older build's placeholder, or at another name's id: a variable of its own
       elseif found ~= nil then
+        if holderName ~= nil then
+          values[holderName] = nil -- reserved at the switch as not ours
+        end
         record.id = found.id -- Director already has a visible variable of this name: take it over at its id
       end
     end
