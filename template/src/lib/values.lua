@@ -362,7 +362,6 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
       index = existing and existing.index or maxIndex(values) + 1,
       id = existing and existing.id,
       unverified = existing and existing.unverified,
-      deleted = existing and existing.deleted,
       varType = varType,
       value = value,
       suffix = propertySuffix,
@@ -1156,12 +1155,6 @@ function Values:_learnIds(values, director, estimated)
   end
   table.sort(names)
 
-  -- Without a rename a numeric-looking name says nothing: a hold is named by its number too.
-  local function shown(name)
-    if canRename() or not looksNumeric(name) then
-      return byName[name]
-    end
-  end
   -- An older build's by-name add of a numeric-looking name lands on the id it spells.
   local function numbered(name)
     local p = parsedId(name)
@@ -1179,7 +1172,7 @@ function Values:_learnIds(values, director, estimated)
   -- Where Director shows a live record's name visible now, then a record's recorded id while no
   -- other record is shown there, then where Director shows the rest, then the id restore order gives.
   for _, name in ipairs(names) do
-    local id = shown(name)
+    local id = byName[name]
     if isLive(values[name]) and id ~= nil and not director[id].hidden then
       claim(name, id)
     end
@@ -1191,7 +1184,7 @@ function Values:_learnIds(values, director, estimated)
   end
   for _, name in ipairs(names) do
     if wasEverVariable(values[name]) then
-      claim(name, shown(name) or numbered(name))
+      claim(name, byName[name] or numbered(name))
     else
       claim(name, numbered(name))
     end
