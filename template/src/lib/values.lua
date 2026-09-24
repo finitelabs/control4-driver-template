@@ -911,6 +911,7 @@ function Values:_createByName(values, name, record, strValue)
   if self._rejected[name] then
     return false
   end
+  self:_verify(values)
   local changed = self:_clearName(values, name, record)
   for id in pairs(self._unheld) do
     if self:_hold(id) then
@@ -929,9 +930,13 @@ function Values:_createByName(values, name, record, strValue)
     log:error("Director did not add variable %s%s", name, ok and "" or (": " .. tostring(added)))
     return changed
   end
+  local guessed = false
   if id == nil then
     local found = self:_findVariable(looksNumeric(name) and tostring(parsedId(name)) or name)
     id = found and found.id
+    if id == nil and record.id ~= nil then
+      id, guessed = record.id, true -- Director cannot say: kept, and checked once it can
+    end
   end
   if record.id ~= nil and id ~= record.id then
     log:error("Variable %s took id %s, not its id %s", name, id, record.id)
@@ -948,7 +953,7 @@ function Values:_createByName(values, name, record, strValue)
     end
   end
   record.id = id
-  record.unverified = nil
+  record.unverified = guessed or nil
   return true
 end
 
@@ -1041,12 +1046,18 @@ function Values:_learn(values, restarted, director)
           held[record.id] = true
         end
       end
-      -- Without a rename an id must stay held by a variable, so only those Director shows count.
+      -- Without a rename an id must stay held by a variable: a shown name's estimate is checked later,
+      -- a deleted name's is held now if free, as the older build's restore would have held it.
       for _, row in ipairs(rows) do
-        local id = estimated[row.name]
-        if row.record.id == nil and id ~= nil and not held[id] and (canRename() or Variables[row.name] ~= nil) then
-          row.record.id, row.record.unverified = id, true
-          held[id] = true
+        local id, record = estimated[row.name], row.record
+        if record.id == nil and id ~= nil and not held[id] then
+          if canRename() or Variables[row.name] ~= nil then
+            record.id, record.unverified = id, true
+            held[id] = true
+          elseif record.deleted and self:_hold(id, record.varType) then
+            record.id = id
+            held[id] = true
+          end
         end
       end
     end

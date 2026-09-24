@@ -870,6 +870,71 @@ T.eq("1003 is held", H.called("^Add #1003%(h%)%->1003$"), true)
 walked:update("N", "n", "STRING")
 T.eq("so a new name does not take it", { H.visible().N, H.recordIds().E }, { 1004, 1003 })
 
+--- The first load of this build after a driver update, with GetDeviceVariables failing during it.
+local function unreadableSwitch()
+  H.unreadableDirector()
+  local values = H.load("update")
+  H.readableDirector()
+  return values
+end
+
+T.section("without a rename, Director unreadable at the switch: a name the older build deleted keeps its id")
+H.mode(false)
+H.wipe()
+local deg = H.load("restart", "v0.9.28")
+deg:update("A", "1", "STRING")
+deg:update("B", "2", "STRING")
+deg:update("C", "3", "STRING")
+deg:delete("B")
+deg = unreadableSwitch()
+T.eq("its id is held", H.hiddenIds(), { 1002 })
+deg:update("D", "4", "STRING")
+T.eq("so a new name does not take it", H.visible(), { A = 1001, C = 1003, D = 1004 })
+
+T.section("without a rename, Director unreadable at the switch: a new name does not take a live name's id")
+H.wipe()
+deg = H.load("restart", "v0.9.28")
+deg:update("A", "1", "STRING")
+deg:update("B", "2", "STRING")
+deg:update("C", "3", "STRING")
+deg:delete("C") -- trimmed: 1003 is free, and restore order puts D there
+deg:update("D", "4", "STRING") -- 1004
+deg = unreadableSwitch()
+deg:update("E", "5", "STRING")
+deg:delete("D")
+deg:update("F", "6", "STRING")
+T.eq(
+  "D's id is held once it goes",
+  { H.visible(), H.hiddenIds() },
+  { { A = 1001, B = 1002, E = 1003, F = 1005 }, { 1004 } }
+)
+
+T.section("without a rename, Director unreadable at the switch: the coordinator's rooms keep their ids held")
+H.wipe()
+local kitchen = { "Kitchen (12) Occupied", "Kitchen (12) Occupant Count", "Kitchen (12) Occupants" }
+local office = { "Office (15) Occupied", "Office (15) Occupant Count", "Office (15) Occupants" }
+deg = H.load("restart", "v0.9.28")
+deg:update("Connected", true, "BOOL")
+for _, name in ipairs(kitchen) do
+  deg:update(name, "", "STRING")
+end
+for _, name in ipairs(office) do
+  deg:update(name, "", "STRING")
+end
+deg:update("Scanner Count", "2", "NUMBER")
+for _, name in ipairs(kitchen) do
+  deg:delete(name) -- both proxies are offline when the driver is updated
+end
+for _, name in ipairs(office) do
+  deg:delete(name)
+end
+deg = unreadableSwitch()
+for _, name in ipairs(office) do
+  deg:update(name, "", "STRING") -- the Office proxy reports first
+end
+T.eq("every room's old id is held", H.hiddenIds(), { 1002, 1003, 1004, 1005, 1006, 1007 })
+T.eq("and Office takes new ones", H.visible()[office[1]], 1009)
+
 T.section("without a rename: an id that is only a guess is not held when its name is deleted")
 H.mode(false)
 H.wipe()

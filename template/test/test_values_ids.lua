@@ -669,6 +669,56 @@ for _, mode in ipairs(MODES) do
   H.load("restart")
   T.eq("which a restart keeps", H.visible(), { A = 1001, B = 1003, C = 1004, D = 1005 })
 
+  if not R then
+    T.section(L .. ": an OS whose AddVariable returns no id, with Director unreadable in OnDriverInit")
+    fresh(mode)
+    local realAdd = C4.AddVariable
+    C4.AddVariable = function(self, ...)
+      return (realAdd(self, ...))
+    end
+    local function load(how)
+      H.unreadableDirector()
+      local loaded = H.load(how)
+      H.readableDirector()
+      return loaded
+    end
+    values = load("restart")
+    for _, name in ipairs({ "A", "B", "C" }) do
+      values:update(name, name, "STRING")
+    end
+    values:delete("B")
+    values = load("restart")
+    values = load("update")
+    values:delete("C")
+    values:update("D", "d", "STRING")
+    load("restart")
+    T.eq("no id moves", { H.visible(), H.hiddenIds() }, { { A = 1001, D = 1004 }, { 1002, 1003 } })
+    values = load("update")
+    C4:DeleteVariable(1001) -- behind the library's back, so D's add by name can land below its id
+    C4:DeleteVariable(1004)
+    H.unreadableDirector()
+    values:update("D", "d2", "STRING")
+    values:update("D", "d3", "STRING")
+    H.readableDirector()
+    C4.AddVariable = realAdd
+    T.eq("where Director cannot say, a guess is not addressed by id", Variables.D, "d3")
+
+    values = fresh(mode)
+    for _, name in ipairs({ "A", "B", "C" }) do
+      values:update(name, name, "STRING")
+    end
+    C4.AddVariable = function(self, ...)
+      return (realAdd(self, ...))
+    end
+    H.unreadableDirector() -- from here on, for good
+    values:delete("B")
+    H.load("restart")
+    H.load("restart")
+    H.readableDirector()
+    C4.AddVariable = realAdd
+    T.eq("nor where Director can never say", H.visible(), { A = 1001, C = 1003 })
+  end
+
   T.section(L .. ": programming writes reach the callback")
   values = fresh(mode)
   local seen = {}
