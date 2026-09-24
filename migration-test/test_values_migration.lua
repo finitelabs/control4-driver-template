@@ -950,6 +950,12 @@ local function unreadableSwitch()
   return values
 end
 
+--- The same, still inside OnDriverInit: Director stays unreadable until the caller makes it readable.
+local function unreadableSwitchInInit()
+  H.unreadableDirector()
+  return H.load("update")
+end
+
 T.section("without a rename, Director unreadable at the switch: a name the older build deleted keeps its id")
 H.mode(false)
 H.wipe()
@@ -1076,6 +1082,160 @@ T.eq("E is gone", H.visible(), { A = 1001, C = 1003 })
 T.eq("and nothing is held at the guessed id", H.hiddenIds(), {})
 T.contains("which is logged", table.concat(warnings, "\n"), "not known")
 
+--- v0.9.28's in-load split: A deleted and added back in one load, so restore order (A at 1001) is
+--- not where A is (1004).
+local function splitHistory()
+  local old = H.load("restart", "v0.9.28")
+  old:update("A", "a", "STRING")
+  old:update("B", "b", "STRING")
+  old:update("C", "c", "STRING")
+  old:delete("A")
+  old:update("A", "a", "STRING")
+end
+
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ", Director unreadable at the switch: with no recheck, the first update learns the ids")
+  H.mode(mode.rename)
+  H.wipe()
+  splitHistory()
+  local values = unreadableSwitch()
+  ShimCancelTimers() -- the recheck set in OnDriverInit never runs
+  values:update("B", "b2", "STRING")
+  H.load("restart")
+  T.eq("so a restart keeps A's", H.visible(), { A = 1004, B = 1002, C = 1003 })
+end
+
+T.section("without a rename, Director unreadable: a name added in OnDriverInit on a live name's guess leaves it its id")
+H.mode(false)
+H.wipe()
+splitHistory()
+warnings = {}
+local initAdd = unreadableSwitchInInit()
+initAdd:update("N", "n", "STRING") -- by name at 1001, A's guess
+initAdd:update("B", "b2", "STRING")
+H.readableDirector()
+local unread = 0
+for _, line in ipairs(warnings) do
+  unread = unread + (line:find("GetDeviceVariables failed", 1, true) and 1 or 0)
+end
+T.eq("Director unreadable is logged once in the load", unread, 1)
+ShimFireTimers()
+initAdd:delete("C")
+initAdd:update("M", "m", "STRING")
+H.load("restart")
+T.eq("A keeps its id", H.visible(), { A = 1004, B = 1002, M = 1005, N = 1001 })
+
+for _, how in ipairs({ "the recheck", "the next driver update" }) do
+  T.section("with a rename, Director unreadable at the switch: an orphan's id goes back to its name after " .. how)
+  H.mode(true)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("D", "d", "STRING") -- 1001
+  old:update("X", "x", "STRING") -- 1002
+  old:delete("D")
+  old = H.load("restart", "v0.9.28") -- D(h)=1001
+  old:delete("X") -- both records trimmed; D(h) stays, and restore order puts E there
+  old:update("E", "e", "STRING") -- 1003
+  old:update("B", "b", "STRING") -- 1004
+  old:delete("E")
+  local values = unreadableSwitch()
+  if how == "the recheck" then
+    ShimFireTimers()
+  else
+    values = H.load("update")
+  end
+  values:update("D", "d2", "STRING")
+  values:update("E", "e2", "STRING")
+  T.eq("D is back at its id, E at a new one", H.visible(), { B = 1004, D = 1001, E = 1005 })
+  H.load("restart")
+  T.eq("which a restart keeps", H.visible(), { B = 1004, D = 1001, E = 1005 })
+end
+
+for _, recheck in ipairs({ true, false }) do
+  T.section(
+    "with a rename, Director unreadable at the switch: a deleted name keeps the older build's restore-order id, "
+      .. (recheck and "learned by the recheck" or "learned at the next driver update")
+  )
+  H.mode(true)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  for _, name in ipairs({ "A", "B", "C", "D" }) do
+    old:update(name, name, "STRING")
+  end
+  old:delete("B")
+  old:update("B", "b", "STRING") -- 1005: the stored indexes no longer give C 1003
+  old:delete("C")
+  local values = unreadableSwitch()
+  if recheck then
+    ShimFireTimers()
+  else
+    ShimCancelTimers()
+  end
+  values = H.load("update")
+  values:update("C", "c", "STRING")
+  H.load("restart")
+  T.eq("C comes back where the older build's restart puts it", H.visible(), { A = 1001, B = 1005, C = 1003, D = 1004 })
+end
+
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ": the recheck gives no two records one id")
+  H.mode(mode.rename)
+  H.wipe()
+  local values = H.load("restart")
+  values:update("A", "1", "STRING")
+  values:update("X", "2", "STRING")
+  values:update("B", "3", "STRING")
+  local old = H.load("update", "v0.9.28")
+  old:delete("X")
+  old:update("Y", "y", "STRING") -- v0.9.28 hands X's 1002 to Y
+  values = unreadableSwitch()
+  ShimFireTimers()
+  local at1002 = {}
+  for name, id in pairs(H.recordIds()) do
+    if id == 1002 then
+      table.insert(at1002, name)
+    end
+  end
+  T.eq("1002 is Y's alone", at1002, { "Y" })
+  T.eq("and X's record goes, as a driver update's learning drops it", values:getValue("X"), nil)
+  values:update("X", "x", "STRING")
+  T.eq("so X comes back at a new id", H.visible(), { A = 1001, B = 1003, X = 1004, Y = 1002 })
+end
+
+T.section("with a rename, Director unreadable at the switch: a live name an older build left hidden is shown")
+H.mode(true)
+H.wipe()
+local hid = H.load("restart", "v0.9.28")
+hid:update("A", "1", "STRING")
+hid:update("B", "2", "STRING")
+hid:update("C", "3", "STRING")
+hid:delete("B")
+hid = H.load("restart", "v0.9.28")
+hid:update("B", "3", "STRING") -- written into its hidden placeholder at 1002
+hid = unreadableSwitch()
+ShimFireTimers()
+hid:update("B", "4", "STRING")
+T.eq("at its next update, at its id", { H.visible().B, Variables.B }, { 1002, "4" })
+
+for _, mode in ipairs(MODES) do
+  for _, op in ipairs({ "delete", "reset" }) do
+    T.section(mode.label .. ", Director unreadable at the switch: with no recheck, " .. op .. " learns the ids first")
+    H.mode(mode.rename)
+    H.wipe()
+    splitHistory()
+    local values = unreadableSwitch()
+    ShimCancelTimers()
+    if op == "delete" then
+      values:delete("A")
+    else
+      values:reset()
+    end
+    values:update("N", "n", "STRING")
+    T.check("a new name does not take A's id", H.visible().N ~= 1004, H.snapshot())
+    T.eq("which stays reserved", H.recordIds().A, 1004)
+  end
+end
+
 T.section("with a rename: a variable an older build left hidden is shown at its next update")
 H.mode(true)
 H.wipe()
@@ -1108,11 +1268,20 @@ for id, variable in pairs(C4:GetDeviceVariables(C4:GetDeviceID())) do
     listed[id] = variable
   end
 end
-H.unreadableDirector(listed)
-H.load("update")
-H.readableDirector()
+local asked = 0
+C4.GetDeviceVariables = function()
+  asked = asked + 1
+  return listed
+end
+v = H.load("update")
 T.eq("not A from Director and B from restore order", H.blob().A.unverified, true)
 T.eq("with the same ids", H.recordIds(), { A = 1001, B = 1002 })
+ShimFireTimers()
+for i = 1, 3 do
+  v:update("A", "a" .. i, "STRING")
+end
+H.readableDirector()
+T.eq("such a list is asked for once more, not at every update", asked, 2)
 
 T.section("without a rename, a restart after the switch holds each gap by number")
 H.mode(false)

@@ -15,6 +15,8 @@ require("lib.utils")
 --- @field _unhide table<string, boolean> Live names an older build left hidden, shown again at their next update.
 --- @field _unheld table<integer, boolean> Ids another variable sat on at restore, held once it is gone.
 --- @field _emptyWarned boolean? Whether this load has logged that "" is kept as a plain value.
+--- @field _stale boolean? Ids not yet learned from Director in this load, because it could not be read.
+--- @field _unreadWarned boolean? Whether this load has logged that Director's variables could not be read.
 --- A class representing a collection of named values with optional variable/property support.
 local Values = {}
 Values.__index = Values
@@ -29,7 +31,7 @@ local FIRST_ID = 1001
 --- How many taken ids a new variable skips before giving up.
 local MAX_ID_TRIES = 1000
 
---- How long after restore estimated ids are checked against Director, once OnDriverInit is over.
+--- How long after restore the ids it could not learn are learned, if a timer set in OnDriverInit runs.
 local RECHECK_MS = 1000
 
 --- Name a variable of ours holds while another variable is added at the id its name spells (a "_"
@@ -90,6 +92,15 @@ end
 --- Whether the record is or has been a variable, as opposed to a plain value that never was one.
 local function wasEverVariable(record)
   return record.id ~= nil or record.deleted or record.varType ~= nil
+end
+
+--- Drops each deleted record left with no id: it has nothing to keep.
+local function dropIdless(values)
+  for name, record in pairs(values) do
+    if record.id == nil and not holdsValue(record) then
+      values[name] = nil
+    end
+  end
 end
 
 local function ovcKey(name)
@@ -336,6 +347,7 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
   end
 
   local values = self:_load()
+  self:_recheck(values)
   if values[name] ~= nil and values[name].placeholder then
     -- An id no name owns sits under this key; it stays reserved under another.
     local held = values[name]
@@ -387,6 +399,7 @@ end
 function Values:delete(name)
   log:trace("Values:delete(%s)", name)
   local values = self:_load()
+  self:_recheck(values)
   local record = values[name]
   if record == nil then
     log:debug("Value %s does not exist; ignoring delete", name)
@@ -465,7 +478,7 @@ end
 function Values:restoreValues()
   log:trace("Values:restoreValues()")
   local values = self:_load()
-  self._unhide, self._unheld = {}, {}
+  self._unhide, self._unheld, self._stale = {}, {}, false
   local before = recordSignature(values)
   local restarted, director = self:_regime(values)
 
@@ -483,17 +496,11 @@ function Values:restoreValues()
   if recordSignature(values) ~= before then
     self:_saveValues(values, true)
   end
-  -- Director may be unreadable in OnDriverInit only: estimated ids are checked again once it is over.
-  for _, record in pairs(values) do
-    if record.unverified then
-      delay(RECHECK_MS):next(function()
-        local current = self:_load()
-        if self:_verify(current) then
-          self:_saveValues(current, true)
-        end
-      end)
-      break
-    end
+  -- Director may be unreadable in OnDriverInit only: ids are learned once it is over, or at the first change.
+  if self._stale then
+    delay(RECHECK_MS):next(function()
+      self:_recheck(self:_load())
+    end)
   end
 
   for name, record in pairs(values) do
@@ -511,6 +518,7 @@ end
 function Values:reset()
   log:trace("Values:reset()")
   local values = self:_load()
+  self:_recheck(values)
   local names = {}
   for name in pairs(values) do
     table.insert(names, name)
@@ -593,38 +601,24 @@ function Values:_target(name, record)
   end
 end
 
---- Estimated ids are replaced by the ones Director has for their names, once it can say; an
---- estimate another name turns out to have is dropped.
+--- After a restore that could not read Director, learns every id from it as a driver update does,
+--- once it can say, and writes the result at once.
 --- @private
---- @return boolean? checked True when there were estimates and Director could say.
-function Values:_verify(values)
-  local director
-  for _, record in pairs(values) do
-    if record.unverified then
-      director = self:_directorVariables()
-      break
-    end
+--- @return boolean? learned
+function Values:_recheck(values)
+  if not self._stale then
+    return
   end
+  local director = self:_directorVariables()
   if director == nil then
     return
   end
-  local byName, known = {}, {}
-  for id, variable in pairs(director) do
-    byName[variable.name] = id
+  self._stale = false -- a list that leaves out a name Director shows is not asked for again in this load
+  if not self:_learnIds(values, director, {}) then
+    return
   end
-  for name, record in pairs(values) do
-    if record.unverified and not looksNumeric(name) and byName[name] ~= nil then
-      record.id, record.unverified = byName[name], nil
-    end
-    if record.id ~= nil and not record.unverified then
-      known[record.id] = true
-    end
-  end
-  for _, record in pairs(values) do
-    if record.unverified and known[record.id] then
-      record.id, record.unverified = nil, nil
-    end
-  end
+  dropIdless(values)
+  self:_saveValues(values, true)
   return true
 end
 
@@ -717,7 +711,6 @@ end
 --- so nothing after it moves.
 --- @private
 function Values:_removeVariable(values, name, record, varType)
-  self:_verify(values)
   local target = self:_target(name, record)
   if target ~= nil then
     C4:DeleteVariable(target)
@@ -772,7 +765,6 @@ end
 --- @private
 --- @return integer? left The id it left behind.
 function Values:_leaveBehind(values, name, record, varType)
-  self:_verify(values)
   local id = record.id
   if record.unverified then
     record.id, record.unverified = nil, nil -- only a guess: nothing of ours is known to be there
@@ -855,7 +847,6 @@ function Values:_createRenamed(values, name, record, strValue)
     return false
   end
   local readOnly = not record.writable
-  self:_verify(values)
   local changed = self:_clearName(values, name, record)
   if
     record.id ~= nil
@@ -938,7 +929,6 @@ function Values:_createByName(values, name, record, strValue)
   if self._rejected[name] then
     return false
   end
-  self:_verify(values)
   local changed = self:_clearName(values, name, record)
   for id in pairs(self._unheld) do
     if self:_hold(id) then
@@ -962,7 +952,8 @@ function Values:_createByName(values, name, record, strValue)
     local found = self:_findVariable(looksNumeric(name) and tostring(parsedId(name)) or name)
     id = found and found.id
     if id == nil and record.id ~= nil then
-      id, guessed = record.id, true -- Director cannot say: kept, and checked once it can
+      id, guessed = record.id, true -- Director cannot say: kept, and learned once it can
+      self._stale = true
     end
   end
   if record.id ~= nil and id ~= record.id then
@@ -988,18 +979,22 @@ end
 --- @private
 function Values:_directorVariables()
   local ok, variables = pcall(C4.GetDeviceVariables, C4, C4:GetDeviceID())
+  local out, failure = {}, nil
   if not ok or type(variables) ~= "table" then
-    log:warn("GetDeviceVariables failed: %s", ok and type(variables) or variables)
-    return nil
-  end
-  local out = {}
-  for id, variable in pairs(variables) do
-    if tonumber(id) ~= nil and type(variable) == "table" and variable.name ~= nil then
-      out[tonumber(id)] = {
-        name = tostring(variable.name),
-        hidden = variable.hidden == true or variable.hidden == "True",
-      }
+    out, failure = nil, ok and type(variables) or tostring(variables)
+  else
+    for id, variable in pairs(variables) do
+      if tonumber(id) ~= nil and type(variable) == "table" and variable.name ~= nil then
+        out[tonumber(id)] = {
+          name = tostring(variable.name),
+          hidden = variable.hidden == true or variable.hidden == "True",
+        }
+      end
     end
+  end
+  if out == nil and not self._unreadWarned then
+    log:warn("GetDeviceVariables failed: %s", failure)
+    self._unreadWarned = true
   end
   return out
 end
@@ -1076,7 +1071,8 @@ function Values:_learn(values, restarted, director)
     end
   else
     director = director or self:_directorVariables()
-    if (director == nil or not self:_learnIds(values, director, estimated)) and pending then
+    self._stale = director == nil or not self:_learnIds(values, director, estimated)
+    if self._stale and pending then
       log:warn("Director's variables could not be read; variable ids are taken from restore order")
       local held = {}
       for _, record in pairs(values) do
@@ -1101,12 +1097,7 @@ function Values:_learn(values, restarted, director)
     end
   end
 
-  -- A deleted record left with no id has nothing to keep.
-  for name, record in pairs(values) do
-    if record.id == nil and not holdsValue(record) then
-      values[name] = nil
-    end
-  end
+  dropIdless(values)
 end
 
 --- On a Director restart with no ids recorded, does what the older build's restore did,
@@ -1190,7 +1181,8 @@ function Values:_learnIds(values, director, estimated)
     end
   end
   for _, name in ipairs(names) do
-    local id = estimated[name]
+    local record = values[name]
+    local id = record.unverified and record.id or estimated[name] -- a stored estimate used the older build's order
     if want[name] == nil and id ~= nil and director[id] == nil then
       claim(name, id)
     end

@@ -757,15 +757,17 @@ for _, mode in ipairs(MODES) do
     values:update("D", "d", "STRING")
     load("restart")
     T.eq("no id moves", { H.visible(), H.hiddenIds() }, { { A = 1001, D = 1004 }, { 1002, 1003 } })
-    values = load("update")
+    values = H.load("update") -- Director readable in this restore, not in the adds below
     C4:DeleteVariable(1001) -- behind the library's back, so D's add by name can land below its id
     C4:DeleteVariable(1004)
     H.unreadableDirector()
     values:update("D", "d2", "STRING")
     values:update("D", "d3", "STRING")
     H.readableDirector()
-    C4.AddVariable = realAdd
     T.eq("where Director cannot say, a guess is not addressed by id", Variables.D, "d3")
+    values:update("D", "d4", "STRING")
+    C4.AddVariable = realAdd
+    T.eq("and once it can say, D's id is learned", { H.recordIds().D, H.blob().D.unverified }, { 1001, nil })
 
     values = fresh(mode)
     for _, name in ipairs({ "A", "B", "C" }) do
@@ -782,6 +784,21 @@ for _, mode in ipairs(MODES) do
     C4.AddVariable = realAdd
     T.eq("nor where Director can never say", H.visible(), { A = 1001, C = 1003 })
   end
+
+  T.section(L .. ": a load whose restore read Director asks it nothing on an update")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  values = H.load("update")
+  local asked, realList = 0, C4.GetDeviceVariables
+  C4.GetDeviceVariables = function(...)
+    asked = asked + 1
+    return realList(...)
+  end
+  for i = 1, 3 do
+    values:update("A", tostring(i), "STRING")
+  end
+  C4.GetDeviceVariables = realList
+  T.eq("not GetDeviceVariables", asked, 0)
 
   T.section(L .. ": programming writes reach the callback")
   values = fresh(mode)
