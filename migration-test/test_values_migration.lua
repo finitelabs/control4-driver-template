@@ -1,10 +1,7 @@
--- The first load of this lib/values after a shipped build (test/legacy/, byte-identical copies) keeps
+-- The first load of this lib/values after a shipped build (legacy/, byte-identical copies) keeps
 -- every variable id Director has, after a driver update or a Director restart, and later loads keep it.
 --
--- Run from the driver root:
---   make test
--- or:
---   ./test/run_test.sh test_values_migration.lua
+-- The template's CI copies migration-test/ into a render's test/ and runs it with `make test`.
 
 local T = require("testlib")
 local H = require("values_harness")

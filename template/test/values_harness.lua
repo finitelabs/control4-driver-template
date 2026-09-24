@@ -1,5 +1,5 @@
 -- Driver loads for the lib/values tests: a driver update or a Director restart on the
--- c4_shim Director, then a fresh lib/values (this build or a shipped one) restoring.
+-- c4_shim Director, then a fresh lib/values restoring.
 
 require("c4_shim")
 require("drivers-common-public.global.lib") -- Serialize, Deserialize
@@ -8,24 +8,6 @@ require("drivers-common-public.global.handlers") -- OVC, OnVariableChanged
 local T = require("testlib")
 
 local H = {}
-
-local LEGACY_DIR = debug.getinfo(1, "S").source:match("^@(.*/)") or "./"
-LEGACY_DIR = LEGACY_DIR .. "legacy/"
-
--- Shipped builds, byte-identical to their release blobs (git hash-object prefix given),
--- each with the lib/persist it shipped with.
-H.LEGACY = {
-  -- esphome v20250606..v20251031: new records reuse the lowest free index, no tombstones.
-  F1 = { values = "values-esphome-v20250606", persist = "persist-esphome-v20250714", blob = "db964bfc49" },
-  -- mqtt v20260117..v20260127: tombstones and trimming; every update rewrites the record.
-  F2 = { values = "values-mqtt-v20260117", persist = "persist-mqtt-v20260117", blob = "a7b765c386" },
-  -- template v0.1.0..v0.5.0 (esphome v20260217..v20260512, mqtt v20260217, essentials v20260711).
-  F3 = { values = "values-v0.1.0", persist = "persist-v0.3.0", blob = "25c2c7a2ea" },
-  -- template v0.9.23..v0.9.28: what esphome v20260922 and zigbee3 run.
-  ["v0.9.28"] = { values = "values-v0.9.23", persist = "persist-v0.9.15", blob = "4debefa50c" },
-  -- template v0.9.29, never released: renames deleted plain records to __deleted__N.
-  ["v0.9.29"] = { values = "values-v0.9.29", persist = "persist-v0.9.29", blob = "2d753d3bca" },
-}
 
 --- Every Director call lib/values made in the current load, as "Add name->id", "Add #id(h)->id", ...
 H.calls = {}
@@ -83,20 +65,9 @@ local function thisBuild()
   return require("lib.values")
 end
 
---- A fresh lib/values of a shipped build.
-local function shippedBuild(tag)
-  local build = assert(H.LEGACY[tag], "unknown build " .. tostring(tag))
-  require("lib.utils") -- builds before v0.9.15 relied on the driver having loaded it
-  T.unload("^lib%.persist$", "^lib%.values$")
-  local persist = assert(loadfile(LEGACY_DIR .. build.persist .. ".lua"))()
-  package.loaded["lib.persist"] = persist
-  local values = assert(loadfile(LEGACY_DIR .. build.values .. ".lua"))()
-  package.loaded["lib.values"] = values
-  return values
-end
-
 --- A driver load after `how` ("update" or "restart") of `build` (nil for this build), which
---- restores in OnDriverInit. Returns the build's values module.
+--- restores in OnDriverInit. Returns the build's values module. Shipped builds come from
+--- values_legacy, which only the template's own CI has.
 function H.load(how, build)
   if how == "restart" then
     ShimRestartDirector()
@@ -104,7 +75,7 @@ function H.load(how, build)
     ShimUpdateDriver()
   end
   H.calls = {}
-  local values = build and shippedBuild(build) or thisBuild()
+  local values = build and require("values_legacy").load(build) or thisBuild()
   values:restoreValues()
   -- The docs say DeleteVariable should not be invoked during OnDriverInit.
   if not build and H.called("^Delete") then

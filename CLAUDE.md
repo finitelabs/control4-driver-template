@@ -27,6 +27,13 @@ Every gating defect so far passed a default render and appeared only under a
 non-default one, so when you add an `_exclude` entry, add the leg that exercises
 it — and check that leg is distinct with `diff -r`.
 
+## Tests that stay out of driver repos
+
+`migration-test/` holds byte-identical copies of shipped `lib/values` builds and
+the test that switches from each of them to this one. It sits outside
+`template/`, so no driver repo receives it; the `render` job copies it into the
+render's `test/` before `make test`. To run it locally, copy it the same way.
+
 ## Rendering, and the default that lies
 
 ```bash
