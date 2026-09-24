@@ -711,6 +711,35 @@ for _, mode in ipairs(MODES) do
   end
 end
 
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ': an older build\'s variable named "" goes at its next update, its id kept')
+  H.mode(mode.rename)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("A", "1", "STRING")
+  old:update("", "e", "STRING") -- 1002, named ""
+  old:update("B", "2", "STRING")
+  local raw = blobCopy()
+  local values = H.load("update")
+  T.eq("the switch changes no variable", H.snapshot(), "1001=A, 1002=, 1003=B")
+  values:update("", "e2", "STRING")
+  T.eq("its next update removes it", H.visible(), { A = 1001, B = 1003 })
+  T.eq("and keeps its value", values:getValue("").value, "e2")
+  values:update("N", "n", "STRING")
+  T.eq("its id is not handed out", H.visible().N, 1004)
+  H.load("restart")
+  T.eq("nor after a restart", H.visible(), { A = 1001, B = 1003, N = 1004 })
+
+  ShimRestartDirector()
+  setBlob(raw)
+  values = H.load("restart")
+  T.eq("switched by a restart, its place is held by number", H.snapshot(), "1001=A, 1002=1002(h), 1003=B")
+  values:update("", "e3", "STRING")
+  values:update("N", "n", "STRING")
+  H.load("restart")
+  T.eq("and its id is not handed out", H.visible(), { A = 1001, B = 1003, N = 1004 })
+end
+
 T.section("without a rename: an id that is only a guess is not held when its name is deleted")
 H.mode(false)
 H.wipe()

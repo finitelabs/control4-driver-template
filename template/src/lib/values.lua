@@ -14,6 +14,7 @@ require("lib.utils")
 --- @field _rejected table<string, boolean> Names Director refused to add, or to rename to, in this load.
 --- @field _unhide table<string, boolean> Live names an older build left hidden, shown again at their next update.
 --- @field _unheld table<integer, boolean> Ids another variable sat on at restore, held once it is gone.
+--- @field _emptyWarned boolean? Whether this load has logged that "" is kept as a plain value.
 --- A class representing a collection of named values with optional variable/property support.
 local Values = {}
 Values.__index = Values
@@ -45,12 +46,6 @@ local ASIDE_NAME = "__values_aside__"
 --- Whether this OS can rename a variable, so one can be created at a chosen id (OS 4.0+).
 local function canRename()
   return C4.SetVariableName ~= nil
-end
-
---- Whether a variable of this name can be created at a chosen id. Director keeps one renamed
---- to "" under its number (measured on 4.3.0), so that name is added by name.
-local function renamable(name)
-  return canRename() and name ~= ""
 end
 
 --- Renames a variable, false when Director refuses or raises.
@@ -326,6 +321,14 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
     value = tonumber(value)
   else
     value = tostring(value)
+  end
+  if name == "" and varType ~= nil then
+    -- A rename to "" does not take (4.3.0), so "" could never keep an id: it is never a variable.
+    if not self._emptyWarned then
+      log:warn("A value with an empty name is kept as a plain value, not a variable")
+      self._emptyWarned = true
+    end
+    varType = nil
   end
 
   local values = self:_load()
@@ -722,6 +725,17 @@ function Values:_hold(id, varType)
   return added and true or false
 end
 
+--- Holds the first free id, where a by-name add would land while nothing below has been deleted.
+--- @private
+--- @return integer? id
+function Values:_holdFree()
+  for id = FIRST_ID, FIRST_ID + MAX_ID_TRIES do
+    if self:_hold(id) then
+      return id
+    end
+  end
+end
+
 --- Keeps an id no name owns reserved under a record of its own.
 --- @private
 function Values:_reserve(values, id, avoid)
@@ -800,11 +814,13 @@ function Values:_clearName(values, name, record)
   return owner == nil
 end
 
---- Creates a record's variable: at its id with a rename, else by name.
+--- Creates a record's variable: at its id with a rename, else by name. "" never gets one.
 --- @private
 --- @return boolean changed True when a variable was created or an id or record changed.
 function Values:_createVariable(values, name, record, strValue)
-  if renamable(name) then
+  if name == "" then
+    return false
+  elseif canRename() then
     return self:_createRenamed(values, name, record, strValue)
   end
   return self:_createByName(values, name, record, strValue)
@@ -890,8 +906,7 @@ function Values:_addAt(values, id, name, strValue, varType, readOnly, own)
   return added and true or false
 end
 
---- Adds the variable by name and records the id Director gives it. With a rename (only "")
---- every free id it must not take is held first, so it lands on its own id or on a new one.
+--- Adds the variable by name, without a rename, and records the id Director gives it.
 --- @private
 --- @return boolean changed True when a variable was created or an id or record changed.
 function Values:_createByName(values, name, record, strValue)
@@ -899,10 +914,6 @@ function Values:_createByName(values, name, record, strValue)
     return false
   end
   local changed = self:_clearName(values, name, record)
-  local want = canRename() and not record.unverified and record.id or nil
-  if canRename() then
-    self:_holdFor(values, want)
-  end
   for id in pairs(self._unheld) do
     if self:_hold(id) then
       self._unheld[id] = nil
@@ -924,11 +935,7 @@ function Values:_createByName(values, name, record, strValue)
     local found = self:_findVariable(looksNumeric(name) and tostring(parsedId(name)) or name)
     id = found and found.id
   end
-  if want ~= nil and id ~= want then
-    -- Only after another by-name add of "" in this load; its id stays reserved.
-    log:warn("%s returns at id %s; its id %s stays reserved", name, id, want)
-    self:_reserve(values, want, name)
-  elseif record.id ~= nil and id ~= record.id then
+  if record.id ~= nil and id ~= record.id then
     log:error("Variable %s took id %s, not its id %s", name, id, record.id)
   end
   for other, held in pairs(values) do
@@ -945,27 +952,6 @@ function Values:_createByName(values, name, record, strValue)
   record.id = id
   record.unverified = nil
   return true
-end
-
---- Before a by-name add with a rename: each free recorded id other than `want`, and each free
---- id below `want`, is held by a hidden variable, so the add cannot land on them.
---- @private
-function Values:_holdFor(values, want)
-  local director = self:_directorVariables()
-  local ids = {}
-  for _, record in pairs(values) do
-    if record.id ~= nil and record.id ~= want then
-      ids[record.id] = true
-    end
-  end
-  for id = FIRST_ID, (want or FIRST_ID) - 1 do
-    ids[id] = true
-  end
-  for id in pairs(ids) do
-    if director == nil or director[id] == nil then
-      self:_hold(id)
-    end
-  end
 end
 
 --- This device's variables from Director as id -> { name, hidden }, or nil if it cannot say.
@@ -1076,7 +1062,11 @@ function Values:_restoreAsOlderBuild(values, estimated, rows)
   for _, row in ipairs(rows) do
     local name, record = row.name, row.record
     local ok, added, id
-    if record.deleted then
+    if name == "" then
+      -- The older build added it by name, at the first free id; this build holds that id instead.
+      ok, id = true, self:_holdFree()
+      added = id ~= nil
+    elseif record.deleted then
       ok, added, id = pcall(C4.AddVariable, C4, name, "", record.varType or "STRING", true, true)
     else
       local strValue = variableString(record.value)
@@ -1184,7 +1174,6 @@ function Values:_learnIds(values, director, estimated)
       elseif
         variable.name ~= name
         and variable.name == tostring(record.id)
-        and renamable(name)
         and not rename(record.id, name)
       then
         log:error("Variable %s could not be named %s", record.id, name) -- a numeric name stored under its id
@@ -1219,20 +1208,14 @@ function Values:_learnIds(values, director, estimated)
   return true
 end
 
---- Restore with a rename: each variable Director lacks is added at its id and named. "" is
---- added last, by name, so the ids it holds below its own are none a variable needs.
+--- Restore with a rename: each variable Director lacks is added at its id and named.
 --- @private
 function Values:_restoreRenamed(values)
-  local names, last = {}, nil
+  local names = {}
   for name, record in pairs(values) do
-    if isLive(record) and renamable(name) then
+    if isLive(record) then
       table.insert(names, name)
-    elseif isLive(record) then
-      last = name
     end
-  end
-  if last ~= nil then
-    table.insert(names, last)
   end
   for _, name in ipairs(names) do
     self:_restoreOne(values, name)

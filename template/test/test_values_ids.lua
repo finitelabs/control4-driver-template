@@ -519,19 +519,71 @@ for _, mode in ipairs(MODES) do
     end
   end
 
-  T.section(L .. ": an empty name")
+  T.section(L .. ": an empty name is never a variable")
   values = fresh(mode)
+  local asked, realAdd, realRename = 0, C4.AddVariable, C4.SetVariableName
+  C4.AddVariable = function(self, identifier, ...)
+    asked = asked + (identifier == "" and 1 or 0)
+    return realAdd(self, identifier, ...)
+  end
+  if R then
+    C4.SetVariableName = function(self, id, name)
+      asked = asked + (name == "" and 1 or 0)
+      return realRename(self, id, name)
+    end
+  end
+  values:update("A", "1", "STRING")
+  warnings = {}
+  for i = 1, 3 do
+    values:update("", "e" .. i, "STRING")
+  end
+  values:update("B", "2", "STRING")
+  T.eq("it takes no id", H.snapshot(), "1001=A, 1002=B")
+  T.eq("its value is kept as a plain value", { values:getValue("").value, values:getValue("").varType }, { "e3" })
+  T.eq("which is logged once in a load", #warnings, 1)
+  values = H.load("update")
+  values:update("", true, "BOOL", function() end)
+  T.eq("and once in the next", #warnings, 2)
+  T.eq("converted as its type says", values:getValue("").value, true)
+  values:delete("")
+  values:update("", "back", "STRING")
+  values = H.load("restart")
+  values:update("", "again", "STRING")
+  values:reset()
+  values:update("", "after reset", "STRING")
+  T.eq("no record of it has an id", H.recordIds()[""], nil)
   values:update("A", "1", "STRING")
   values:update("B", "2", "STRING")
-  values:delete("A")
-  values:update("", "e", "STRING")
-  T.eq("is the variable's name in Director", H.variables()[1003].name, "")
-  holds("it takes an id nobody had", { B = 1002, [""] = 1003 }, not R and { 1001 } or nil)
-  values:delete("")
-  values = H.load("update")
-  values:update("", "back", "STRING")
-  holds("and comes back", { B = 1002, [""] = R and 1003 or 1004 }, not R and { 1001, 1003 } or nil)
-  T.eq("with its value", Variables[""], "back")
+  holds("the others keep their ids", R and { A = 1001, B = 1002 } or { A = 1003, B = 1004 }, none or { 1001, 1002 })
+  C4.AddVariable, C4.SetVariableName = realAdd, realRename
+  T.eq("and Director is never asked for a variable of that name", asked, 0)
+
+  -- The same device with and without "", each with a name Director reads as an id: identical.
+  local layouts = {}
+  for _, withEmpty in ipairs({ false, true }) do
+    values = fresh(mode)
+    for _, name in ipairs({ "A", "B", "C" }) do
+      values:update(name, name, "STRING")
+    end
+    values:delete("C")
+    values:update("1003", "n", "STRING")
+    if withEmpty then
+      values:update("", "e", "STRING")
+    end
+    values = H.load("restart")
+    if withEmpty then
+      values:update("", "e2", "STRING")
+    end
+    values:update("C", "c", "STRING")
+    values = H.load("update")
+    values:update("D", "d", "STRING")
+    H.load("restart")
+    table.insert(layouts, H.snapshot())
+  end
+  T.eq('beside a numeric name, "" changes no id', layouts[2], layouts[1])
+  if R then
+    T.eq("C keeps its id and 1003 its own", H.visible(), { A = 1001, B = 1002, C = 1003, ["1003"] = 1004, D = 1005 })
+  end
 
   T.section(L .. ": a plain value keeps its value when another variable takes its old id")
   values = fresh(mode)
