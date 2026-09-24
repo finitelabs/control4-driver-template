@@ -1066,7 +1066,7 @@ end
 function ShimUpdateDriver()
   next_variable_id = 1001
   for _, meta in pairs(variables_by_id) do
-    if meta.key ~= meta.name then
+    if meta.key ~= nil and meta.key ~= meta.name then
       Variables[meta.key], meta.key = nil, nil -- renamed to "": no Variables key reaches it now
     end
   end

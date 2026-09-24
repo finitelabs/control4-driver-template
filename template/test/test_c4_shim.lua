@@ -368,6 +368,7 @@ T.eq('though Variables[""] holds its value in that load', { Variables[""], Varia
 T.eq('so a by-name add of "" is refused', C4:AddVariable("", "e", "STRING"), false)
 ShimUpdateDriver()
 T.eq("and after a driver update no key reaches it", { Variables[""], Variables["1061"] }, {})
+T.check("nor after a second one", pcall(ShimUpdateDriver) and Variables[""] == nil)
 T.eq("while it keeps its id", C4:AddVariable(1061, "", "STRING"), false)
 C4:DeleteVariable(1061)
 T.eq('a by-name add of "" is named ""', { C4:AddVariable("", "e", "STRING") }, { true, 1001 })
