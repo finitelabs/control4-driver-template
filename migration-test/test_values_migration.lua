@@ -769,6 +769,21 @@ for _, older in ipairs({ "v0.9.28", "F3" }) do
   T.eq("which a restart keeps", H.visible(), { B = 1005, E = 1002, F = 1003 })
 end
 
+T.section("without a rename: a deleted name's id is held when an older build left its name at another id")
+H.mode(false)
+H.wipe()
+local walked = H.load("restart")
+walked:update("C", "c", "STRING") -- 1001
+walked:update("A", "a", "STRING") -- 1002
+walked:update("E", "e", "STRING") -- 1003
+walked:delete("E") -- 1003 held
+H.load("update", "v0.9.28"):update("C", "{}") -- the older build makes C plain
+H.load("restart", "v0.9.28") -- A=1001, E(h)=1002
+walked = H.load("update")
+T.eq("1003 is held", H.called("^Add #1003%(h%)%->1003$"), true)
+walked:update("N", "n", "STRING")
+T.eq("so a new name does not take it", { H.visible().N, H.recordIds().E }, { 1004, 1003 })
+
 T.section("without a rename: an id that is only a guess is not held when its name is deleted")
 H.mode(false)
 H.wipe()

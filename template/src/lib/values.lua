@@ -1253,7 +1253,11 @@ function Values:_restoreByName(values, restarted)
         self:_hold(id) -- it could not be added: held, so no later variable takes its id
       end
     elseif record ~= nil or restarted then
-      local held = Variables[tostring(id)] ~= nil or (record ~= nil and Variables[name] ~= nil)
+      local held = Variables[tostring(id)] ~= nil
+      if not held and record ~= nil and Variables[name] ~= nil then
+        local found = self:_findVariable(name) -- an older build may have left the name at another id
+        held = found == nil or found.id == id
+      end
       if not held and not self:_hold(id, record and record.varType) then
         log:warn("Variable id %s%s is taken by another variable", id, name and (" of " .. name) or "")
         self._unheld[id] = true
