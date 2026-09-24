@@ -84,6 +84,9 @@ local SCALARS = {
   { -math.huge, "-1e+9999", kept = -2 ^ 63 },
   { true, "true" },
   { false, "false" },
+  -- 14 significant digits carry these, though 15 or 16 would write other bytes.
+  { 9.9999999999999, "9.9999999999999" },
+  { 6.1355248047754e+14, "6.1355248047754e+14" },
   -- JSON:encode would keep 14 significant digits of these.
   { 187723572702975, "187723572702975" },
   { 2 ^ 53, "9007199254740992" },
