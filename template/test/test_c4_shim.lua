@@ -359,10 +359,24 @@ end
 ShimWriteVariable(1010, "w")
 T.eq("a write from programming names the variable as renamed", fired, "Named Ten")
 OnVariableChanged = realOnVariableChanged
+ShimRestartDirector()
+-- Measured on 4.3.0 (2026-09-24): a rename to "" does not take.
+C4:AddVariable(1061, "x", "STRING")
+T.eq('a rename to "" returns true', C4:SetVariableName(1061, ""), true)
+T.eq("but Director keeps its number as its name", variableField("1061", "name"), "1061")
+T.eq('though Variables[""] holds its value in that load', { Variables[""], Variables["1061"] }, { "x" })
+T.eq('so a by-name add of "" is refused', C4:AddVariable("", "e", "STRING"), false)
+ShimUpdateDriver()
+T.eq("and after a driver update no key reaches it", { Variables[""], Variables["1061"] }, {})
+T.eq("while it keeps its id", C4:AddVariable(1061, "", "STRING"), false)
+C4:DeleteVariable(1061)
+T.eq('a by-name add of "" is named ""', { C4:AddVariable("", "e", "STRING") }, { true, 1001 })
+ShimUpdateDriver()
+T.eq("and keeps its key across a driver update", Variables[""], "e")
 ShimVariableRename(false)
-T.eq("an OS before 4.0 has no SetVariableName", C4.SetVariableName, nil)
+T.eq("switched off, as on an OS without it (3.x unmeasured)", C4.SetVariableName, nil)
 ShimVariableRename(true)
-T.eq("and 4.0 on has it", type(C4.SetVariableName), "function")
+T.eq("and on again", type(C4.SetVariableName), "function")
 ShimRestartDirector()
 
 --------------------------------------------------------------------------------

@@ -918,9 +918,9 @@ local var_type_codes = {
 -- or after a counter that starts at 1001 in each driver load and never goes back in it.
 local next_variable_id = 1001
 
---- Each variable by id, and each id by name. The value lives in Variables under the
---- variable's current name, so a SetVariable needs no bookkeeping here.
---- @type table<integer, { name: string, type: string, readonly: string, hidden: string }>
+--- Each variable by id, and each id by name. The value lives in Variables under `key`, the
+--- variable's current name except after a rename to "", so a SetVariable needs no bookkeeping here.
+--- @type table<integer, { name: string, key: string?, type: string, readonly: string, hidden: string }>
 local variables_by_id = {}
 --- @type table<string, integer>
 local variable_ids = {}
@@ -947,15 +947,13 @@ local function numeric_identifier(identifier)
   return n >= 0 and math.floor(n) or math.ceil(n)
 end
 
--- The id and current name a Set/Delete identifier reaches, if any variable.
+-- The id and variable a Set/Delete identifier reaches, if any.
 local function resolve_variable(identifier)
   local id = numeric_identifier(identifier)
-  if id ~= nil then
-    local meta = variables_by_id[id]
-    return meta and id, meta and meta.name
+  if id == nil then
+    id = variable_ids[tostring(identifier)]
   end
-  local name = tostring(identifier)
-  return variable_ids[name], name
+  return id, id ~= nil and variables_by_id[id] or nil
 end
 
 -- Checks run in the controller's order: the value, then that varType is a
@@ -998,6 +996,7 @@ function C4:AddVariable(identifier, value, varType, readOnly, hidden)
   variable_ids[name] = id
   variables_by_id[id] = {
     name = name,
+    key = name,
     type = tostring(var_type_codes[varType]),
     readonly = readOnly == true and "True" or "False",
     hidden = hidden == true and "True" or "False",
@@ -1013,23 +1012,23 @@ function C4:SetVariable(identifier, value)
     error("strValue should be a string", 2)
   end
   -- A numeric-looking name reaches the id it spells, not a variable renamed to it.
-  local _, name = resolve_variable(identifier)
+  local _, meta = resolve_variable(identifier)
 
   -- Never added: silently does nothing, and does not create it
-  if name == nil or Variables[name] == nil then
+  if meta == nil or meta.key == nil or Variables[meta.key] == nil then
     return
   end
 
-  Variables[name] = strValue
+  Variables[meta.key] = strValue
 end
 
 function C4:DeleteVariable(identifier)
-  local id, name = resolve_variable(identifier)
-  if name ~= nil then
-    Variables[name] = nil
-    variable_ids[name] = nil
-  end
-  if id ~= nil then
+  local id, meta = resolve_variable(identifier)
+  if meta ~= nil then
+    if meta.key ~= nil then
+      Variables[meta.key] = nil
+    end
+    variable_ids[meta.name] = nil
     variables_by_id[id] = nil
   end
 end
@@ -1042,14 +1041,22 @@ local function set_variable_name(_, id, name)
   if meta == nil or Variables[name] ~= nil or variable_ids[name] ~= nil then
     return false
   end
-  Variables[name], Variables[meta.name] = Variables[meta.name], nil
+  local value = meta.key ~= nil and Variables[meta.key] or ""
+  if meta.key ~= nil then
+    Variables[meta.key] = nil
+  end
+  Variables[name], meta.key = value, name
+  if name == "" then
+    -- Measured: true, but Director keeps the number as its name, and the key "" lasts only this load.
+    return true
+  end
   variable_ids[meta.name], variable_ids[name] = nil, id
   meta.name = name
   return true
 end
 C4.SetVariableName = set_variable_name
 
---- Harness: whether C4.SetVariableName exists, as on OS 4.0 and later (the default).
+--- Harness: whether C4.SetVariableName exists (the default), as it does from OS 4.0.0 at least.
 function ShimVariableRename(enabled)
   C4.SetVariableName = enabled and set_variable_name or nil
 end
@@ -1058,12 +1065,19 @@ end
 --- starts again at 1001, so it fills the gaps a delete left.
 function ShimUpdateDriver()
   next_variable_id = 1001
+  for _, meta in pairs(variables_by_id) do
+    if meta.key ~= meta.name then
+      Variables[meta.key], meta.key = nil, nil -- renamed to "": no Variables key reaches it now
+    end
+  end
 end
 
 --- Harness: a Director restart or controller boot. No driver variable survives it.
 function ShimRestartDirector()
   for _, meta in pairs(variables_by_id) do
-    Variables[meta.name] = nil
+    if meta.key ~= nil then
+      Variables[meta.key] = nil
+    end
   end
   variables_by_id, variable_ids = {}, {}
   next_variable_id = 1001
@@ -1073,12 +1087,12 @@ end
 --- OnVariableChanged with the variable's current name.
 function ShimWriteVariable(id, value)
   local meta = variables_by_id[id]
-  if meta == nil then
+  if meta == nil or meta.key == nil then
     return
   end
-  Variables[meta.name] = tostring(value)
+  Variables[meta.key] = tostring(value)
   if type(OnVariableChanged) == "function" then
-    OnVariableChanged(meta.name)
+    OnVariableChanged(meta.key)
   end
 end
 
@@ -1228,7 +1242,7 @@ function C4:GetDeviceVariables(deviceId)
       variables[tostring(id)] = {
         name = meta.name,
         description = "",
-        value = Variables[meta.name],
+        value = meta.key ~= nil and Variables[meta.key] or nil,
         type = meta.type,
         readonly = meta.readonly,
         hidden = meta.hidden,
