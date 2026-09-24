@@ -1358,6 +1358,29 @@ spelled:update("0042", "back", "STRING") -- "42" is the name of 1002 now
 H.readableDirector()
 T.eq("while another variable is named by that id", H.visible(), { A = 1001, ["0042"] = 42, ["42"] = 1002 })
 
+for _, mode in ipairs(MODES) do
+  for _, build in ipairs({ "F3", "v0.9.28" }) do
+    T.section(mode.label .. ": " .. build .. "'s deleted variable written again with nil keeps its id")
+    H.mode(mode.rename)
+    H.wipe()
+    local old = H.load("restart", build)
+    old:update("A", "1", "STRING")
+    old:update("B", "2", "NUMBER")
+    old:update("C", "3", "STRING")
+    old:delete("B")
+    old:update("B", nil, "NUMBER") -- H15: shown again at 1004, its record still deleted
+    H.load("update", build)
+    H.load("update")
+    H.load("restart")
+    T.eq("a restart before its next write", H.visible(), { A = 1001, B = 1004, C = 1003 })
+    local values = H.load("update")
+    values:update("B", "7", "NUMBER")
+    T.eq("its next write", H.visible(), { A = 1001, B = 1004, C = 1003 })
+    H.load("restart")
+    T.eq("and a restart", H.visible(), { A = 1001, B = 1004, C = 1003 })
+  end
+end
+
 T.section("with a rename: a variable an older build left hidden is shown at its next update")
 H.mode(true)
 H.wipe()

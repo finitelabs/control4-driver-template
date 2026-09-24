@@ -1224,6 +1224,9 @@ function Values:_learnIds(values, director, estimated)
       record.deleted = record.id ~= nil or nil -- a plain value is stored deleted while it keeps an id
     end
     local variable = record.id and director[record.id]
+    if record.deleted and record.varType ~= nil and variable and not variable.hidden and variable.name == name then
+      record.deleted = nil -- an older build deleted it, then wrote it again: Director shows it
+    end
     if
       variable ~= nil
       and not variable.hidden
