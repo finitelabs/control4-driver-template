@@ -41,10 +41,10 @@ http.get = function(_, url)
   end
   return deferred.new():resolve({ body = bodies[url] })
 end
-local realFileWrite = FileWrite
-FileWrite = function(name, ...)
-  table.insert(writes, name)
-  return realFileWrite(name, ...)
+local realFileWrite = C4.FileWrite
+C4.FileWrite = function(self, fh, ...)
+  table.insert(writes, C4:FileGetName(fh))
+  return realFileWrite(self, fh, ...)
 end
 log.warn = function(_, format, ...)
   table.insert(warnings, string.format(format, ...))

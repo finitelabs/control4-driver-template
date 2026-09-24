@@ -72,6 +72,50 @@ local function unsupportedReason(asset, requirement)
   )
 end
 
+--- C4:FileOpen returns -1 for a file it cannot open or create.
+--- @param fh any What C4:FileOpen returned.
+--- @return boolean
+local function isHandle(fh)
+  return type(fh) == "number" and fh >= 0
+end
+
+--- Read a whole file in the current directory.
+--- @param name string
+--- @return string|nil contents The contents, or nil when the file cannot be read in full.
+local function readFile(name)
+  local fh = C4:FileOpen(name)
+  if not isHandle(fh) then
+    return nil
+  end
+  local size = C4:FileGetSize(fh)
+  C4:FileSetPos(fh, 0)
+  local contents = type(size) == "number" and size > 0 and C4:FileRead(fh, size) or ""
+  C4:FileClose(fh)
+  if type(contents) ~= "string" or #contents ~= size then
+    return nil
+  end
+  return contents
+end
+
+--- Replace a file in the current directory. The vendored FileWrite returns nothing, so a
+--- failed write through it cannot be seen.
+--- @param name string
+--- @param contents string
+--- @return boolean ok True only when the file reads back as contents.
+local function writeFile(name, contents)
+  -- FileOpen never truncates, so the old file has to go or a shorter body keeps its tail.
+  if C4:FileExists(name) then
+    C4:FileDelete(name)
+  end
+  local fh = C4:FileOpen(name)
+  if not isHandle(fh) then
+    return false
+  end
+  C4:FileWrite(fh, #contents, contents)
+  C4:FileClose(fh)
+  return readFile(name) == contents
+end
+
 --- Create a new instance of GitHubUpdater.
 --- @return GitHubUpdater updater A new GitHubUpdater instance.
 function GitHubUpdater:new()
@@ -163,7 +207,8 @@ function GitHubUpdater:getOutdatedDriverAssets(repo, driverFilenames, includePre
 end
 
 --- Download outdated driver assets from GitHub and write them to the specified directory.
---- Writes nothing when any asset requires a newer C4 OS than this controller runs.
+--- Writes nothing when any asset requires a newer C4 OS than this controller runs, and puts
+--- every file back when one of them fails to write.
 --- @param dir string Target directory to save downloaded driver assets.
 --- @param repo string The GitHub repository, in the format "owner/repo".
 --- @param driverFilenames string[] List of driver filenames to update.
@@ -225,27 +270,52 @@ function GitHubUpdater:downloadOutdatedDrivers(dir, repo, driverFilenames, inclu
         end
       end
 
-      local written, errors = {}, {}
+      -- GetDriverVersion only unlocks C4Z_ROOT for companion drivers, so a project running
+      -- one driver from this repo reaches the write with the alias still locked.
+      UnlockC4ZRoot()
+      C4:FileSetDir(dir)
+
+      -- Every current file is read before any write, so a failed write can put them all back.
+      local previous = {}
       for i, download in ipairs(downloaded) do
         local name = download.asset.name
-        -- GetDriverVersion only unlocks C4Z_ROOT for companion drivers, so a project running
-        -- one driver from this repo reaches the write with the alias still locked.
-        UnlockC4ZRoot()
-        C4:FileSetDir(dir)
-        local currentContents = C4:FileExists(name) and FileRead(name) or nil
-        if FileWrite(name, download.body, true) == -1 then
-          -- Restore the previous contents if the write failed
-          if currentContents ~= nil then
-            FileWrite(name, currentContents, true)
+        if C4:FileExists(name) then
+          previous[i] = readFile(name)
+          if previous[i] == nil then
+            return reject(string.format("cannot read the current %s; no driver was written", name))
           end
-          errors[i] = string.format("failed to download asset %s", name)
-        else
-          log:info("Downloaded asset %s (%d bytes)", name, string.len(download.body))
-          table.insert(written, name)
         end
       end
-      if not IsEmpty(errors) then
-        return reject(errors)
+
+      local written = {}
+      for i, download in ipairs(downloaded) do
+        local name = download.asset.name
+        if not writeFile(name, download.body) then
+          local unrestored = {}
+          for j = i, 1, -1 do
+            local priorName = downloaded[j].asset.name
+            local restored
+            if previous[j] ~= nil then
+              restored = writeFile(priorName, previous[j])
+            else
+              if C4:FileExists(priorName) then
+                C4:FileDelete(priorName)
+              end
+              restored = not C4:FileExists(priorName)
+            end
+            if not restored then
+              table.insert(unrestored, priorName)
+            end
+          end
+          if not IsEmpty(unrestored) then
+            return reject(
+              string.format("failed to write %s and could not restore %s", name, table.concat(unrestored, ", "))
+            )
+          end
+          return reject(string.format("failed to write %s; the installed driver files are unchanged", name))
+        end
+        log:info("Downloaded asset %s (%d bytes)", name, string.len(download.body))
+        table.insert(written, name)
       end
       return written
     end)

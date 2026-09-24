@@ -24,6 +24,7 @@ _exclude:
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_alias.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_self_last.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_min_os.lua{% endif %}"
+  - "{% if 'oss' not in distributions.split() %}test/test_github_updater_write.lua{% endif %}"
 
 project_name:
   type: str
