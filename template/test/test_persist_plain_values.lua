@@ -5,8 +5,9 @@
 -- Every shipped build (template v0.1.0 to v0.9.29, and the esphome and mqtt copies
 -- before the template) wrote PersistSetValue(key, Serialize(value), encrypted): a
 -- table as base64 of its JSON, anything else raw. C4:Base64Decode returns "" for a raw
--- string with a space, comma, dot or dash, and JSON:decode("") returns nil, so their
--- Deserialize read such a string as nil and the caller got its default.
+-- string under four characters, or with a character outside the alphabet in one of its
+-- whole groups of four, and JSON:decode("") returns nil, so their Deserialize read such
+-- a string as nil and the caller got its default.
 --
 -- Run from the driver root:
 --   make test
@@ -190,6 +191,7 @@ for i, case in ipairs(SCALARS) do
 end
 legacySet("LTbl", tbl, false)
 legacySet("LEnc", "Living Room", true)
+legacySet("LUtf", "Zürich", false)
 q = reload()
 for i, case in ipairs(SCALARS) do
   local got, kept = q:get("LN" .. i, "<default>"), case.kept or case[1]
@@ -197,11 +199,24 @@ for i, case in ipairs(SCALARS) do
 end
 T.eq("a table", q:get("LTbl"), tbl)
 T.eq("an encrypted string", q:get("LEnc", nil, true), "Living Room")
+T.eq("a UTF-8 string", q:get("LUtf"), "Zürich")
 
 T.section("an older build's NaN reads as the default, as it did")
 legacySet("LNan", 0 / 0, false)
 T.eq("the default", reload():get("LNan", "<default>"), "<default>")
 T.eq("  where a shipped build read nothing", legacyGet("LNan", false), nil)
+-- Only Director's exact text: an older build's string that merely looks like it reads back.
+for i, text in ipairs({ "a:null", '{":number:":0}', '{":number:":null} ' }) do
+  legacySet("LNull" .. i, text, false)
+  T.eq(label(text), reload():get("LNull" .. i, "<default>"), text)
+end
+
+T.section("an older build's raw string with a control byte reads as the default, as it did")
+for i, text in ipairs({ "a\tb", "on\noff", "\1ab" }) do
+  legacySet("LCtl" .. i, text, false)
+  T.eq(label(text), reload():get("LCtl" .. i, "<default>"), "<default>")
+  T.eq("  where a shipped build read nothing", legacyGet("LCtl" .. i, false), nil)
+end
 
 T.section("an older build's raw string in which Deserialize finds base64 of JSON reads as that JSON, as it always did")
 for _, case in ipairs({
@@ -229,6 +244,21 @@ T.eq("and storage still holds the raw string", C4:PersistGetValue("Old", false),
 q:set("Old", "Kitchen")
 T.eq("a set stores the new form", C4:PersistGetValue("Old", false), encoded("Kitchen"))
 
+T.section("a key written plain and read encrypted reads as the default, as it did")
+-- The controller answers with the stored value base64-decoded and deciphered: bytes, not text.
+local FLIPPED = { { name = "Ann" }, "123456", "low", "", 42, true }
+for i, value in ipairs(FLIPPED) do
+  p:set("F" .. i, value)
+  legacySet("LF" .. i, value, false)
+end
+q = reload()
+for i, value in ipairs(FLIPPED) do
+  T.eq(label(value), q:get("F" .. i, "<default>", true), "<default>")
+  T.eq("  as a shipped build read it", legacyGet("F" .. i, true), nil)
+  T.eq("  and an older build's value too", q:get("LF" .. i, "<default>", true), "<default>")
+  T.eq("  as a shipped build read that", legacyGet("LF" .. i, true), nil)
+end
+
 T.section("a read under the other encrypted flag does not overwrite the value")
 p:set("Code", "1 2 3 4", true)
 q = reload()
@@ -238,9 +268,12 @@ T.eq("so an encrypted read still has it", reload():get("Code", nil, true), "1 2 
 
 -- ── Values JSON cannot carry ─────────────────────────────────────────────────
 
-T.section("a NaN or a string that is not UTF-8 is logged and not stored")
+T.section("a NaN or a string that is not UTF-8 is logged, and its key deleted")
 local NAN = 0 / 0
-for _, case in ipairs({ { "Nan", NAN }, { "Bytes", "\255\254\1" }, { "Lone", "a\128b" }, { "Cut", "caf\195" } }) do
+-- A shipped build read "abcd\200" back: C4:Base64Decode drops the partial group holding its bad byte.
+local UNSTORABLE =
+  { { "Nan", NAN }, { "Bytes", "\255\254\1" }, { "Lone", "a\128b" }, { "Cut", "caf\195" }, { "Tail", "abcd\200" } }
+for _, case in ipairs(UNSTORABLE) do
   errors = {}
   p:set(case[1], "earlier")
   p:set(case[1], case[2])

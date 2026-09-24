@@ -43,11 +43,16 @@
 --- Every value is stored as base64 of its JSON, so a string, number or boolean reads
 --- back as itself after a reload; a number on its own is written in as many digits as
 --- that takes. A table is stored as `Serialize` writes it, its numbers kept to 14
---- significant digits as before. Builds before this one stored a scalar raw. Such a raw
---- string reads back as that string unless `Deserialize` finds base64 of JSON in it, and
---- then as that JSON, as every shipped build read it; the key takes the new form at its
---- next `set()`. A value JSON cannot carry (a NaN, or a string that is not UTF-8 text) is
---- logged and not stored.
+--- significant digits as before. A NaN, or a string that is not UTF-8 text, set on its
+--- own is logged and its key deleted.
+---
+--- Builds before this one stored a scalar raw and read every value through `Deserialize`.
+--- A value `Deserialize` reads is that value, as it was for them, so a raw string in which
+--- it finds base64 of JSON reads as that JSON. A raw string it reads as nothing is
+--- returned as it is when it is UTF-8 text with no control bytes. Anything else it reads
+--- as nothing is absent, as it was for them: an empty string, the text Director hands
+--- back for an older build's NaN, and the bytes a read under the other encrypted flag
+--- returns. The key takes the new form at its next `set()`.
 
 local log = require("lib.logging")
 
@@ -81,6 +86,18 @@ local migrationsLoaded = false
 --- What Director (measured on 4.3.0) hands back for a NaN an older build stored raw.
 local STORED_NAN = '{":number:":null}'
 
+--- Whether JSON carries a string unchanged.
+--- @param text string The string.
+--- @return boolean carried
+local function jsonCarries(text)
+  if not text:find("[\128-\255]") then
+    return true
+  end
+  -- JSON:decode rejects bytes that are not UTF-8.
+  local ok, decoded = pcall(JSON.decode, JSON, JSON:encode(text))
+  return ok and decoded == text
+end
+
 --- A finite number as JSON in the fewest significant digits, from 14, that read back exactly.
 --- @param value number The number.
 --- @return string json The JSON text.
@@ -110,26 +127,32 @@ local function encode(value)
   else
     json = JSON:encode(value)
   end
-  if type(value) == "string" and value:find("[\128-\255]") then
-    -- JSON:decode rejects bytes that are not UTF-8, so such a string would not read back.
-    local ok, decoded = pcall(JSON.decode, JSON, json)
-    if not ok or decoded ~= value then
-      return nil
-    end
+  if type(value) == "string" and not jsonCarries(value) then
+    return nil
   end
   return C4:Base64Encode(json)
+end
+
+--- Whether a stored value that `Deserialize` reads as nothing can be an older build's raw string.
+--- @param stored any What PersistGetValue returned.
+--- @return boolean raw
+local function isRawString(stored)
+  -- A read under the other encrypted flag returns deciphered bytes, and Director never stores "".
+  return type(stored) == "string"
+    and stored ~= ""
+    and stored ~= STORED_NAN
+    and not stored:find("[%z\1-\31\127]")
+    and jsonCarries(stored)
 end
 
 --- Decodes a stored value.
 --- @param stored any What PersistGetValue returned.
 --- @return any value The value, or nil if there is none.
 local function decode(stored)
-  if stored == STORED_NAN then
-    return nil
-  end
   local value = Deserialize(stored)
-  if value == nil then
-    -- An older build's raw string: C4:Base64Decode gives "" for one with a space, comma or dot.
+  if value == nil and isRawString(stored) then
+    -- C4:Base64Decode gives "" for a string under four characters, or with a character outside
+    -- the alphabet in one of its whole groups of four.
     return stored
   end
   return value
