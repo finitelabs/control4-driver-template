@@ -1379,8 +1379,8 @@ function ShimFireTimers()
   end
 end
 
---- Harness, not a controller API: a new driver load. Director drops every timer the old
---- load set, so none of them fires into the new one.
+--- Harness, not a controller API: a new driver load. Assumed, not measured: a load starts a new
+--- Lua state, so no timer the old load set fires into it.
 function ShimCancelTimers()
   for id, timer in pairs(timers) do
     timer.cancelled = true
