@@ -132,4 +132,86 @@ function F.captureTcpClient()
   return capture
 end
 
+--- @param n integer
+--- @param bytes integer
+--- @return string
+local function littleEndian(n, bytes)
+  local out = {}
+  for i = 1, bytes do
+    out[i] = string.char(n % 256)
+    n = math.floor(n / 256)
+  end
+  return table.concat(out)
+end
+
+--- A zip archive laid out as the driver packager writes one, with every file stored
+--- uncompressed. CRCs are left zero: lib.zip does not read them.
+--- @param files { [1]: string, [2]: string }[] Ordered { name, contents } pairs.
+--- @return string
+function F.zip(files)
+  local body, central = {}, {}
+  local offset = 0
+  for _, file in ipairs(files) do
+    local name, contents = file[1], file[2]
+    local sizes = littleEndian(0, 4) .. littleEndian(#contents, 4) .. littleEndian(#contents, 4)
+    local header = "PK\3\4" .. littleEndian(20, 2) .. littleEndian(0, 8) .. sizes .. littleEndian(#name, 2)
+    header = header .. littleEndian(0, 2) .. name
+    table.insert(body, header .. contents)
+    table.insert(
+      central,
+      "PK\1\2"
+        .. littleEndian(20, 2)
+        .. littleEndian(20, 2)
+        .. littleEndian(0, 8)
+        .. sizes
+        .. littleEndian(#name, 2)
+        .. littleEndian(0, 12)
+        .. littleEndian(offset, 4)
+        .. name
+    )
+    offset = offset + #header + #contents
+  end
+  local directory = table.concat(central)
+  local count = littleEndian(#files, 2)
+  local tail = "PK\5\6" .. littleEndian(0, 4) .. count .. count .. littleEndian(#directory, 4)
+  return table.concat(body) .. directory .. tail .. littleEndian(offset, 4) .. littleEndian(0, 2)
+end
+
+--- The driver.xml inside F.packagedC4z().
+F.PACKAGED_DRIVER_XML = [[
+<?xml version="1.0"?>
+<devicedata>
+  <copyright>Copyright 2026 Example Labs</copyright>
+  <creator>Example Labs</creator>
+  <manufacturer>Example Labs</manufacturer>
+  <name>Example Device</name>
+  <model>Example Device</model>
+  <created>09/24/2026 09:00 AM</created>
+  <modified>09/24/2026 09:00 AM</modified>
+  <version>20261001</version>
+  <control>lua_gen</control>
+  <controlmethod>IP</controlmethod>
+  <driver>DriverWorks</driver>
+  <minimum_os_version>4.99.0</minimum_os_version>
+</devicedata>
+]]
+
+--- A .c4z written by Python's zipfile with ZIP_DEFLATED, as the driver packager writes
+--- one: driver.xml (F.PACKAGED_DRIVER_XML), driver.lua ("-- driver\n" x 20) and
+--- www/documentation/index.html ("<html></html>"), all deflated.
+--- @return string
+function F.packagedC4z()
+  return C4:Base64Decode(table.concat({
+    "UEsDBBQAAAAIADRKOF2AgU4W8wAAAPYBAAAKAAAAZHJpdmVyLnhtbHWRX2vDIBTF3/MppB8gmlAGGc4y1j0MWtjbHoOLt63MP8WY",
+    "0n77qjFZ17In5ZzfvR6OdHXWCp3A9dKal0VVksWKFVTASXYguOesQIh29nhxcn/w7G26oZrUT+j9zPVRAdrw757iXywNOeDeOnbH",
+    "ZDUSmpthxzs/OLjH/liRNVzDzKxTPIqTmDZZAerBHtU5CwhGGlwvcYpOmmdC0Os2RwpmXiR38j9ydiOaS2ORqQipKJ6UsTLjnVVM",
+    "Dbzdg4nljMKNqcEfrGAfn7OblcgIJ8M+tk7Hl3U/oZWspaDSSD3o1vbt9OyybJqShJSPVhFmb770ClBLAwQUAAAACAA0SjhdzZX6",
+    "1g8AAADIAAAACgAAAGRyaXZlci5sdWHT1VVIKcosSy3i0h3SLABQSwMEFAAAAAgANEo4XR+HG2ALAAAADQAAABwAAAB3d3cvZG9j",
+    "dW1lbnRhdGlvbi9pbmRleC5odG1ss8koyc2xs9EHUwBQSwECFAMUAAAACAA0SjhdgIFOFvMAAAD2AQAACgAAAAAAAAAAAAAAgAEA",
+    "AAAAZHJpdmVyLnhtbFBLAQIUAxQAAAAIADRKOF3NlfrWDwAAAMgAAAAKAAAAAAAAAAAAAACAARsBAABkcml2ZXIubHVhUEsBAhQD",
+    "FAAAAAgANEo4XR+HG2ALAAAADQAAABwAAAAAAAAAAAAAAIABUgEAAHd3dy9kb2N1bWVudGF0aW9uL2luZGV4Lmh0bWxQSwUGAAAA",
+    "AAMAAwC6AAAAlwEAAAAA",
+  }))
+end
+
 return F
