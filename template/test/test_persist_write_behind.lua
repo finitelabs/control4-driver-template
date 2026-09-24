@@ -153,15 +153,6 @@ end, "boom")
 p:set("Hot", { n = 2 })
 T.eq("and the scope is closed after it", calls, { "set Hot" })
 
-T.section("setWriteBehind(key, nil) restores write-through and flushes")
-p = newPersist()
-p:setWriteBehind("Hot", 60000)
-p:defer(p.set, p, "Hot", { n = 1 })
-p:setWriteBehind("Hot", nil)
-T.eq("the pending write goes out", calls, { "set Hot" })
-p:defer(p.set, p, "Hot", { n = 2 })
-T.eq("and a later set inside defer writes at once", calls, { "set Hot", "set Hot" })
-
 -- ── lib/values.lua ───────────────────────────────────────────────────────────
 
 T.section("values: an update waits unless it adds or removes a variable")

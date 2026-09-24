@@ -274,8 +274,8 @@ end
 
 --- Opts the values in to write-behind (see lib.persist): an update made inside
 --- `persist:defer()` reaches storage at most once per `ms`, unless it adds or
---- removes a variable. A nil or non-positive `ms` restores write-through.
---- @param ms number? The flush interval in milliseconds.
+--- removes a variable.
+--- @param ms number The flush interval in milliseconds.
 --- @return void
 function Values:setWriteBehind(ms)
   log:trace("Values:setWriteBehind(%s)", ms)

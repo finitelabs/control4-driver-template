@@ -176,18 +176,13 @@ function Persist:set(key, value, encrypted)
 end
 
 --- Opts a key in to write-behind: its sets made inside `defer()` reach storage at
---- most once per `ms`. A nil or non-positive `ms` restores write-through and flushes.
+--- most once per `ms`.
 --- @param key string The key.
---- @param ms number? The flush interval in milliseconds.
+--- @param ms number The flush interval in milliseconds.
 --- @return void
 function Persist:setWriteBehind(key, ms)
   log:trace("Persist:setWriteBehind(%s, %s)", key, ms)
-  if ms ~= nil and ms > 0 then
-    self._writeBehind[key] = ms
-  else
-    self._writeBehind[key] = nil
-    self:flush(key)
-  end
+  self._writeBehind[key] = ms
 end
 
 --- Closes a `defer()` scope, then returns or rethrows what pcall gave it.
