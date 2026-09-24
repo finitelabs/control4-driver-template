@@ -1054,7 +1054,7 @@ function Values:_learn(values, restarted, director)
   local estimated, rows = olderBuildIds(values)
   if restarted then
     if pending and not anyId then
-      self:_restoreAsOlderBuild(values, estimated, rows)
+      self:_restoreAsOlderBuild(rows)
     end
     -- A record an older build wrote has no id: it takes the one that build's restart gives it, if free.
     for _, row in ipairs(rows) do
@@ -1112,7 +1112,7 @@ end
 --- On a Director restart with no ids recorded, does what the older build's restore did,
 --- and records the id each variable gets.
 --- @private
-function Values:_restoreAsOlderBuild(values, estimated, rows)
+function Values:_restoreAsOlderBuild(rows)
   for _, row in ipairs(rows) do
     local name, record = row.name, row.record
     local ok, added, id
@@ -1129,7 +1129,7 @@ function Values:_restoreAsOlderBuild(values, estimated, rows)
     if not ok then
       log:error("Restoring variable %s failed: %s", name, added)
     elseif added then
-      record.id = id or estimated[name]
+      record.id = id -- where Director cannot say, the restore-order id is given below
     end
   end
 end
