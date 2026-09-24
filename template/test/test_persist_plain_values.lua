@@ -1,6 +1,6 @@
 -- lib/persist.lua stores every value as base64 of its JSON, so a plain string, a
--- number or a boolean reads back as itself after a driver update or a Director
--- restart, and still reads what earlier builds stored.
+-- number or a boolean reads back as itself after a driver update, and still reads
+-- what earlier builds stored.
 --
 -- Every shipped build (template v0.1.0 to v0.9.29, and the esphome and mqtt copies
 -- before the template) wrote PersistSetValue(key, Serialize(value), encrypted): a
@@ -41,9 +41,12 @@ local function encoded(value)
   return C4:Base64Encode(JSON:encode(value))
 end
 
--- A value for a test name, a string quoted with its control and high bytes escaped.
+-- A value for a test name: a string quoted with its control and high bytes escaped, a
+-- number in full.
 local function label(value)
-  if type(value) ~= "string" then
+  if type(value) == "number" then
+    return string.format("%.17g", value)
+  elseif type(value) ~= "string" then
     return T.show(value)
   end
   return '"' .. value:gsub("[%z\1-\31\127-\255]", function(c)
@@ -67,7 +70,25 @@ local STRINGS = {
   { "true" },
 }
 
-local SCALARS = { 12.5, 66568, 0, -3, 1e300, math.huge, -math.huge, true, false }
+-- Each with the JSON it is stored as.
+local SCALARS = {
+  { 12.5, "12.5" },
+  { 66568, "66568" },
+  { 0, "0" },
+  { -3, "-3" },
+  { 100, "100" },
+  { 1e300, "1e+300" },
+  { math.huge, "1e+9999" },
+  { -math.huge, "-1e+9999" },
+  { true, "true" },
+  { false, "false" },
+  -- JSON:encode would keep 14 significant digits of these.
+  { 187723572702975, "187723572702975" },
+  { 2 ^ 53, "9007199254740992" },
+  { 1727190000123456, "1727190000123456" },
+  { 0.1 + 0.2, "0.30000000000000004" },
+  { math.pi, "3.141592653589793" },
+}
 
 -- ── What this build writes ───────────────────────────────────────────────────
 
@@ -82,16 +103,34 @@ for i, case in ipairs(STRINGS) do
   T.eq("  stored as base64 of its JSON", C4:PersistGetValue("S" .. i, false), encoded(case[1]))
 end
 
-T.section("numbers and booleans keep their type")
-for i, value in ipairs(SCALARS) do
-  p:set("N" .. i, value)
+T.section("numbers and booleans keep their type and every digit")
+for i, case in ipairs(SCALARS) do
+  p:set("N" .. i, case[1])
 end
 q = reload()
-for i, value in ipairs(SCALARS) do
+for i, case in ipairs(SCALARS) do
   local got = q:get("N" .. i, "<default>")
-  T.eq(tostring(value), got, value)
-  T.eq("  as a " .. type(value), type(got), type(value))
+  T.check(label(case[1]), got == case[1], "got " .. label(got))
+  T.eq("  as a " .. type(case[1]), type(got), type(case[1]))
+  T.eq("  stored as base64 of " .. case[2], C4:PersistGetValue("N" .. i, false), C4:Base64Encode(case[2]))
 end
+
+T.section("a number is written with a period where the locale writes a comma")
+-- What a comma locale does to these, as global.lib's tonumber_expect_comma reads it.
+local format, tonumberNative = string.format, tonumber
+string.format = function(fmt, ...)
+  local text = format(fmt, ...)
+  return fmt:find("^%%%.%d+g$") and (text:gsub("%.", ",")) or text
+end
+tonumber = function(text, base)
+  return tonumberNative(type(text) == "string" and (text:gsub(",", ".")) or text, base)
+end
+p:set("Comma1", 12.5)
+p:set("Comma2", 0.1 + 0.2)
+string.format, tonumber = format, tonumberNative
+T.eq("12.5", C4:PersistGetValue("Comma1", false), C4:Base64Encode("12.5"))
+T.eq("0.1 + 0.2", C4:PersistGetValue("Comma2", false), C4:Base64Encode("0.30000000000000004"))
+T.check("  which reads back", reload():get("Comma2") == 0.1 + 0.2)
 
 T.section("a table is stored exactly as Serialize writes it")
 local tbl = { name = "Living Room", ids = { 65542, 67330 }, on = true }
@@ -120,8 +159,9 @@ T.section("a shipped build reads every value this build writes")
 for i, case in ipairs(STRINGS) do
   T.eq(label(case[1]), legacyGet("S" .. i, false), case[1])
 end
-for i, value in ipairs(SCALARS) do
-  T.eq(tostring(value), legacyGet("N" .. i, false), value)
+for i, case in ipairs(SCALARS) do
+  local got = legacyGet("N" .. i, false)
+  T.check(label(case[1]), got == case[1], "got " .. label(got))
 end
 T.eq("the table", legacyGet("Tbl", false), tbl)
 T.eq("an encrypted string", legacyGet("E1", true), "Living Room")
@@ -144,29 +184,35 @@ for i, case in ipairs(STRINGS) do
 end
 
 T.section("an older build's numbers, booleans, tables and encrypted strings read back")
-for i, value in ipairs(SCALARS) do
-  legacySet("LN" .. i, value, false)
+for i, case in ipairs(SCALARS) do
+  legacySet("LN" .. i, case[1], false)
 end
 legacySet("LTbl", tbl, false)
 legacySet("LEnc", "Living Room", true)
 q = reload()
-for i, value in ipairs(SCALARS) do
-  T.eq(tostring(value), q:get("LN" .. i, "<default>"), value)
+for i, case in ipairs(SCALARS) do
+  local got = q:get("LN" .. i, "<default>")
+  T.check(label(case[1]), got == case[1], "got " .. label(got))
 end
 T.eq("a table", q:get("LTbl"), tbl)
 T.eq("an encrypted string", q:get("LEnc", nil, true), "Living Room")
 
--- A Director restart hands raw scalars back as text; there is no telling them apart.
-PersistSetValue("LRestart", "true", false)
-T.eq("a boolean an older build stored comes back from a restart as text", reload():get("LRestart"), "true")
+T.section("an older build's NaN reads as the default, as it did")
+-- Measured on 4.3.0: Director hands back a NaN stored raw as this text.
+PersistSetValue("LNan", '{":number:":null}', false)
+T.eq("the default", reload():get("LNan", "<default>"), "<default>")
+T.eq("  where a shipped build read nothing", legacyGet("LNan", false), nil)
 
-T.section("an older build's raw string that is base64 of JSON reads as that JSON, as it always did")
+T.section("an older build's raw string in which Deserialize finds base64 of JSON reads as that JSON, as it always did")
 for _, case in ipairs({
   { "MTIz", 123 },
   { "dHJ1ZQ==", true },
   { "ZmFsc2U=", false },
   { "e30=", {} },
   { "IkxpdmluZyBSb29tIg==", "Living Room" },
+  -- C4:Base64Decode drops a trailing partial group, whatever it holds.
+  { "MTIz!", 123 },
+  { "MTIzYQ", 123 },
 }) do
   PersistSetValue("LJ", case[1], false)
   T.eq(case[1], reload():get("LJ", "<default>"), case[2])

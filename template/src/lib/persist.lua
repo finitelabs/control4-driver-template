@@ -40,11 +40,14 @@
 ---
 --- ## Storage format
 ---
---- Every value is stored as base64 of its JSON, which for a table is what `Serialize`
---- writes, so a string, number or boolean reads back as itself after a reload. Builds
---- before this one stored those raw; a raw string still reads back as that string, and
---- the key takes the new form at its next `set()`. A value JSON cannot carry (a NaN, or
---- a string that is not UTF-8 text) is logged and not stored.
+--- Every value is stored as base64 of its JSON, so a string, number or boolean reads
+--- back as itself after a reload; a number on its own is written in as many digits as
+--- that takes. A table is stored as `Serialize` writes it, its numbers kept to 14
+--- significant digits as before. Builds before this one stored a scalar raw. Such a raw
+--- string reads back as that string unless `Deserialize` finds base64 of JSON in it, and
+--- then as that JSON, as every shipped build read it; the key takes the new form at its
+--- next `set()`. A value JSON cannot carry (a NaN, or a string that is not UTF-8 text) is
+--- logged and not stored.
 
 local log = require("lib.logging")
 
@@ -75,6 +78,24 @@ local MIGRATIONS = {}
 --- @type boolean
 local migrationsLoaded = false
 
+--- What Director (measured on 4.3.0) hands back for a NaN an older build stored raw.
+local STORED_NAN = '{":number:":null}'
+
+--- A finite number as JSON in the fewest significant digits, from 14, that read back exactly.
+--- @param value number The number.
+--- @return string json The JSON text.
+local function numberJson(value)
+  local text
+  for digits = 14, 17 do
+    text = string.format("%." .. digits .. "g", value)
+    if tonumber(text) == value then
+      break
+    end
+  end
+  -- JSON wants a period whatever the locale, as JSON:encode writes it.
+  return (text:gsub(",", "."))
+end
+
 --- Encodes a value for storage as base64 of its JSON.
 --- @param value any The value.
 --- @return string|nil stored The stored form, or nil for a NaN or a string that is not UTF-8 text.
@@ -82,7 +103,13 @@ local function encode(value)
   if value ~= value then
     return nil
   end
-  local json = JSON:encode(value)
+  local json
+  if type(value) == "number" and value > -math.huge and value < math.huge then
+    -- JSON:encode keeps 14 significant digits, and an older build stored the number exactly.
+    json = numberJson(value)
+  else
+    json = JSON:encode(value)
+  end
   if type(value) == "string" and value:find("[\128-\255]") then
     -- JSON:decode rejects bytes that are not UTF-8, so such a string would not read back.
     local ok, decoded = pcall(JSON.decode, JSON, json)
@@ -97,6 +124,9 @@ end
 --- @param stored any What PersistGetValue returned.
 --- @return any value The value, or nil if there is none.
 local function decode(stored)
+  if stored == STORED_NAN then
+    return nil
+  end
   local value = Deserialize(stored)
   if value == nil then
     -- An older build's raw string: C4:Base64Decode gives "" for one with a space, comma or dot.
