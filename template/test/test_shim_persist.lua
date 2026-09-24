@@ -46,15 +46,39 @@ C4:PersistSetValue("EncOver", "y", true)
 C4:PersistSetValue("EncOver", "", true)
 T.eq("encrypted, over a value", C4:PersistGetValue("EncOver", true), "y")
 
-T.section("a read under the other encrypted flag returns ciphertext, not nil")
-C4:PersistSetValue("Secret", "secret", true)
-local plain = C4:PersistGetValue("Secret", false)
-T.neq("an encrypted value read plain", plain, "secret")
-T.eq("is base64 as long as the value's", #plain, #C4:Base64Encode("secret"))
-T.eq("and the encrypted read still has it", C4:PersistGetValue("Secret", true), "secret")
-C4:PersistSetValue("Plain", "plain", false)
-local deciphered = C4:PersistGetValue("Plain", true)
-T.neq("a plain value read encrypted", deciphered, "plain")
-T.eq("is the value base64-decoded, then deciphered", #deciphered, #C4:Base64Decode("plain"))
+T.section("a read under the other encrypted flag returns the value run through the cipher, or nothing")
+local function hex(s)
+  return (s:gsub("..", function(x)
+    return string.char(tonumber(x, 16))
+  end))
+end
+local A20 = string.rep("A", 20)
+local A20_CIPHER = hex("016bbbc10d876bb33e1ffa6f91d167f390c21f70")
+C4:PersistSetValue("Secret", A20, true)
+C4:PersistSetValue("Zero", "0", true)
+T.eq(
+  "an encrypted value read plain is base64 of its ciphertext",
+  C4:PersistGetValue("Secret", false),
+  C4:Base64Encode(A20_CIPHER)
+)
+T.eq('  "0"', C4:PersistGetValue("Zero", false), "cA==")
+T.eq("  and the encrypted read still has it", C4:PersistGetValue("Secret", true), A20)
+for _, case in ipairs({
+  { C4:Base64Encode(A20), A20_CIPHER },
+  { C4:Base64Encode(string.rep("A", 40)), A20_CIPHER .. hex("5bae7d7fbf93c1c9206e6acfbc7c2e004f40d510") },
+  { C4:Base64Encode("0"), "p" },
+  { C4:Base64Encode("7"), "w" },
+  { C4:Base64Encode('"123456"'), hex("621bc8b378f31cd0") },
+  { C4:Base64Encode("@abc"), hex("004b98e3") },
+  { "hello", hex("c5c39f") },
+  { "123456", hex("974702") },
+}) do
+  C4:PersistSetValue("Plain", case[1], false)
+  T.eq("a plain " .. case[1] .. " read encrypted", C4:PersistGetValue("Plain", true), case[2])
+end
+for _, value in ipairs({ "Living Room", "Den", "101", 42, true }) do
+  C4:PersistSetValue("Plain", value, false)
+  T.eq("a plain " .. tostring(value) .. " read encrypted is nothing", select("#", C4:PersistGetValue("Plain", true)), 0)
+end
 
 T.finish()

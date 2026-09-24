@@ -1321,17 +1321,27 @@ end
 -- encrypted flag; here it is false.
 local persist_store = {}
 
--- Stands in for the controller's length-keeping cipher, whose output is bytes, not text.
+-- The controller's cipher XORs a fixed keystream; its first 40 bytes as measured on 4.3.0, repeated.
+local PERSIST_KEYSTREAM = "402afa804cc62af27f5ebb2ed09026b2d1835e311aef3c3efed28088612f2b8efd3d6f410e019451"
+
 local function persist_cipher(data)
-  return (
-    data:reverse():gsub(".", function(c)
-      local b = c:byte()
-      return string.char(b < 128 and b + 128 or b - 128)
-    end)
-  )
+  local out = {}
+  for i = 1, #data do
+    local k = (i - 1) % (#PERSIST_KEYSTREAM / 2) * 2 + 1
+    local a, b, x, bit = data:byte(i), tonumber(PERSIST_KEYSTREAM:sub(k, k + 1), 16), 0, 1
+    for _ = 1, 8 do
+      if a % 2 ~= b % 2 then
+        x = x + bit
+      end
+      a, b, bit = math.floor(a / 2), math.floor(b / 2), bit * 2
+    end
+    out[i] = string.char(x)
+  end
+  return table.concat(out)
 end
 
--- A read under the other flag returns the ciphertext, or the value base64-decoded and deciphered.
+-- Under the other flag, an encrypted value reads as base64 of its ciphertext, and a plain one as
+-- its base64 deciphered, or nothing if it is not a string or decodes to nothing.
 function C4:PersistGetValue(key, encrypted)
   local entry = persist_store[key]
   if entry == nil or entry.encrypted == (encrypted == true) then
@@ -1339,7 +1349,10 @@ function C4:PersistGetValue(key, encrypted)
   elseif entry.encrypted then
     return base64_encode_impl(persist_cipher(tostring(entry.value)))
   end
-  return persist_cipher(base64_decode_impl(tostring(entry.value)))
+  local decoded = type(entry.value) == "string" and base64_decode_impl(entry.value) or ""
+  if decoded ~= "" then
+    return persist_cipher(decoded)
+  end
 end
 
 function C4:PersistSetValue(key, value, encrypted)

@@ -247,20 +247,60 @@ T.eq("and storage still holds the raw string", C4:PersistGetValue("Old", false),
 q:set("Old", "Kitchen")
 T.eq("a set stores the new form", C4:PersistGetValue("Old", false), encoded("Kitchen"))
 
-T.section("a key written plain and read encrypted reads as the default, as it did")
--- The controller answers with the stored value base64-decoded and deciphered: bytes, not text.
-local FLIPPED = { { name = "Ann" }, "123456", "low", "", 42, true }
-for i, value in ipairs(FLIPPED) do
+T.section("a key this build stored plain, read encrypted, reads its value")
+-- Director answers with the stored base64 deciphered, not nil, so global.lib never reads it plain.
+local MOVED = { { name = "Ann" }, "123456", "low", "", 42, true, 0, 7 }
+for i, value in ipairs(MOVED) do
   p:set("F" .. i, value)
-  legacySet("LF" .. i, value, false)
 end
 q = reload()
-for i, value in ipairs(FLIPPED) do
-  T.eq(label(value), q:get("F" .. i, "<default>", true), "<default>")
-  T.eq("  as a shipped build read it", legacyGet("F" .. i, true), nil)
-  T.eq("  and an older build's value too", q:get("LF" .. i, "<default>", true), "<default>")
-  T.eq("  as a shipped build read that", legacyGet("LF" .. i, true), nil)
+for i, value in ipairs(MOVED) do
+  T.eq(label(value), q:get("F" .. i, "<default>", true), value)
+  T.eq("  where a shipped build read nothing", legacyGet("F" .. i, true), nil)
+  T.eq("  and storage still holds it plain", C4:PersistGetValue("F" .. i, false), encoded(value))
 end
+
+T.section("a key an older build stored plain, read encrypted, reads as a shipped build read it, or better")
+-- Director answers "low", 42 and true with nothing, so global.lib reads them plain and stores them
+-- encrypted; the others it deciphers.
+for i, case in ipairs({
+  { "low", shipped = "<default>", here = "low" },
+  { 42, shipped = 42, here = 42 },
+  { true, shipped = true, here = true },
+  { tbl, shipped = "<default>", here = tbl },
+  { "123456", shipped = "<default>", here = "<default>" },
+  { "hello", shipped = "<default>", here = "<default>" },
+}) do
+  legacySet("LFs" .. i, case[1], false)
+  legacySet("LFh" .. i, case[1], false)
+  local shipped = legacyGet("LFs" .. i, true)
+  T.eq(label(case[1]) .. ": a shipped build", shipped == nil and "<default>" or shipped, case.shipped)
+  T.eq("  this build", reload():get("LFh" .. i, "<default>", true), case.here)
+end
+
+T.section("an older build's encrypted string that Deserialize reads as nothing reads back")
+for i, text in ipairs({ "Living Room", "Den", "101" }) do
+  legacySet("LE" .. i, text, true)
+  T.eq(label(text), reload():get("LE" .. i, "<default>", true), text)
+end
+-- Both reads of an encrypted "p" match those of a plain 0 read encrypted ("p", and "MA==" plain),
+-- so this build's own form wins; every shipped build read "p" as nothing.
+legacySet("LEp", "p", true)
+T.eq('"p" reads as 0', reload():get("LEp", "<default>", true), 0)
+
+T.section("the plain read is asked only for an encrypted read that came back unreadable")
+local reads, realGet = 0, C4.PersistGetValue
+C4.PersistGetValue = function(self, ...)
+  reads = reads + 1
+  return realGet(self, ...)
+end
+legacySet("OneRead", "Living Room", false)
+reload():get("OneRead")
+T.eq("a plain read of an older build's raw string reads once", reads, 1)
+reads = 0
+reload():get("NoKey", nil, true)
+T.eq("an encrypted read of a missing key reads twice, as global.lib does", reads, 2)
+C4.PersistGetValue = realGet
 
 T.section("a read under the other encrypted flag does not overwrite the value")
 p:set("Code", "1 2 3 4", true)

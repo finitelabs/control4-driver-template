@@ -49,10 +49,15 @@
 --- Builds before this one stored a scalar raw and read every value through `Deserialize`.
 --- A value `Deserialize` reads is that value, as it was for them, so a raw string in which
 --- it finds base64 of JSON reads as that JSON. A raw string it reads as nothing is
---- returned as it is when it is UTF-8 text with no control bytes. Anything else it reads
---- as nothing is absent, as it was for them: an empty string, the text Director hands
---- back for an older build's NaN, and the bytes a read under the other encrypted flag
---- returns. The key takes the new form at its next `set()`.
+--- returned as it is when it is UTF-8 text with no control bytes; anything else it reads
+--- as nothing, such as the text Director hands back for an older build's NaN, is absent.
+---
+--- Read encrypted, a key stored plain comes back from Director deciphered: as bytes, or as
+--- nothing when its base64 decodes to nothing, and only nothing makes global.lib read it
+--- plain and store it encrypted. So when the bytes read as nothing and the plain read
+--- holds a value in this build's form, that value is returned. Beyond that fallback, a
+--- read does not rewrite an older value; the key takes the new form, and flag, at its
+--- next `set()`.
 
 local log = require("lib.logging")
 
@@ -137,25 +142,34 @@ end
 --- @param stored any What PersistGetValue returned.
 --- @return boolean raw
 local function isRawString(stored)
-  -- A read under the other encrypted flag returns deciphered bytes, and Director never stores "".
-  return type(stored) == "string"
-    and stored ~= ""
-    and stored ~= STORED_NAN
-    and not stored:find("[%z\1-\31\127]")
-    and jsonCarries(stored)
+  -- Deciphered bytes, from a key stored plain and read encrypted, are rarely text.
+  return type(stored) == "string" and stored ~= STORED_NAN and not stored:find("[%z\1-\31\127]") and jsonCarries(stored)
 end
 
---- Decodes a stored value.
---- @param stored any What PersistGetValue returned.
+--- Reads a key's value from storage.
+--- @param key string The key.
+--- @param encrypted boolean? Whether the value is encrypted.
 --- @return any value The value, or nil if there is none.
-local function decode(stored)
+local function readStored(key, encrypted)
+  local stored = PersistGetValue(key, encrypted)
   local value = Deserialize(stored)
-  if value == nil and isRawString(stored) then
+  if value ~= nil then
+    return value
+  end
+  if encrypted and stored ~= nil then
+    -- Maybe a key stored plain, whose deciphered bytes kept global.lib from reading it plain.
+    local plain = PersistGetValue(key, false)
+    local inPlain = Deserialize(plain)
+    if inPlain ~= nil and inPlain ~= plain then
+      return inPlain
+    end
+  end
+  if isRawString(stored) then
     -- C4:Base64Decode gives "" for a string under four characters, or with a character outside
     -- the alphabet in one of its whole groups of four.
     return stored
   end
-  return value
+  return nil
 end
 
 --- Creates a new instance of the Persist class.
@@ -223,7 +237,7 @@ function Persist:_get(key, default, encrypted)
   local value = self._persist[key]
 
   if value == nil then
-    value = decode(PersistGetValue(key, encrypted))
+    value = readStored(key, encrypted)
     if value == nil then
       value = default
     end
