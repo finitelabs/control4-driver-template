@@ -1126,11 +1126,12 @@ function Values:_learnIds(values, director, estimated)
       owner[id], want[name] = name, id
     end
   end
-  -- Where Director shows a live record's name now, then a record's recorded id while no other
-  -- record is shown there, then where Director shows the rest, then the id restore order gives.
+  -- Where Director shows a live record's name visible now, then a record's recorded id while no
+  -- other record is shown there, then where Director shows the rest, then the id restore order gives.
   for _, name in ipairs(names) do
-    if isLive(values[name]) then
-      claim(name, shown(name))
+    local id = shown(name)
+    if isLive(values[name]) and id ~= nil and not director[id].hidden then
+      claim(name, id)
     end
   end
   for _, name in ipairs(names) do

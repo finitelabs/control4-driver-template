@@ -796,6 +796,25 @@ for _, mode in ipairs(MODES) do
     T.eq("each comes back where Director had it", H.visible(), want)
   end
 
+  T.section(mode.label .. ": a recorded id beats the id of a hidden variable an older build wrote into")
+  H.mode(mode.rename)
+  H.wipe()
+  values = H.load("restart")
+  for _, name in ipairs({ "C", "A", "D", "F" }) do
+    values:update(name, name, "STRING") -- 1001 to 1004
+  end
+  values:delete("A")
+  values:delete("D")
+  H.load("update", "v0.9.28"):update("C", "{}") -- the older build makes C plain
+  H.load("restart", "v0.9.28"):update("D", "d2", "STRING") -- A(h)=1001, D(h)=1002 holding D's value, F=1003
+  values = H.load("update")
+  T.eq("A keeps its id", H.recordIds().A, 1002)
+  values:update("D", "d3", "STRING")
+  values:update("A", "a", "STRING")
+  H.load("restart")
+  -- Without a rename a returning name takes a new id; D took 1005 just before.
+  T.eq("and comes back at it", H.visible().A, mode.rename and 1002 or 1006)
+
   T.section(mode.label .. ": after a restart, live records with no free id of their own get new ones in index order")
   H.mode(mode.rename)
   H.wipe()
