@@ -526,27 +526,31 @@ function C4:FileOpen(name)
   return lastFileHandle
 end
 
--- A handle whose file was deleted acts closed; the controller's behaviour there is unmeasured.
-local function openFile(fh)
-  local file = openFiles[fh]
-  if file == nil or ShimFiles(file.dir)[file.name] == nil then
-    return nil
+-- Measured: a handle keeps its file after FileDelete, apart from a new file of that name.
+local function contents(file)
+  return file.detached or ShimFiles(file.dir)[file.name] or ""
+end
+
+local function setContents(file, data)
+  if file.detached then
+    file.detached = data
+  else
+    ShimFiles(file.dir)[file.name] = data
   end
-  return file
 end
 
 function C4:FileGetName(fh)
-  local file = openFile(fh)
+  local file = openFiles[fh]
   return file and file.name or ""
 end
 
 function C4:FileGetSize(fh)
-  local file = openFile(fh)
-  return file and #ShimFiles(file.dir)[file.name] or -1
+  local file = openFiles[fh]
+  return file and #contents(file) or -1
 end
 
 function C4:FileSetPos(fh, pos)
-  local file = openFile(fh)
+  local file = openFiles[fh]
   if file == nil then
     return false
   end
@@ -555,11 +559,11 @@ function C4:FileSetPos(fh, pos)
 end
 
 function C4:FileRead(fh, count)
-  local file = openFile(fh)
+  local file = openFiles[fh]
   if file == nil then
     return ""
   end
-  local data = ShimFiles(file.dir)[file.name]:sub(file.pos + 1, file.pos + count)
+  local data = contents(file):sub(file.pos + 1, file.pos + count)
   file.pos = file.pos + #data
   return data
 end
@@ -567,15 +571,14 @@ end
 -- Writes at the position, over what is there. A count of 0 is -1 on the controller, and a
 -- count past the end of data writes whatever memory follows it, NULs here.
 function C4:FileWrite(fh, count, data)
-  local file = openFile(fh)
+  local file = openFiles[fh]
   if file == nil or count <= 0 then
     return -1
   end
   local chunk = data:sub(1, count) .. string.rep("\0", count - #data)
-  local dir = ShimFiles(file.dir)
-  local old = dir[file.name]
+  local old = contents(file)
   local gap = string.rep("\0", file.pos - #old)
-  dir[file.name] = old:sub(1, file.pos) .. gap .. chunk .. old:sub(file.pos + count + 1)
+  setContents(file, old:sub(1, file.pos) .. gap .. chunk .. old:sub(file.pos + count + 1))
   file.pos = file.pos + count
   return count
 end
@@ -597,11 +600,21 @@ function C4:FileGetOpenedHandles()
   return next(handles) and handles or nil
 end
 
-function C4:FileDelete(name)
+function C4:FileDelete(name, subpath)
+  if subpath ~= nil then
+    error("the shim does not model C4:FileDelete(alias, subpath)", 2)
+  end
   local dir = ShimFiles(fileDir)
-  local existed = dir[name] ~= nil
+  if dir[name] == nil then
+    return false
+  end
+  for _, file in pairs(openFiles) do
+    if not file.detached and file.dir == fileDir and file.name == name then
+      file.detached = dir[name]
+    end
+  end
   dir[name] = nil
-  return existed
+  return true
 end
 
 --- Logging functions for C4 compatibility
