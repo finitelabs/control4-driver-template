@@ -762,5 +762,64 @@ T.eq("&#0; is dropped", zero.Value, "")
 T.eq("a malformed reference stays literal", C4:ParseXml("<v>&#;</v>").Value, "&#;")
 
 --------------------------------------------------------------------------------
+T.section("C4 file API")
+--------------------------------------------------------------------------------
+
+-- Measured on a dev controller (OS 4.3.0) in a lab driver's sandbox.
+T.eq("nothing is open to start with", C4:FileGetOpenedHandles(), nil)
+
+local fh = C4:FileOpen("shim_a.bin")
+T.check("FileOpen creates a file and returns a handle", type(fh) == "number" and fh >= 0, tostring(fh))
+T.check("the file exists once opened", C4:FileExists("shim_a.bin"))
+T.eq("the handle is listed as open", C4:FileGetOpenedHandles(), { [fh] = "shim_a.bin" })
+T.eq("FileGetName is the bare name", C4:FileGetName(fh), "shim_a.bin")
+T.eq("FileWrite returns the bytes written", C4:FileWrite(fh, 5, "hello"), 5)
+T.eq("a count below the data's length writes that many", C4:FileWrite(fh, 1, "!?"), 1)
+T.eq("a count of 0 is -1", C4:FileWrite(fh, 0, "zzz"), -1)
+T.eq("FileGetSize follows the writes", C4:FileGetSize(fh), 6)
+T.eq("FileClose returns 0", C4:FileClose(fh), 0)
+
+T.eq("a closed handle's FileClose is -1", C4:FileClose(fh), -1)
+T.eq("its FileWrite is -1", C4:FileWrite(fh, 3, "abc"), -1)
+T.eq("its FileRead is empty", C4:FileRead(fh, 3), "")
+T.eq("its FileGetSize is -1", C4:FileGetSize(fh), -1)
+T.eq("its FileSetPos is false", C4:FileSetPos(fh, 0), false)
+T.eq("its FileGetName is empty", C4:FileGetName(fh), "")
+T.eq("an unknown handle's FileWrite is -1", C4:FileWrite(-1, 3, "abc"), -1)
+
+fh = C4:FileOpen("shim_a.bin")
+T.eq("a reopened file reads nothing from the end", C4:FileRead(fh, 100), "")
+T.eq("FileSetPos returns true", C4:FileSetPos(fh, 0), true)
+T.eq("and the contents read from the start", C4:FileRead(fh, 100), "hello!")
+C4:FileSetPos(fh, 0)
+C4:FileWrite(fh, 2, "XY")
+C4:FileSetPos(fh, 0)
+T.eq("a write lands at the position, over what is there", C4:FileRead(fh, 100), "XYllo!")
+C4:FileClose(fh)
+
+local longName = string.rep("n", 300) .. ".bin"
+T.eq("FileOpen of an empty name is -1", C4:FileOpen(""), -1)
+T.eq("of a name in a missing directory is -1", C4:FileOpen("missing/x.bin"), -1)
+T.eq("of . is -1", C4:FileOpen("."), -1)
+T.eq("of a 300-character name is -1", C4:FileOpen(longName), -1)
+T.eq("and that name does not exist", C4:FileExists(longName), false)
+
+T.eq("FileDelete returns true when it deletes", C4:FileDelete("shim_a.bin"), true)
+T.eq("the file is gone", C4:FileExists("shim_a.bin"), false)
+T.eq("FileDelete of a missing file returns false", C4:FileDelete("shim_a.bin"), false)
+T.eq("nothing is left open", C4:FileGetOpenedHandles(), nil)
+
+fh = C4:FileOpen("shim_b.bin")
+C4:FileWrite(fh, 1, "b")
+C4:FileClose(fh)
+C4:FileSetDir("SANDBOX")
+T.check("a driver starts in its sandbox", C4:FileExists("shim_b.bin"))
+C4:FileSetDir("LOGGING")
+T.eq("another directory holds its own files", C4:FileExists("shim_b.bin"), false)
+T.eq("ShimFiles shows what a directory holds", ShimFiles("SANDBOX"), { ["shim_b.bin"] = "b" })
+C4:FileSetDir("SANDBOX")
+C4:FileDelete("shim_b.bin")
+
+--------------------------------------------------------------------------------
 
 T.finish()
