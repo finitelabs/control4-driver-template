@@ -1047,7 +1047,10 @@ function Values:_regime(values)
     return true
   end
   local director = self:_directorVariables()
-  for id, variable in pairs(director or {}) do
+  if director == nil then
+    return false -- a restart keeps no variable, so without Director's list the ones there mark a driver update
+  end
+  for id, variable in pairs(director) do
     if variable.hidden or id < FIRST_ID then
       return false, director
     end

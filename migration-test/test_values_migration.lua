@@ -1486,6 +1486,25 @@ T.eq("it stays hidden at its id until a restart", { H.recordIds().B, H.variables
 H.load("restart")
 T.eq("which shows it there", H.visible(), { A = 1001, B = 1002, C = 1003 })
 
+for _, mode in ipairs(MODES) do
+  T.section(
+    mode.label .. ", Director unreadable at the switch: a leftover on a device with nothing stored keeps its id"
+  )
+  H.mode(mode.rename)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("A", "a", "STRING")
+  old:update("1e3", "y", "STRING") -- at 1000, named "1000"
+  old:reset() -- deleting "1e3" by name misses the variable Director calls "1000"
+  local values = unreadableSwitch()
+  ShimFireTimers()
+  H.load("restart")
+  values = H.load("update")
+  values:update("1e3", "y2", "STRING")
+  values:update("N", "n", "STRING")
+  T.eq("so the name gets it back", H.visible(), { [mode.rename and "1e3" or "1000"] = 1000, N = 1001 })
+end
+
 T.section("with a rename: a variable an older build left hidden is shown at its next update")
 H.mode(true)
 H.wipe()
