@@ -50,14 +50,15 @@ log.warn = function(_, format, ...)
   table.insert(warnings, string.format(format, ...))
 end
 
---- Publish a release of `tag` with one asset per { name, minimumOs | body | missing }, run
---- updateAll against it and report what it downloaded, wrote and sent to Director.
+--- Publish a release of `tag` with one asset per { name, minimumOs | body | missing, updatedAt? },
+--- run updateAll against it and report what it downloaded, wrote and sent to Director.
 local function update(tag, assetSpecs, forceUpdate)
   local assets = {}
   for _, spec in ipairs(assetSpecs) do
     local url = "https://example.invalid/" .. tag .. "/" .. spec.name
     bodies[url] = not spec.missing and (spec.body or F.c4z(tag, spec.minimumOs)) or nil
-    table.insert(assets, { name = spec.name, browser_download_url = url, updated_at = "2026-10-01T00:00:00Z" })
+    local updatedAt = spec.updatedAt or "2026-10-01T00:00:00Z"
+    table.insert(assets, { name = spec.name, browser_download_url = url, updated_at = updatedAt })
   end
   updater.getLatestRelease = function()
     return deferred.new():resolve({ version = semver(tag), assets = assets })
@@ -204,10 +205,22 @@ local again = update("2.0.0", { { name = RUNNING, minimumOs = "4.99.0" } })
 skips("the same release on the next check", again, { "requires C4 OS 4.99.0" })
 T.eq("without downloading it", again.gets, {})
 
+local suiteAgain = update("4.0.0", {
+  { name = RUNNING, minimumOs = "4.2.0" },
+  { name = COMPANION, minimumOs = "4.99.0" },
+})
+skips("the same suite on the next check", suiteAgain, { COMPANION, "4.99.0" })
+T.eq("without downloading any of it", suiteAgain.gets, {})
+
 -- What is remembered is the minimum, not the verdict: an OS that meets it installs.
 osVersion = "4.99.0.1"
 local upgraded = update("2.0.0", { { name = RUNNING, minimumOs = "4.99.0" } })
 installs("after the OS reaches it", upgraded, { RUNNING })
 osVersion = "4.2.1.757028"
+
+-- A re-uploaded asset keeps its download URL; only its upload time tells the new file apart.
+skips("a release needing 4.99.0", update("8.0.0", { { name = RUNNING, minimumOs = "4.99.0" } }), { "4.99.0" })
+local reuploaded = update("8.0.0", { { name = RUNNING, minimumOs = "4.2.0", updatedAt = "2026-10-02T00:00:00Z" } })
+installs("the same asset re-uploaded with a minimum the OS meets", reuploaded, { RUNNING })
 
 T.finish()
