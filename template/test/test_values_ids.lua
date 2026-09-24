@@ -344,6 +344,18 @@ for _, mode in ipairs(MODES) do
     holds("the second is refused", { A = 1001, ["42"] = 42 }, {})
   end
 
+  if R then
+    T.section(L .. ": a name created at the id it spells comes back there in the same load")
+    values = fresh(mode)
+    for _, name in ipairs({ "A", "B", "C" }) do
+      values:update(name, name, "STRING")
+    end
+    values:update("1004", "x", "STRING") -- the next id is the one it spells
+    values:delete("1004")
+    values:update("1004", "y", "STRING")
+    holds("at its id", { A = 1001, B = 1002, C = 1003, ["1004"] = 1004 }, {})
+  end
+
   T.section(L .. ": a numeric-looking name Director refuses touches no other variable")
   values = fresh(mode)
   values:update("A", "1", "STRING")
@@ -852,6 +864,17 @@ for _, mode in ipairs(MODES) do
   T.eq("stores where A is", H.recordIds().A, 1005)
   H.load("restart")
   T.eq("so a restart keeps it there", H.visible().A, 1005)
+
+  if not R then
+    T.section(L .. ": an unchanged update that re-adds a variable deleted behind the library's back stores its id")
+    values = fresh(mode)
+    values:update("A", "1", "STRING")
+    values:update("B", "2", "STRING")
+    C4:DeleteVariable(1002)
+    C4:AddVariable("X", "", "STRING") -- the driver's own, in the same load
+    T.eq("an unchanged update", values:update("B", "2", "STRING"), false)
+    T.eq("stores the id Director gave it", H.recordIds().B, H.visible().B)
+  end
 
   T.section(L .. ": a property that fails to show does not stop restore")
   values = fresh(mode)

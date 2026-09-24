@@ -511,11 +511,13 @@ for _, mode in ipairs(MODES) do
     values:delete("B")
     H.load("update")
     local raw, before = blobCopy(), H.snapshot()
+    warnings = {}
     H.unreadableDirector(failure[2])
     H.load("update")
     H.readableDirector()
     T.eq("no record", blobCopy(), raw)
     T.eq("and no variable", H.snapshot(), before)
+    T.eq("with every id recorded, none is said to come from restore order", #warnings, 1)
   end
 end
 
@@ -899,20 +901,30 @@ for _, mode in ipairs(MODES) do
   T.eq("and comes back at it", H.visible().A, mode.rename and 1002 or 1006)
 
   T.section(mode.label .. ": after a restart, live records with no free id of their own get new ones in index order")
-  H.mode(mode.rename)
-  H.wipe()
-  local blob = {}
-  for i = 1, 6 do
-    blob["Z" .. (7 - i)] = { index = i, varType = "STRING", value = "z" } -- restore order would give them 1001-1006
-    blob["K" .. i] = { index = 6 + i, id = 1000 + i, varType = "STRING", value = "k" }
+  -- Index order is once the reverse of name order and once the same, so neither name order passes.
+  for _, key in ipairs({
+    function(i)
+      return "Z" .. (7 - i)
+    end,
+    function(i)
+      return "Z" .. i
+    end,
+  }) do
+    H.mode(mode.rename)
+    H.wipe()
+    local blob = {}
+    for i = 1, 6 do
+      blob[key(i)] = { index = i, varType = "STRING", value = "z" } -- restore order would give them 1001-1006
+      blob["K" .. i] = { index = 6 + i, id = 1000 + i, varType = "STRING", value = "k" }
+    end
+    C4:PersistSetValue("Values", Serialize(blob))
+    H.load("restart")
+    local got = {}
+    for i = 1, 6 do
+      got[i] = H.visible()[key(i)]
+    end
+    T.eq("so they follow the order an older build restores them in", got, { 1007, 1008, 1009, 1010, 1011, 1012 })
   end
-  C4:PersistSetValue("Values", Serialize(blob))
-  H.load("restart")
-  local got = {}
-  for i = 1, 6 do
-    got[i] = H.visible()["Z" .. (7 - i)]
-  end
-  T.eq("so they follow the order an older build restores them in", got, { 1007, 1008, 1009, 1010, 1011, 1012 })
 end
 
 for _, build in ipairs({ "F2", "v0.9.28" }) do
@@ -1457,6 +1469,22 @@ refused:delete("E") -- restore order puts E at 1001, where D(h) is
 warnings = {}
 unreadableSwitch()
 T.contains("E's guess is not held", table.concat(warnings, "\n"), "Variable id 1001 of E is taken")
+
+T.section("without a rename: a live value an older build wrote into its hidden placeholder keeps that id")
+H.mode(false)
+H.wipe()
+local hidden = H.load("restart", "v0.9.28")
+hidden:update("A", "a", "STRING")
+hidden:update("B", "b", "STRING")
+hidden:update("C", "c", "STRING")
+hidden:delete("B")
+hidden = H.load("restart", "v0.9.28") -- B(h) at 1002
+hidden:update("B", "b2", "STRING") -- written into the hidden placeholder, its record live
+hidden = H.load("update")
+hidden:update("B", "b3", "STRING")
+T.eq("it stays hidden at its id until a restart", { H.recordIds().B, H.variables()[1002].hidden }, { 1002, true })
+H.load("restart")
+T.eq("which shows it there", H.visible(), { A = 1001, B = 1002, C = 1003 })
 
 T.section("with a rename: a variable an older build left hidden is shown at its next update")
 H.mode(true)
