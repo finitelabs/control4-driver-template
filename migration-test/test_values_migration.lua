@@ -693,6 +693,20 @@ for _, mode in ipairs(MODES) do
     T.eq("and a new name takes no id a name had", H.visible().N, fresh)
   end
 
+  T.section(mode.label .. ": an older build's deleted plain value with no variable left stays deleted")
+  H.mode(mode.rename)
+  H.wipe()
+  old = H.load("restart", "v0.9.28")
+  old:update("A", "1", "STRING")
+  old:update("P", '{"a":1}')
+  old:update("O", "1", "NUMBER") -- so the older build keeps P's record
+  old = H.load("update", "v0.9.28")
+  old:delete("P")
+  old = H.load("update", "v0.9.28") -- restore adds P hidden
+  old:delete("P") -- zigbee3's saveState deletes the tombstone again, and its variable
+  values = H.load("update")
+  T.eq("it reads as nothing", values:getValue("P"), nil)
+
   T.section(mode.label .. ": a variable the driver added itself, reserved at the switch, is taken over by its name")
   H.mode(mode.rename)
   H.wipe()

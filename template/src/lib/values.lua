@@ -1196,7 +1196,7 @@ function Values:_learnIds(values, director, estimated)
       lost[record.id] = true
     end
     record.id, record.unverified = want[name], nil
-    if record.varType == nil then
+    if record.varType == nil and record.value ~= nil then
       record.deleted = record.id ~= nil or nil -- a plain value is stored deleted while it keeps an id
     end
     local variable = record.id and director[record.id]
