@@ -65,11 +65,20 @@ C4:PersistSetValue(
   })
 )
 values, added = reload()
-T.eq("restore adds its placeholder where it always did", added, { "A", "__deleted__Json (hidden)", "B" })
+T.eq("restore adds its placeholder where it always did", added, { "A", "__deleted__2 (hidden)", "B" })
 T.eq("the move is saved", Deserialize(C4:PersistGetValue("Values")).Json, nil)
 values:update("Json", '{"x":3}')
 values, added = reload()
-T.eq("saving a value of the old name moves no id", added, { "A", "__deleted__Json (hidden)", "B" })
+T.eq("saving a value of the old name moves no id", added, { "A", "__deleted__2 (hidden)", "B" })
 T.eq("that value is a new record", values:getValue("Json").index, 4)
+
+T.section("a second pre-fix placeholder of the same name keeps its own slot")
+-- An older build ran after the move, saved Json again, added C and deleted Json.
+local blob = Deserialize(C4:PersistGetValue("Values"))
+blob.Json = { index = 4, deleted = true }
+blob.C = { index = 5, varType = "STRING", value = "3" }
+C4:PersistSetValue("Values", Serialize(blob))
+values, added = reload()
+T.eq("both placeholders stay in place", added, { "A", "__deleted__2 (hidden)", "B", "__deleted__4 (hidden)", "C" })
 
 T.finish()

@@ -19,7 +19,8 @@ Values.__index = Values
 --- @type string
 local VALUES_PERSIST_KEY = "Values"
 
---- Name prefix under which a legacy placeholder keeps its id slot.
+--- Reserved name prefix, followed by the record's index, under which a legacy
+--- placeholder keeps its id slot.
 --- @type string
 local LEGACY_PLACEHOLDER_PREFIX = "__deleted__"
 
@@ -49,8 +50,8 @@ end
 --- @field deleted boolean? If true, the value slot is reserved but the variable is hidden (preserves ID ordering)
 
 --- Deleting a value with no variable used to leave a deleted record, which restore
---- added as a hidden STRING variable. Each such slot moves to a reserved name, so a
---- later value of the old name cannot take it and shift the variable ids after it.
+--- added as a hidden STRING variable. Each such slot moves to a name built from its
+--- index, which no other record has, so a later value of the old name cannot take it.
 --- @param values table<string, Value> The values table, changed in place.
 --- @return boolean moved True if any record moved.
 local function moveLegacyPlaceholders(values)
@@ -62,7 +63,7 @@ local function moveLegacyPlaceholders(values)
   end
   for _, name in ipairs(legacy) do
     values[name].varType = "STRING"
-    values[LEGACY_PLACEHOLDER_PREFIX .. name] = values[name]
+    values[string.format("%s%d", LEGACY_PLACEHOLDER_PREFIX, values[name].index)] = values[name]
     values[name] = nil
   end
   return #legacy > 0
