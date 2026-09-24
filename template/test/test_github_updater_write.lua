@@ -110,13 +110,18 @@ local function once(fault)
   end
 end
 
-local function restores(label, result, needle)
+local function restores(label, result, needle, installed)
   T.eq(label .. ": resolves nothing", result.updated, nil)
   T.contains(label .. ": says which write failed", tostring(result.err), "failed to write " .. needle)
   T.contains(label .. ": says the files are unchanged", tostring(result.err), "unchanged")
   T.eq(label .. ": sends nothing to Director", result.sent, 0)
-  T.eq(label .. ": leaves the installed files as they were", result.files, OLD)
+  T.eq(label .. ": leaves the installed files as they were", result.files, installed or OLD)
   T.eq(label .. ": leaves no file open", result.open, nil)
+end
+
+--- A FileDelete fault that leaves the companion in place, as the controller answers.
+local function keepsCompanion(name)
+  return name == COMPANION, false
 end
 
 ---------------------------------------------------------------------------
@@ -151,11 +156,14 @@ local short = once(function(fh, _, data)
 end)
 restores("the companion is written short", update("2.3.0", OLD, { FileWrite = short }), COMPANION)
 
--- The write itself succeeds onto the old file; only reading it back shows the mix.
-local notDeleted = once(function(name)
-  return name == COMPANION, nil
-end)
-restores("the old companion is not deleted", update("2.4.0", OLD, { FileDelete = notDeleted }), COMPANION)
+-- Longer than the release, so the write leaves its tail and only reading it back shows it.
+local LONG = { [RUNNING] = OLD[RUNNING], [COMPANION] = OLD[COMPANION] .. string.rep(".", 1000) }
+local notDeleted = update("2.4.0", LONG, { FileDelete = once(keepsCompanion) })
+restores("the old companion is not deleted", notDeleted, COMPANION, LONG)
+
+-- The restore cannot delete it either and writes the old bytes back over the release.
+local neverDeleted = update("2.4.1", LONG, { FileDelete = keepsCompanion })
+restores("the old companion is never deleted", neverDeleted, COMPANION, LONG)
 
 local fresh = update("2.5.0", { [RUNNING] = OLD[RUNNING] }, { FileWrite = once(forFile(COMPANION, -1)) })
 T.contains("a driver with no file before", tostring(fresh.err), "unchanged")
@@ -187,6 +195,27 @@ T.contains(
   "failed to write " .. COMPANION .. " and could not restore " .. RUNNING
 )
 T.eq("sends nothing to Director", stuck.sent, 0)
+
+local stray = update("3.1.0", { [RUNNING] = OLD[RUNNING] }, {
+  FileWrite = once(forFile(COMPANION, -1)),
+  FileDelete = keepsCompanion,
+})
+T.contains(
+  "a new file it cannot remove is named",
+  tostring(stray.err),
+  "failed to write " .. COMPANION .. " and could not restore " .. COMPANION
+)
+T.eq("and nothing is sent to Director", stray.sent, 0)
+
+---------------------------------------------------------------------------
+T.section("an old file the delete leaves is written over from the start")
+---------------------------------------------------------------------------
+
+-- The installed companion is shorter than the release, so the release covers all of it.
+local over = update("3.2.0", OLD, { FileDelete = keepsCompanion })
+T.eq("resolves with both drivers", over.updated, { RUNNING, COMPANION })
+T.eq("sends both to Director", over.sent, 2)
+T.eq("C4Z_ROOT holds the release", over.files, { [RUNNING] = F.c4z("3.2.0"), [COMPANION] = F.c4z("3.2.0") })
 
 ---------------------------------------------------------------------------
 T.section("an installed file that cannot be read is not overwritten")

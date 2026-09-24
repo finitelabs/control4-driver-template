@@ -111,6 +111,8 @@ local function writeFile(name, contents)
   if not isHandle(fh) then
     return false
   end
+  -- FileOpen starts at the end, so an old file the delete left would be appended to.
+  C4:FileSetPos(fh, 0)
   C4:FileWrite(fh, #contents, contents)
   C4:FileClose(fh)
   return readFile(name) == contents
