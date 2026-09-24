@@ -258,7 +258,7 @@ end
 --- @param driverFilenames string[] List of driver filenames to update.
 --- @param includePrereleases? boolean If true, includes pre-releases (optional).
 --- @param forceUpdate? boolean If true, runs update even if drivers are up to date (optional).
---- @return Deferred<string[], table<number, string>> updatedDrivers Deferred resolving to a list of updated driver filenames, or rejected with an error table.
+--- @return Deferred<string[], string|table<number, string>> updatedDrivers Deferred resolving to a list of updated driver filenames, or rejected with an error message (a release the OS cannot run, among others) or a table of error messages indexed by number.
 function GitHubUpdater:updateAll(repo, driverFilenames, includePrereleases, forceUpdate)
   log:trace("GitHubUpdater:updateAll(%s, %s, %s, %s)", repo, driverFilenames, includePrereleases, forceUpdate)
   -- Only update drivers that are already installed.
@@ -272,7 +272,7 @@ function GitHubUpdater:updateAll(repo, driverFilenames, includePrereleases, forc
   return self
     :downloadOutdatedDrivers("C4Z_ROOT", repo, installedDriverFilenames, includePrereleases, forceUpdate)
     :next(function(downloadedDriverFilenames)
-      --- @type Deferred<string[], table<number, string>>
+      --- @type Deferred<string[], string>
       local d = deferred.new()
       if IsEmpty(downloadedDriverFilenames) then
         return d:resolve(downloadedDriverFilenames)

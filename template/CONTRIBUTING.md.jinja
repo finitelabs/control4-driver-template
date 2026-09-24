@@ -23,10 +23,10 @@ then pull the change in with `copier update`.
   release only when its tag's date is later than the installed driver's version,
   so give each release a later date than the last. A suffixed tag such as
   `v20260918-rc1` publishes as a pre-release, which only drivers on the
-  Prerelease update channel pick up. The updater skips a release when any of its
-  `.c4z` files declares a `minimum_os_version` above the controller's OS. The
-  check runs in the installed driver, so ship it in a release before raising a
-  minimum
+  Prerelease update channel pick up. The updater skips a release when the `.c4z`
+  of any driver installed in the project declares a `minimum_os_version` above
+  the controller's OS. The check runs in the installed driver, so ship it in a
+  release before raising a minimum
 {%- endif %}
 
 **Common libraries (`src/lib/`):**
