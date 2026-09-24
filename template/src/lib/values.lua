@@ -1032,7 +1032,7 @@ function Values:_regime(values)
       return false, director
     end
   end
-  return true
+  return true, director
 end
 
 --- Gives every record the id Director has for it now, on every load after a driver update;
@@ -1059,6 +1059,17 @@ function Values:_learn(values, restarted, director)
       if isLive(row.record) and row.record.id == nil and id ~= nil and ownerOf(values, id) == nil then
         row.record.id = id
       end
+    end
+    -- Director listed these before restore added any: not lib/values' variables, so their ids stay reserved.
+    local others = {}
+    for id in pairs(director or {}) do
+      if ownerOf(values, id) == nil then
+        table.insert(others, id)
+      end
+    end
+    table.sort(others)
+    for _, id in ipairs(others) do
+      self:_reserve(values, id)
     end
   else
     director = director or self:_directorVariables()

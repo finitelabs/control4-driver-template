@@ -458,6 +458,25 @@ for _, rename in ipairs({ true, false }) do
 end
 
 for _, rename in ipairs({ true, false }) do
+  for _, stored in ipairs({ "nothing stored", "only a plain value stored" }) do
+    T.section("variables no record names on a device with " .. stored .. " keep their ids (" .. tostring(rename) .. ")")
+    H.mode(rename)
+    H.wipe()
+    local old = H.load("restart", "v0.9.28")
+    if stored == "only a plain value stored" then
+      old:update("Config", "{}")
+    end
+    C4:AddVariable("STRING", "", "STRING", true, false) -- essentials' retired pre-release variables, 1001
+    C4:AddVariable("NUMBER", "0", "NUMBER", true, false) -- 1002
+    local values = H.load("update")
+    C4:DeleteVariable("STRING") -- variable_expressions, in OnDriverLateInit
+    C4:DeleteVariable("NUMBER")
+    values:update("X Result", "1", "STRING")
+    T.eq("a new name takes neither id", H.visible()["X Result"], 1003)
+  end
+end
+
+for _, rename in ipairs({ true, false }) do
   T.section("a restart where Director places a variable elsewhere records where (" .. tostring(rename) .. ")")
   H.mode(rename)
   H.wipe()
@@ -469,7 +488,7 @@ for _, rename in ipairs({ true, false }) do
   setBlob(raw)
   C4:AddVariable("Own", "", "STRING", true, false) -- the driver's own, before restoreValues: 1001
   H.load("update") -- the same load: only the counter starts again, at 1001
-  T.eq("the ids are Director's", H.recordIds(), { A = 1002, B = 1003 })
+  T.eq("the ids are Director's, and Own's is reserved", H.recordIds(), { A = 1002, B = 1003, ["1001"] = 1001 })
   T.eq("and the variables are there", H.visible(), { Own = 1001, A = 1002, B = 1003 })
 end
 
