@@ -1261,6 +1261,103 @@ for _, mode in ipairs(MODES) do
   end
 end
 
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ": an empty list from GetDeviceVariables while the driver has variables is not trusted")
+  H.mode(mode.rename)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("D", "d", "STRING")
+  old:update("X", "x", "STRING")
+  old:delete("D")
+  old = H.load("restart", "v0.9.28")
+  old:delete("X") -- both records trimmed; D(h) stays at 1001
+  old:update("0042", "q", "STRING") -- the only record, and Director does not show it under its name
+  H.unreadableDirector({})
+  local values = H.load("update")
+  H.readableDirector()
+  ShimFireTimers()
+  H.load("restart")
+  values = H.load("update")
+  values:update("N", "n", "STRING")
+  T.eq("so the orphan's id stays reserved", H.visible().N, 1002)
+end
+
+for _, mode in ipairs(MODES) do
+  for _, how in ipairs({ "update", "restart" }) do
+    T.section(mode.label .. ": Director unreadable at a switch by " .. how .. ", numeric names keep the ids they spell")
+    H.mode(mode.rename)
+    H.wipe()
+    local old = H.load("restart", "v0.9.28")
+    old:update("A", "1", "STRING")
+    old:update("1e3", "y", "STRING") -- 1000, named "1000"
+    old:update("0042", "q", "STRING") -- 42, named "42"
+    old:update("B", "2", "STRING")
+    -- A restart's list is read before restore adds anything, so it stays empty.
+    H.unreadableDirector(how == "restart" and {} or nil)
+    local values = H.load(how)
+    H.readableDirector()
+    ShimFireTimers()
+    values:update("0042", "q2", "STRING")
+    values:update("1e3", "y2", "STRING")
+    local want = { A = 1001, B = 1002 }
+    local q, y = mode.rename and "0042" or "42", mode.rename and "1e3" or "1000"
+    want[q], want[y] = 42, 1000
+    T.eq("where the older build put them", H.visible(), want)
+    T.eq("and their values reach them", { Variables[q], Variables[y] }, { "q2", "y2" })
+    H.load("restart")
+    T.eq("which a restart keeps", H.visible(), want)
+  end
+
+  T.section(mode.label .. ": Director unreadable at the switch, a numeric name is deleted by its id")
+  H.mode(mode.rename)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("A", "a", "STRING")
+  old:update("1003", "n", "STRING") -- at 1003, the id it spells
+  old:update("B", "b", "STRING")
+  local values = unreadableSwitch()
+  ShimFireTimers()
+  values:delete("1003")
+  T.eq("its variable is gone", H.visible(), { A = 1001, B = 1002 })
+  H.load("restart")
+  values = H.load("update")
+  values:update("N", "n", "STRING")
+  T.eq("and a new name does not take its id", H.visible(), { A = 1001, B = 1002, N = 1004 })
+end
+
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ": two names that spell one id get the same ids whether Director can be read or not")
+  local layouts = {}
+  for _, degraded in ipairs({ false, true }) do
+    H.mode(mode.rename)
+    H.wipe()
+    local old = H.load("restart", "v0.9.28")
+    old:update("A", "a", "STRING")
+    old:update("0042", "q", "STRING") -- at 42, named "42"
+    pcall(old.update, old, "42", "x", "STRING") -- the same id: refused, its record kept
+    local values = degraded and unreadableSwitch() or H.load("update")
+    ShimFireTimers()
+    values:update("0042", "q2", "STRING")
+    H.load("restart")
+    layouts[degraded and 2 or 1] = H.snapshot()
+  end
+  T.eq("the readable layout", layouts[2], layouts[1])
+end
+
+T.section("with a rename, Director unreadable in OnDriverInit: a numeric name returns to the id it spells")
+H.mode(true)
+H.wipe()
+local spelled = H.load("restart", "v0.9.28")
+spelled:update("A", "a", "STRING")
+spelled:update("0042", "q", "STRING") -- at 42
+spelled = H.load("update") -- renamed "0042" at 42
+spelled:update("42", "x", "STRING") -- 1002, renamed "42"
+spelled:delete("0042")
+spelled = unreadableSwitchInInit()
+spelled:update("0042", "back", "STRING") -- "42" is the name of 1002 now
+H.readableDirector()
+T.eq("while another variable is named by that id", H.visible(), { A = 1001, ["0042"] = 42, ["42"] = 1002 })
+
 T.section("with a rename: a variable an older build left hidden is shown at its next update")
 H.mode(true)
 H.wipe()

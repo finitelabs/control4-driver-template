@@ -125,6 +125,15 @@ local function variableString(value)
   return tostring(value)
 end
 
+--- The id a numeric-looking name's variable has when Director cannot list them: the one it spells,
+--- where a variable is named by it and no other record is.
+local function spelledId(values, name)
+  local id = parsedId(name)
+  if id ~= nil and Variables[tostring(id)] ~= nil and (values[tostring(id)] == nil or tostring(id) == name) then
+    return id
+  end
+end
+
 --- The name Director shows for a record's variable: without a rename, a numeric-looking name
 --- is stored under the id Director read from it.
 local function directorName(name, record)
@@ -888,7 +897,12 @@ end
 function Values:_addAt(values, id, name, strValue, varType, readOnly, own)
   local added = C4:AddVariable(id, strValue, varType, readOnly, false)
   if not added and own then
-    local occupant = (self:_directorVariables() or {})[id]
+    local director = self:_directorVariables()
+    local occupant = director and director[id]
+    local named = values[tostring(id)]
+    if director == nil and Variables[tostring(id)] ~= nil and (named == nil or named.id == nil or named.id == id) then
+      occupant = { name = tostring(id) } -- no other record is named by the id, so that variable is at it
+    end
     if occupant ~= nil and not occupant.hidden and occupant.name == tostring(id) then
       C4:SetVariable(id, strValue)
       added = true
@@ -995,6 +1009,9 @@ function Values:_directorVariables()
         }
       end
     end
+    if next(out) == nil and next(Variables) ~= nil then
+      out, failure = nil, "it lists none of the driver's variables" -- read before any was added
+    end
   end
   if out == nil and not self._unreadWarned then
     log:warn("GetDeviceVariables failed: %s", failure)
@@ -1089,7 +1106,10 @@ function Values:_learn(values, restarted, director)
       for _, row in ipairs(rows) do
         local id, record = estimated[row.name], row.record
         if record.id == nil and id ~= nil and not held[id] then
-          if canRename() or Variables[row.name] ~= nil then
+          if id == spelledId(values, row.name) then
+            record.id = id -- an older build's add by name put it at the id it spells
+            held[id] = true
+          elseif canRename() or Variables[row.name] ~= nil then
             record.id, record.unverified = id, true
             held[id] = true
           elseif record.deleted and self:_hold(id, record.varType) then
