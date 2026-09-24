@@ -238,7 +238,7 @@ function Values:delete(name)
   log:trace("Values:delete(%s)", name)
   local values = self:getValues()
   if values[name] == nil then
-    log:warn("Value %s does not exist; ignoring delete", name)
+    log:debug("Value %s does not exist; ignoring delete", name)
     return
   end
 
