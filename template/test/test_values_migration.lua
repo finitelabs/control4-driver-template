@@ -292,16 +292,17 @@ for _, mode in ipairs(MODES) do
         end
         local raw = blobCopy()
         local values = H.load("update")
-        T.eq("a driver update to this build changes no variable", layout(), before)
-        local asked = 0
-        local realGet = C4.GetDeviceVariables
-        C4.GetDeviceVariables = function(...)
-          asked = asked + 1
-          return realGet(...)
+        local after = layout()
+        for id, name in pairs(after) do
+          if before[id] == nil and not mode.rename and name == id .. "(h)" then
+            after[id] = nil -- without a rename, the id of a name deleted in the last load is held
+          end
         end
+        T.eq("a driver update to this build changes no variable", after, before)
+        local settled = blobCopy()
         values = H.load("update")
-        C4.GetDeviceVariables = realGet
-        T.eq("the next load does not read Director again", asked, 0)
+        T.eq("the next load changes no record", blobCopy(), settled)
+        T.eq("and no variable", H.calls, {})
         keeps("every id Director had is recorded", held, true, true)
         values = H.load("restart")
         keeps("and held after a Director restart", held, mode.rename)
@@ -426,13 +427,19 @@ for _, mode in ipairs(MODES) do
     T.eq("E's value still reaches E", Variables["E"], "6")
     values:delete("E")
     T.eq("deleting E deletes E and nothing else", H.visible(), { A = 1001, C = 1003 })
+    T.eq("and B's guess at E's id is dropped", H.recordIds().B, nil)
+    if not mode.rename then
+      T.eq("its id, read from Director once it can, is held", H.hiddenIds(), { 1002 })
+    end
+    values:update("F", "8", "STRING")
+    T.eq("a new name does not take it", H.visible().F, 1004)
     values:update("E", "7", "STRING")
-    -- Without a rename a returning name takes a new id; here Director gives E the id it freed.
-    local want = mode.rename and { A = 1001, C = 1003, E = 1004 } or { A = 1001, C = 1003, E = 1002 }
+    -- With a rename E comes back at the id Director had for it; without, a returning name takes a new one.
+    local want = { A = 1001, C = 1003, F = 1004, E = mode.rename and 1002 or 1005 }
     H.load("restart")
-    T.eq("after a restart the ids are restore order", H.visible(), want)
+    T.eq("after a restart", H.visible(), want)
     H.load("update")
-    T.eq("and stay", H.visible(), want)
+    T.eq("and after a driver update", H.visible(), want)
   end
 end
 
@@ -469,10 +476,246 @@ for _, rename in ipairs({ true, false }) do
   T.eq("and the variables are there", H.visible(), { Own = 1001, A = 1002, B = 1003 })
 end
 
-T.section("GetDeviceVariables leaving out a name Director shows: every id comes from restore order")
+for _, mode in ipairs(MODES) do
+  for _, failure in ipairs({ { "raises" }, { "returns an empty table", {} } }) do
+    T.section(mode.label .. ": GetDeviceVariables " .. failure[1] .. " on a later load: nothing changes")
+    H.mode(mode.rename)
+    H.wipe()
+    local values = H.load("restart")
+    values:update("A", "1", "STRING")
+    values:update("B", "2", "STRING")
+    values:update("C", "3", "STRING")
+    values:delete("B")
+    H.load("update")
+    local raw, before = blobCopy(), H.snapshot()
+    H.unreadableDirector(failure[2])
+    H.load("update")
+    H.readableDirector()
+    T.eq("no record", blobCopy(), raw)
+    T.eq("and no variable", H.snapshot(), before)
+  end
+end
+
+for _, mode in ipairs(MODES) do
+  local variants = {
+    { "a driver update", "update", true },
+    { "a driver update, the older build's variables still shown", "update", false },
+    { "a restart", "restart", true },
+  }
+  for _, variant in ipairs(variants) do
+    T.section(mode.label .. ": numeric names the older build deleted come back at their ids, after " .. variant[1])
+    H.mode(mode.rename)
+    H.wipe()
+    local old = H.load("restart", "v0.9.28")
+    old:update("A", "1", "STRING")
+    old:update("0042", "x", "STRING") -- at 42, named "42"
+    old:update("3.5", "y", "STRING") -- at 3, named "3"
+    old:update("B", "2", "STRING")
+    old:delete("0042") -- Variables["0042"] is nil, so v0.9.28 leaves "42" shown
+    old:delete("3.5")
+    if variant[3] then
+      H.load("restart", "v0.9.28") -- each is held hidden at its id, named by it
+    end
+    local values = H.load(variant[2])
+    values:update("0042", "back", "STRING")
+    values:update("3.5", "back", "STRING")
+    local want = mode.rename and { A = 1001, B = 1002, ["0042"] = 42, ["3.5"] = 3 }
+      or { A = 1001, B = 1002, ["42"] = 42, ["3"] = 3 }
+    T.eq("each is shown at its id", H.visible(), want)
+    T.eq("and nothing else", H.count(), 4)
+    H.load("restart")
+    T.eq("after a restart too", H.visible(), want)
+  end
+
+  local old
+  for _, case in ipairs({ { "0042", 42 }, { "02000", 2000 } }) do
+    local name, id = case[1], case[2]
+    T.section(mode.label .. ": a device whose only variable is " .. name)
+    H.mode(mode.rename)
+    H.wipe()
+    old = H.load("restart", "v0.9.28")
+    old:update(name, "x", "STRING") -- Director names it by the id
+    old:update("J", "{}")
+    H.load("update")
+    T.eq("a driver update is not taken for a restart", H.count(), 1)
+    H.load("restart")
+    T.eq("and it keeps its id", H.visible()[mode.rename and name or tostring(id)], id)
+  end
+
+  for _, plain in ipairs({ true, false }) do
+    T.section(
+      mode.label
+        .. ": a hidden variable whose record the older build trimmed"
+        .. (plain and ", beside a plain value" or ", nothing stored")
+    )
+    H.mode(mode.rename)
+    H.wipe()
+    old = H.load("restart", "v0.9.28")
+    if plain then
+      old:update("P", "{}")
+    end
+    old:update("A", "1", "STRING")
+    old:update("B", "2", "STRING")
+    old:delete("A")
+    old = H.load("restart", "v0.9.28") -- A is held hidden at 1001
+    old:delete("B") -- which trims both records
+    local values = H.load("update")
+    T.eq("its id is recorded", H.recordIds().A, 1001)
+    values:update("C", "3", "STRING")
+    T.eq("a new name does not take it", H.visible().C, 1002)
+    values:update("A", "back", "STRING")
+    local want = { A = mode.rename and 1001 or 1003, C = 1002 }
+    T.eq("A comes back shown, with its value", { H.visible(), Variables.A }, { want, "back" })
+    H.load("restart")
+    T.eq("after a restart too", H.visible(), want)
+  end
+
+  T.section(mode.label .. ": a name the older build deleted in its last load keeps its id")
+  H.mode(mode.rename)
+  H.wipe()
+  old = H.load("restart", "v0.9.28")
+  old:update("A", "1", "STRING")
+  old:update("B", "2", "STRING")
+  old:update("C", "3", "STRING")
+  old:delete("B")
+  local values = H.load("update")
+  T.eq("its id is recorded", H.recordIds().B, 1002)
+  if not mode.rename then
+    T.eq("and held", H.hiddenIds(), { 1002 })
+  end
+  values:update("D", "4", "STRING")
+  T.eq("a new name does not take it", H.visible().D, 1004)
+  values:update("B", "back", "STRING")
+  H.load("restart")
+  T.eq("B comes back", H.visible(), { A = 1001, B = mode.rename and 1002 or 1005, C = 1003, D = 1004 })
+
+  T.section(mode.label .. ": estimated ids are checked against Director before one is used")
+  H.mode(mode.rename)
+  H.wipe()
+  old = H.load("restart", "v0.9.28")
+  for _, name in ipairs({ "B", "F", "E", "Dv" }) do
+    old:update(name, name, "STRING")
+  end
+  old:delete("F")
+  old:delete("E")
+  old = H.load("restart", "v0.9.28") -- 1001=B, 1002=F(h), 1003=E(h), 1004=Dv
+  old:update("B", "plain now") -- 1001 is free
+  H.unreadableDirector({})
+  values = H.load("update")
+  H.readableDirector() -- readable again after OnDriverInit
+  values:update("E", "e", "STRING")
+  T.eq("Dv keeps its id", H.visible().Dv, 1004)
+  if mode.rename then
+    T.eq("E comes back at the id Director had for it", H.visible().E, 1003)
+  end
+  local now = H.visible()
+  H.load("restart")
+  T.eq("after a restart too", H.visible(), now)
+
+  T.section(mode.label .. ": the id of a visible variable that is not ours stays reserved after it goes")
+  H.mode(mode.rename)
+  H.wipe()
+  old = H.load("restart", "v0.9.28")
+  old:update("A", "1", "STRING")
+  old:update("B", "2", "STRING")
+  C4:AddVariable("STRING", "", "STRING", true, false) -- essentials' retired variable, 1003
+  values = H.load("update")
+  C4:DeleteVariable("STRING") -- variable_expressions, in OnDriverLateInit
+  values:update("N", "n", "STRING")
+  T.eq("a new name does not take it", H.visible().N, 1004)
+  H.load("restart")
+  T.eq("nor after a restart", H.visible(), { A = 1001, B = 1002, N = 1004 })
+
+  for _, gap in ipairs({ "a gap the older build left", "a gap another variable left" }) do
+    T.section(mode.label .. ": downgraded, restarted under the older build and switched back, with " .. gap)
+    H.mode(mode.rename)
+    H.wipe()
+    old = H.load("restart", "v0.9.28")
+    old:update("A", "a", "STRING")
+    if gap == "a gap the older build left" then
+      old:update("B", "b", "STRING")
+      old:delete("B")
+      old:update("C", "c", "STRING") -- 1003; 1002 is empty and no record has it
+      values = H.load("update")
+    else
+      C4:AddVariable("STRING", "", "STRING", true, false) -- 1002
+      values = H.load("update")
+      values:update("C", "c", "STRING")
+      C4:DeleteVariable("STRING")
+    end
+    values:update("D", "d", "STRING")
+    H.load("update", "v0.9.28")
+    H.load("restart", "v0.9.28")
+    local director = H.visible()
+    values = H.load("update")
+    values:update("C", "C-new", "STRING")
+    values:update("D", "D-new", "STRING")
+    T.eq("each write reaches its own variable", { Variables.C, Variables.D }, { "C-new", "D-new" })
+    T.eq("where Director has it", H.visible(), director)
+    H.load("restart")
+    T.eq("which a restart keeps", H.visible(), director)
+    values = H.load("update")
+    values:update("N", "n", "STRING")
+    local fresh = (gap == "a gap the older build left" and not mode.rename) and 1004 or 1005
+    T.eq("and a new name takes no id a name had", H.visible().N, fresh)
+  end
+
+  T.section(mode.label .. ": a hidden variable the older build added in a downgrade gives way to its name")
+  H.mode(mode.rename)
+  H.wipe()
+  values = H.load("restart")
+  values:update("A", "1", "STRING")
+  values:update("B", "2", "STRING")
+  values:update("C", "3", "STRING")
+  values:delete("B")
+  H.load("update", "v0.9.28") -- adds B hidden, by name
+  values = H.load("update")
+  values:update("B", "back", "STRING")
+  T.eq("B is shown with its value", { H.visible().B ~= nil, Variables.B }, { true, "back" })
+  T.eq("A and C keep their ids", { H.visible().A, H.visible().C }, { 1001, 1003 })
+  if mode.rename then
+    T.eq("and B is back at its id", H.visible().B, 1002)
+  end
+end
+
+T.section("without a rename: an id that is only a guess is not held when its name is deleted")
+H.mode(false)
+H.wipe()
+local h13 = H.load("restart", "v0.9.28")
+h13:update("A", "1", "STRING")
+h13:update("B", "2", "STRING")
+h13:update("C", "3", "STRING")
+h13 = H.load("update", "v0.9.28")
+h13:delete("B")
+h13:update("E", "5", "STRING") -- at 1002; restore order says 1004
+H.unreadableDirector()
+h13 = H.load("update")
+warnings = {}
+h13:delete("E")
+H.readableDirector()
+T.eq("E is gone", H.visible(), { A = 1001, C = 1003 })
+T.eq("and nothing is held at the guessed id", H.hiddenIds(), {})
+T.contains("which is logged", table.concat(warnings, "\n"), "not known")
+
+T.section("with a rename: a variable an older build left hidden is shown at its next update")
 H.mode(true)
 H.wipe()
 local v = H.load("restart", "v0.9.28")
+v:update("A", "1", "STRING")
+v:update("B", "2", "STRING")
+v:update("C", "3", "STRING")
+v:delete("B")
+v = H.load("update", "v0.9.28") -- B comes back hidden at 1002
+v:update("B", "2b", "STRING") -- a normal record again, its variable still hidden
+local healed = H.load("update")
+T.eq("still hidden after the switch", H.variables()[1002].hidden, true)
+healed:update("B", "2b", "STRING")
+T.eq("shown at its id, with its value", { H.visible().B, Variables.B }, { 1002, "2b" })
+
+T.section("GetDeviceVariables leaving out a name Director shows: every id comes from restore order")
+H.mode(true)
+H.wipe()
+v = H.load("restart", "v0.9.28")
 v:update("A", "1", "STRING")
 v:update("B", "2", "STRING")
 local listed = {}

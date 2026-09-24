@@ -106,6 +106,10 @@ function H.load(how, build)
   H.calls = {}
   local values = build and shippedBuild(build) or thisBuild()
   values:restoreValues()
+  -- The docs say DeleteVariable should not be invoked during OnDriverInit.
+  if not build and H.called("^Delete") then
+    T.check("restore after a " .. how .. " deletes no variable", false, table.concat(H.calls, ", "))
+  end
   return values
 end
 

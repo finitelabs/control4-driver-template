@@ -11,7 +11,9 @@ require("lib.utils")
 
 --- @class Values
 --- @field _callbacks table<string, function?> In-memory registry of OVC callbacks keyed by variable name.
---- @field _rejected table<string, boolean> Names Director refused to add in this load.
+--- @field _rejected table<string, boolean> Names Director refused to add, or to rename to, in this load.
+--- @field _unhide table<string, boolean> Live names an older build left hidden, shown again at their next update.
+--- @field _unheld table<integer, boolean> Ids another variable sat on at restore, held once it is gone.
 --- A class representing a collection of named values with optional variable/property support.
 local Values = {}
 Values.__index = Values
@@ -37,12 +39,21 @@ local ASIDE_NAME = "__values_aside__"
 --- @field suffix string? Optional suffix for property display (e.g., " °C", " %")
 --- @field writable boolean? Whether the variable accepts writes from programming. Persisted so restore can recreate the C4 variable with the correct readOnly flag.
 --- @field deleted boolean? No live variable of its own; older builds add a hidden placeholder for it.
---- @field placeholder boolean? An id a returning name left behind, held by a hidden variable.
+--- @field placeholder boolean? An id no name owns any more (left behind, or another's), kept reserved.
 --- @field unverified boolean? An id taken from restore order because Director could not be read.
 
 --- Whether this OS can rename a variable, so one can be created at a chosen id (OS 4.0+).
 local function canRename()
   return C4.SetVariableName ~= nil
+end
+
+--- Renames a variable, false when Director refuses or raises.
+local function rename(id, name)
+  local ok, renamed = pcall(C4.SetVariableName, C4, id, name)
+  if not ok then
+    log:error("Renaming variable %s to %s failed: %s", id, name, renamed)
+  end
+  return ok and renamed == true
 end
 
 --- Whether Director reads the name as an id, as it does "1003", "3.5" or " 7".
@@ -69,6 +80,11 @@ end
 --- Whether the record holds a value: a variable, or a plain value (with or without an old id).
 local function holdsValue(record)
   return not record.deleted or record.value ~= nil
+end
+
+--- Whether the record is or has been a variable, as opposed to a plain value that never was one.
+local function wasEverVariable(record)
+  return record.id ~= nil or record.deleted or record.varType ~= nil
 end
 
 local function ovcKey(name)
@@ -113,6 +129,15 @@ local function maxId(values)
   return max
 end
 
+--- The name and record that hold the id, if any.
+local function ownerOf(values, id)
+  for name, record in pairs(values) do
+    if record.id == id then
+      return name, record
+    end
+  end
+end
+
 local function maxIndex(values)
   local max = 0
   for _, record in pairs(values) do
@@ -145,17 +170,19 @@ local function orderIndexes(values)
   end
 end
 
---- Each record's id, as one comparable string.
-local function idSignature(values)
+--- Each record's id and state, as one comparable string.
+local function recordSignature(values)
   local parts = {}
   for name, record in pairs(values) do
-    table.insert(parts, name .. "=" .. tostring(record.id))
+    local fields = { name, tostring(record.id), tostring(record.deleted), tostring(record.placeholder) }
+    table.insert(fields, tostring(record.unverified) .. tostring(record.value ~= nil))
+    table.insert(parts, table.concat(fields, "\1"))
   end
   table.sort(parts)
-  return table.concat(parts, "\n")
+  return table.concat(parts, "\2")
 end
 
---- A key for a left-behind id; its decimal name lets an older build restore it at that id.
+--- A key for a reserved id; its decimal name lets an older build restore it at that id.
 local function placeholderKey(values, id, avoid)
   local key = tostring(id)
   while values[key] ~= nil or key == avoid do
@@ -206,6 +233,8 @@ function Values:new()
   local instance = setmetatable({}, self)
   instance._callbacks = {}
   instance._rejected = {}
+  instance._unhide = {}
+  instance._unheld = {}
   return instance
 end
 
@@ -233,7 +262,7 @@ function Values:setCallback(name, callback)
 
   local values = self:_load()
   local existing = values[name]
-  if existing == nil or existing.placeholder then
+  if existing == nil then
     return
   end
 
@@ -295,7 +324,7 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
 
   local values = self:_load()
   if values[name] ~= nil and values[name].placeholder then
-    -- An id some other name left behind sits under this key; it keeps its id elsewhere.
+    -- An id no name owns sits under this key; it stays reserved under another.
     local held = values[name]
     values[name] = nil
     values[placeholderKey(values, held.id, name)] = held
@@ -347,7 +376,7 @@ function Values:delete(name)
   log:trace("Values:delete(%s)", name)
   local values = self:_load()
   local record = values[name]
-  if record == nil or record.placeholder then
+  if record == nil then
     log:debug("Value %s does not exist; ignoring delete", name)
     return
   end
@@ -358,18 +387,16 @@ function Values:delete(name)
   OVC[ovcKey(name)] = nil
   self._callbacks[name] = nil
 
-  local wasVariable = isLive(record)
-  if record.deleted and record.value == nil then
-    -- Already deleted: its id stays held as it is
-  else
-    if record.id == nil and record.varType == nil then
+  if holdsValue(record) then
+    local wasVariable = isLive(record)
+    if wasVariable then
+      self:_removeVariable(values, name, record, record.varType)
+    end
+    if record.id == nil then
       values[name] = nil
     else
       record.deleted = true
       record.value = nil
-    end
-    if wasVariable then
-      self:_removeVariable(name, record)
     end
     self:_saveValues(values, wasVariable)
   end
@@ -421,24 +448,27 @@ function Values:getValue(name)
 end
 
 --- Restores every value, each variable at its id; the first run after an older build keeps Director's ids.
---- Call this from OnDriverInit, before the driver adds any variable of its own.
+--- Call it first in OnDriverInit, and add variables only through lib/values, never C4:AddVariable.
 --- @return void
 function Values:restoreValues()
   log:trace("Values:restoreValues()")
   local values = self:_load()
-  local restarted = not self:_anyPresent(values)
+  self._unhide, self._unheld = {}, {}
+  local before = recordSignature(values)
+  local restarted, director = self:_regime(values)
 
-  if self:_migrate(values, restarted) then
+  self:_learn(values, restarted, director)
+  if recordSignature(values) ~= before then
     self:_saveValues(values, true)
+    before = recordSignature(values)
   end
 
-  local before = idSignature(values)
   if canRename() then
     self:_restoreRenamed(values)
   else
     self:_restoreByName(values, restarted)
   end
-  if idSignature(values) ~= before then
+  if recordSignature(values) ~= before then
     self:_saveValues(values, true)
   end
 
@@ -452,15 +482,21 @@ function Values:restoreValues()
   end
 end
 
---- Resets all values: removes every variable and value, but each name keeps its id.
+--- Resets all values: removes every variable and value, but each name keeps its id, so
+--- getValue still returns its record, deleted and with no value.
 function Values:reset()
   log:trace("Values:reset()")
   local values = self:_load()
-  for name, record in pairs(values) do
+  local names = {}
+  for name in pairs(values) do
+    table.insert(names, name)
+  end
+  for _, name in ipairs(names) do
+    local record = values[name]
     log:debug("Removing value '%s'", name)
     OVC[ovcKey(name)] = nil
     if isLive(record) then
-      self:_removeVariable(name, record)
+      self:_removeVariable(values, name, record, record.varType)
     end
     if record.id == nil then
       values[name] = nil
@@ -522,126 +558,250 @@ function Values:_showProperty(name, record)
   end
 end
 
---- What to address a record's variable by: its id, unless that id was only estimated.
+--- What to address a record's variable by: its id, else its name while Director shows it and
+--- does not read the name as another id. Nil when there is no variable to address.
 --- @private
 function Values:_target(name, record)
   if record.id ~= nil and not record.unverified then
     return record.id
+  elseif not looksNumeric(name) and Variables[name] ~= nil then
+    return name
   end
-  return name
+end
+
+--- Estimated ids are replaced by the ones Director has for their names, once it can say; an
+--- estimate another name turns out to have is dropped.
+--- @private
+function Values:_verify(values)
+  local director
+  for _, record in pairs(values) do
+    if record.unverified then
+      director = self:_directorVariables()
+      break
+    end
+  end
+  if director == nil then
+    return
+  end
+  local byName, known = {}, {}
+  for id, variable in pairs(director) do
+    byName[variable.name] = id
+  end
+  for name, record in pairs(values) do
+    if record.unverified and not looksNumeric(name) and byName[name] ~= nil then
+      record.id, record.unverified = byName[name], nil
+    end
+    if record.id ~= nil and not record.unverified then
+      known[record.id] = true
+    end
+  end
+  for _, record in pairs(values) do
+    if record.unverified and known[record.id] then
+      record.id, record.unverified = nil, nil
+    end
+  end
 end
 
 --- Brings Director in line with a record after an update.
 --- @private
---- @return boolean durable True when a variable or an id changed.
+--- @return boolean durable True when a variable, a record's id or the set of records changed.
 function Values:_applyVariable(values, name, record, existing, strValue)
   local wasVariable = isLive(existing)
   if record.varType == nil then
-    record.deleted = record.id ~= nil or nil
-    if not wasVariable then
-      return false
+    if wasVariable then
+      OVC[ovcKey(name)] = nil
+      self._callbacks[name] = nil
+      self:_removeVariable(values, name, record, existing.varType)
     end
-    OVC[ovcKey(name)] = nil
-    self._callbacks[name] = nil
-    self:_removeVariable(name, existing)
-    return true
+    record.deleted = record.id ~= nil or nil
+    return wasVariable
   end
 
   local present = Variables[directorName(name, record)]
-  if present ~= nil and (wasVariable or existing == nil or existing.id == nil) then
+  if present ~= nil and (wasVariable or record.id == nil) and not self._unhide[name] then
     local idBefore = record.id
     if record.id == nil then
-      -- Director already has a visible variable of this name: take it over at its id.
       local found = self:_findVariable(name)
       if found ~= nil and found.hidden then
-        present = nil
+        present = nil -- an older build's placeholder: the record gets a variable of its own
       elseif found ~= nil then
-        record.id = found.id
+        record.id = found.id -- Director already has a visible variable of this name: take it over at its id
       end
     end
     if present ~= nil then
-      record.deleted = nil
-      if present ~= strValue then
-        C4:SetVariable(self:_target(name, record), strValue)
+      local target = self:_target(name, record)
+      if present ~= strValue and target ~= nil then
+        C4:SetVariable(target, strValue)
       end
       return record.id ~= idBefore or not wasVariable
     end
   end
 
   record.deleted = nil
+  self._unhide[name] = nil
+  local left
   if not canRename() and existing ~= nil and existing.id ~= nil and not wasVariable then
-    self:_leaveBehind(values, name, record, existing)
+    left = self:_leaveBehind(values, name, record, existing.varType)
   end
-  self:_createVariable(values, name, record, strValue)
-  return true
+  local created = self:_createVariable(values, name, record, strValue)
+  if left ~= nil and record.id ~= nil then
+    log:warn(
+      "%s returns at id %s; its id %s stays held, so programming on it must be pointed at the new one",
+      name,
+      record.id,
+      left
+    )
+  end
+  return created or left ~= nil
 end
 
 --- Removes a record's variable. Without a rename its id stays held by a hidden variable,
 --- so nothing after it moves.
 --- @private
-function Values:_removeVariable(name, record)
-  C4:DeleteVariable(self:_target(name, record))
-  if not canRename() and record.id ~= nil and not C4:AddVariable(record.id, "", record.varType, true, true) then
+function Values:_removeVariable(values, name, record, varType)
+  self:_verify(values)
+  local target = self:_target(name, record)
+  if target ~= nil then
+    C4:DeleteVariable(target)
+  end
+  if canRename() or record.id == nil then
+    return
+  end
+  if record.unverified then
+    -- Only a guess from restore order: holding it could hold someone else's id.
+    log:warn("The variable id of %s is not known, so nothing holds it", name)
+    record.id, record.unverified = nil, nil
+  elseif not self:_hold(record.id, varType) then
     log:error("Could not hold variable id %s of %s with a hidden variable", record.id, name)
   end
+end
+
+--- Holds an id with a hidden variable added by number.
+--- @private
+--- @return boolean added False when the id is taken or Director refuses.
+function Values:_hold(id, varType)
+  local ok, added = pcall(C4.AddVariable, C4, id, "", varType or "STRING", true, true)
+  if not ok and varType ~= nil and varType ~= "STRING" then
+    ok, added = pcall(C4.AddVariable, C4, id, "", "STRING", true, true)
+  end
+  if not ok then
+    log:error("Holding variable id %s failed: %s", id, added)
+    return false
+  end
+  return added and true or false
+end
+
+--- Keeps an id no name owns reserved under a record of its own.
+--- @private
+function Values:_reserve(values, id, avoid)
+  values[placeholderKey(values, id, avoid)] =
+    { index = maxIndex(values) + 1, id = id, varType = "STRING", deleted = true, placeholder = true }
 end
 
 --- A name that returns without a rename cannot take its old id back: the id stays held
 --- under a record of its own, and the name gets a new one.
 --- @private
-function Values:_leaveBehind(values, name, record, existing)
-  local id = existing.id
-  if parsedId(name) == id then
-    -- Director puts a numeric name at the id it spells, so its own placeholder gives way.
+--- @return integer? left The id it left behind.
+function Values:_leaveBehind(values, name, record, varType)
+  self:_verify(values)
+  local id = record.id
+  if record.unverified then
+    record.id, record.unverified = nil, nil -- only a guess: nothing of ours is known to be there
+    return nil
+  elseif parsedId(name) == id then
+    -- Director puts a numeric name at the id it spells, so its own hold gives way.
     C4:DeleteVariable(id)
-    return
+    return nil
   end
   values[placeholderKey(values, id, name)] = {
-    index = existing.index,
+    index = record.index,
     id = id,
-    unverified = existing.unverified,
-    varType = existing.varType or "STRING",
+    varType = varType or "STRING",
     deleted = true,
     placeholder = true,
   }
-  if Variables[tostring(id)] == nil then
-    if Variables[name] ~= nil then
-      -- An older build's placeholder carries the name the new variable needs.
-      C4:DeleteVariable(self:_target(name, existing))
-    end
-    C4:AddVariable(id, "", existing.varType or "STRING", true, true)
-  end
   record.id = nil
-  record.unverified = nil
+  if Variables[tostring(id)] == nil then
+    -- Not held by number: an older build holds it under the name, or nothing does.
+    local found = self:_findVariable(name)
+    if (found ~= nil and found.id == id) or (found == nil and Variables[name] ~= nil) then
+      C4:DeleteVariable(id)
+    end
+    if not self:_hold(id, varType) then
+      log:error("Could not hold variable id %s of %s with a hidden variable", id, name)
+    end
+  end
+  return id
+end
+
+--- Deletes a variable that carries the name but is not the record's (an older build's hidden
+--- placeholder, or a stray). Its id stays reserved, and without a rename held.
+--- @private
+--- @return boolean changed True when a record was added or the record took an id.
+function Values:_clearName(values, name, record)
+  if Variables[name] == nil then
+    return false
+  end
+  local found = self:_findVariable(name)
+  if found == nil then
+    if not looksNumeric(name) then
+      C4:DeleteVariable(name) -- Director cannot say where it is
+    end
+    return false
+  end
+  local _, owner = ownerOf(values, found.id)
+  if owner ~= nil and owner ~= record and name == tostring(found.id) then
+    return false -- another record's hold, named by its number as this name is
+  end
+  C4:DeleteVariable(found.id)
+  if found.id == record.id then
+    return false
+  elseif canRename() and record.id == nil and found.hidden then
+    record.id = found.id -- the name's old placeholder: it comes back at that id
+    return true
+  end
+  if owner == nil then
+    self:_reserve(values, found.id, name)
+  end
+  if not canRename() then
+    self:_hold(found.id)
+  end
+  return owner == nil
 end
 
 --- Creates a record's variable: at its id with a rename, else by name.
 --- @private
+--- @return boolean changed True when a variable was created or an id or record changed.
 function Values:_createVariable(values, name, record, strValue)
   if canRename() then
-    self:_createRenamed(values, name, record, strValue)
-  else
-    self:_createByName(values, name, record, strValue)
+    return self:_createRenamed(values, name, record, strValue)
   end
+  return self:_createByName(values, name, record, strValue)
 end
 
 --- Adds the variable at the record's id (a new one above every id recorded) and names it.
 --- @private
 function Values:_createRenamed(values, name, record, strValue)
-  local readOnly = not record.writable
-  if Variables[name] ~= nil then
-    -- An older build's hidden placeholder, or a leftover, still carries the name; wherever it is.
-    local found = self:_findVariable(name)
-    C4:DeleteVariable(found and found.id or self:_target(name, record))
+  if self._rejected[name] then
+    return false
   end
-  if record.id ~= nil and not self:_addAt(values, record.id, name, strValue, record.varType, readOnly) then
+  local readOnly = not record.writable
+  self:_verify(values)
+  local changed = self:_clearName(values, name, record)
+  if
+    record.id ~= nil
+    and not self:_addAt(values, record.id, name, strValue, record.varType, readOnly, not record.unverified)
+  then
     log:error("Variable id %s of %s is taken by another variable; %s gets a new id", record.id, name, name)
+    if not record.unverified then
+      self:_reserve(values, record.id, name)
+    end
     record.id = nil
   end
   if record.id == nil then
-    local id = math.max(maxId(values), FIRST_ID - 1) + 1
+    local id = maxId(values) + 1
     for _ = 1, MAX_ID_TRIES do
-      if self:_addAt(values, id, name, strValue, record.varType, readOnly) then
+      if self:_addAt(values, id, name, strValue, record.varType, readOnly, false) then
         record.id = id
         break
       end
@@ -649,16 +809,30 @@ function Values:_createRenamed(values, name, record, strValue)
     end
     if record.id == nil then
       log:error("Found no free variable id for %s", name)
+      record.unverified = nil
+      return changed
     end
   end
   record.unverified = nil
+  return true
 end
 
---- Adds a variable at exactly that id and names it.
+--- Adds a variable at exactly that id and names it. At a record's own id, one named by its number
+--- (an older build's numeric name, or a failed rename) is ours and is named; a hidden one gives way.
 --- @private
 --- @return boolean added
-function Values:_addAt(values, id, name, strValue, varType, readOnly)
+function Values:_addAt(values, id, name, strValue, varType, readOnly, own)
   local added = C4:AddVariable(id, strValue, varType, readOnly, false)
+  if not added and own then
+    local occupant = (self:_directorVariables() or {})[id]
+    if occupant ~= nil and not occupant.hidden and occupant.name == tostring(id) then
+      C4:SetVariable(id, strValue)
+      added = true
+    elseif occupant ~= nil and occupant.hidden then
+      C4:DeleteVariable(id)
+      added = C4:AddVariable(id, strValue, varType, readOnly, false)
+    end
+  end
   local aside
   if not added then
     -- A variable of ours named like this id blocks the add; it steps aside for a moment.
@@ -668,27 +842,35 @@ function Values:_addAt(values, id, name, strValue, varType, readOnly)
       and isLive(holder)
       and holder.id ~= nil
       and holder.id ~= id
-      and C4:SetVariableName(holder.id, ASIDE_NAME)
+      and rename(holder.id, ASIDE_NAME)
     then
       aside = holder.id
       added = C4:AddVariable(id, strValue, varType, readOnly, false)
     end
   end
-  if added and name ~= tostring(id) and not C4:SetVariableName(id, name) then
+  if added and name ~= tostring(id) and not rename(id, name) then
+    -- It keeps the id; no second variable is added for the name in this load.
     log:error("Variable %s could not be named %s", id, name)
+    self._rejected[name] = true
   end
-  if aside ~= nil then
-    C4:SetVariableName(aside, tostring(id))
+  if aside ~= nil and not rename(aside, tostring(id)) then
+    log:error("Variable %s could not be named %s again", aside, id)
   end
   return added and true or false
 end
 
 --- Adds the variable by name and records the id Director gives it.
 --- @private
---- @return boolean added
+--- @return boolean changed True when a variable was created or an id or record changed.
 function Values:_createByName(values, name, record, strValue)
   if self._rejected[name] then
     return false
+  end
+  local changed = self:_clearName(values, name, record)
+  for id in pairs(self._unheld) do
+    if self:_hold(id) then
+      self._unheld[id] = nil
+    end
   end
   local ok, added, id
   if looksNumeric(name) then
@@ -700,7 +882,7 @@ function Values:_createByName(values, name, record, strValue)
   if not ok or not added then
     self._rejected[name] = true
     log:error("Director did not add variable %s%s", name, ok and "" or (": " .. tostring(added)))
-    return false
+    return changed
   end
   if id == nil then
     local found = self:_findVariable(looksNumeric(name) and tostring(parsedId(name)) or name)
@@ -712,8 +894,10 @@ function Values:_createByName(values, name, record, strValue)
   for other, held in pairs(values) do
     if id ~= nil and held.id == id and held ~= record then
       log:error("Variable %s took id %s, which %s held without a variable", name, id, other)
-      held.id = nil
-      if held.deleted and held.value == nil then
+      held.id, held.unverified = nil, nil
+      if holdsValue(held) then
+        held.deleted = nil -- a plain value keeps its value, without the id
+      else
         values[other] = nil
       end
     end
@@ -753,43 +937,51 @@ function Values:_findVariable(name)
   end
 end
 
---- Whether Director has a variable for any record, which it keeps across a driver update
---- and drops on a Director restart.
+--- Whether Director was restarted: a driver update keeps every variable, an older build's hidden
+--- ones included; a restart keeps none.
 --- @private
-function Values:_anyPresent(values)
+--- @return boolean restarted
+--- @return table? director
+function Values:_regime(values)
   for name, record in pairs(values) do
-    if Variables[directorName(name, record)] ~= nil then
-      return true
-    elseif record.id ~= nil and not isLive(record) and Variables[tostring(record.id)] ~= nil then
-      return true
+    local p = record.id == nil and parsedId(name)
+    if Variables[directorName(name, record)] ~= nil or (p and Variables[tostring(p)] ~= nil) then
+      return false
     end
   end
-  return false
+  if next(Variables) == nil then
+    return true
+  end
+  local director = self:_directorVariables()
+  for id, variable in pairs(director or {}) do
+    if variable.hidden then
+      return false, director
+    end
+  end
+  return true
 end
 
---- Gives the records an older build left without ids the ids Director has for them now.
---- All or nothing: every record is looked at again.
+--- Gives every record the id Director has for it now, on every load after a driver update;
+--- on the first load after an older build with no id recorded, also after a restart.
 --- @private
---- @return boolean changed
-function Values:_migrate(values, restarted)
+function Values:_learn(values, restarted, director)
   local pending, anyId = false, false
-  for name, record in pairs(values) do
+  for _, record in pairs(values) do
     if record.id ~= nil then
       anyId = true
-    elseif record.deleted or (record.varType ~= nil and (canRename() or not looksNumeric(name))) then
+    elseif record.deleted or record.varType ~= nil then
       pending = true
     end
   end
-  if not pending then
-    return false
-  end
 
   local estimated, rows = olderBuildIds(values)
-  if restarted and not anyId then
-    self:_restoreAsOlderBuild(values, estimated, rows)
-  elseif not restarted then
-    local director = self:_directorVariables()
-    if director == nil or not self:_learnIds(values, director, estimated) then
+  if restarted then
+    if pending and not anyId then
+      self:_restoreAsOlderBuild(values, estimated, rows)
+    end
+  else
+    director = director or self:_directorVariables()
+    if (director == nil or not self:_learnIds(values, director, estimated)) and pending then
       log:warn("Director's variables could not be read; variable ids are taken from restore order")
       local held = {}
       for _, record in pairs(values) do
@@ -808,18 +1000,12 @@ function Values:_migrate(values, restarted)
     end
   end
 
-  -- A deleted record Director holds no id for has nothing left to keep.
+  -- A deleted record left with no id has nothing to keep.
   for name, record in pairs(values) do
-    if record.id == nil and record.deleted then
+    if record.id == nil and not holdsValue(record) then
       values[name] = nil
-    elseif canRename() and isLive(record) and record.id ~= nil and looksNumeric(name) then
-      if Variables[name] == nil and Variables[tostring(record.id)] ~= nil then
-        C4:SetVariableName(record.id, name) -- a numeric name Director stored under its id
-      end
     end
   end
-  log:info("Recorded the variable ids of the values an older build stored")
-  return true
 end
 
 --- On a Director restart with no ids recorded, does what the older build's restore did,
@@ -843,64 +1029,120 @@ function Values:_restoreAsOlderBuild(values, estimated, rows)
   end
 end
 
---- Takes each record's id from Director by name, and holds the id of every hidden variable
---- no record names. False when Director shows a name it does not list.
+--- Takes each record's id from Director, changing nothing when Director shows a name it does
+--- not list. Every other variable's id is kept reserved under a record of its own.
 --- @private
+--- @return boolean learned
 function Values:_learnIds(values, director, estimated)
   local byName = {}
   for id, variable in pairs(director) do
     byName[variable.name] = id
   end
-  local learned = {}
+  local names = {}
   for name, record in pairs(values) do
-    local id = byName[name]
-    local parsed = parsedId(name)
-    if id == nil and parsed ~= nil and director[parsed] ~= nil and director[parsed].name == tostring(parsed) then
-      if values[tostring(parsed)] == nil then
-        id = parsed -- a numeric name Director stored under its id
+    if wasEverVariable(record) then
+      if Variables[name] ~= nil and byName[name] == nil then
+        return false
+      end
+      table.insert(names, name)
+    end
+  end
+  table.sort(names)
+
+  -- Without a rename a numeric-looking name says nothing: a hold is named by its number too.
+  local function shown(name)
+    if canRename() or not looksNumeric(name) then
+      return byName[name]
+    end
+  end
+  -- An older build's by-name add of a numeric-looking name lands on the id it spells.
+  local function numbered(name)
+    local p = parsedId(name)
+    if p ~= nil and byName[tostring(p)] == p and (values[tostring(p)] == nil or tostring(p) == name) then
+      return p
+    end
+  end
+
+  local owner, want = {}, {}
+  local function claim(name, id)
+    if id ~= nil and owner[id] == nil and want[name] == nil then
+      owner[id], want[name] = name, id
+    end
+  end
+  -- Where Director shows a live record's name now, then a record's recorded id while no other
+  -- record is shown there, then where Director shows the rest, then the id restore order gives.
+  for _, name in ipairs(names) do
+    if isLive(values[name]) then
+      claim(name, shown(name))
+    end
+  end
+  for _, name in ipairs(names) do
+    if not values[name].unverified then
+      claim(name, values[name].id)
+    end
+  end
+  for _, name in ipairs(names) do
+    claim(name, shown(name) or numbered(name))
+  end
+  for _, name in ipairs(names) do
+    local id = estimated[name]
+    if want[name] == nil and id ~= nil and director[id] == nil then
+      claim(name, id)
+    end
+  end
+
+  local lost = {}
+  for _, name in ipairs(names) do
+    local record = values[name]
+    if record.id ~= nil and not record.unverified and record.id ~= want[name] then
+      log:info("Variable %s is at id %s, not %s", name, tostring(want[name]), record.id)
+      lost[record.id] = true
+    end
+    record.id, record.unverified = want[name], nil
+    if record.varType == nil then
+      record.deleted = record.id ~= nil or nil -- a plain value is stored deleted while it keeps an id
+    end
+    local variable = record.id and director[record.id]
+    if
+      variable ~= nil
+      and not variable.hidden
+      and variable.name ~= name
+      and not isLive(record)
+      and not record.placeholder
+    then
+      log:warn("Variable id %s of %s is taken by variable %s", record.id, name, variable.name)
+    end
+    if variable ~= nil and isLive(record) and canRename() then
+      if variable.hidden then
+        self._unhide[name] = true
+      elseif variable.name ~= name and variable.name == tostring(record.id) and not rename(record.id, name) then
+        log:error("Variable %s could not be named %s", record.id, name) -- a numeric name stored under its id
       end
     end
-    if id == nil and Variables[directorName(name, record)] ~= nil then
-      return false
-    end
-    learned[name] = id
-  end
-  local claimed, unmatched = {}, {}
-  for name, record in pairs(values) do
-    if learned[name] ~= nil then
-      record.id, record.unverified = learned[name], nil
-      claimed[record.id] = true
-    else
-      table.insert(unmatched, name)
-    end
   end
 
-  -- Director lacks these: each keeps an id nobody has, else takes the one a restart would give.
-  local function free(id)
-    return id ~= nil and director[id] == nil and not claimed[id]
-  end
-  table.sort(unmatched)
-  for _, name in ipairs(unmatched) do
-    local record = values[name]
-    if free(record.id) then
-      claimed[record.id] = true
-    else
-      record.id = nil
+  -- An id once recorded, and any other variable's, stays reserved: a hidden one under its name.
+  for id in pairs(lost) do
+    if owner[id] == nil and director[id] == nil then
+      owner[id] = true
+      self:_reserve(values, id)
     end
   end
-  for _, name in ipairs(unmatched) do
-    local record = values[name]
-    if record.id == nil and canRename() and free(estimated[name]) then
-      record.id, record.unverified = estimated[name], nil
-      claimed[record.id] = true
+  local others = {}
+  for id in pairs(director) do
+    if owner[id] == nil then
+      table.insert(others, id)
     end
   end
-
-  for id, variable in pairs(director) do
-    if not claimed[id] and variable.hidden and values[variable.name] == nil then
+  table.sort(others)
+  for _, id in ipairs(others) do
+    local variable = director[id]
+    if variable.hidden and values[variable.name] == nil then
       log:info("Holding variable id %s of hidden variable %s", id, variable.name)
-      values[variable.name] = { index = 0, id = id, varType = "STRING", deleted = true }
-      claimed[id] = true
+      values[variable.name] = { index = maxIndex(values) + 1, id = id, varType = "STRING", deleted = true }
+    else
+      log:info("Holding variable id %s of variable %s, which is not ours", id, variable.name)
+      self:_reserve(values, id)
     end
   end
   return true
@@ -909,25 +1151,14 @@ end
 --- Restore with a rename: each variable Director lacks is added at its id and named.
 --- @private
 function Values:_restoreRenamed(values)
-  local rows = {}
+  local names = {}
   for name, record in pairs(values) do
     if isLive(record) then
-      table.insert(rows, { name = name, record = record })
+      table.insert(names, name)
     end
   end
-  table.sort(rows, function(a, b)
-    if (a.record.id ~= nil) ~= (b.record.id ~= nil) then
-      return a.record.id ~= nil
-    elseif a.record.id ~= nil and a.record.id ~= b.record.id then
-      return a.record.id < b.record.id
-    end
-    return a.name < b.name
-  end)
-  for _, row in ipairs(rows) do
-    local ok, err = pcall(self._restoreVariable, self, values, row.name, row.record)
-    if not ok then
-      log:error("Restoring variable %s failed: %s", row.name, err)
-    end
+  for _, name in ipairs(names) do
+    self:_restoreOne(values, name)
   end
 end
 
@@ -936,6 +1167,7 @@ end
 --- @private
 function Values:_restoreByName(values, restarted)
   local owner, ids, walkTo = {}, {}, FIRST_ID - 1
+  local unplaced = {}
   for name, record in pairs(values) do
     if record.id ~= nil then
       owner[record.id] = name
@@ -943,6 +1175,8 @@ function Values:_restoreByName(values, restarted)
       if isLive(record) and not looksNumeric(name) and record.id > walkTo then
         walkTo = record.id
       end
+    elseif isLive(record) then
+      table.insert(unplaced, name)
     end
   end
   -- Every id up to the last one a by-name add must land on, then the rest.
@@ -952,40 +1186,42 @@ function Values:_restoreByName(values, restarted)
     end
   end
   table.sort(ids)
+  table.sort(unplaced, function(a, b)
+    return (values[a].index or 0) < (values[b].index or 0) or (values[a].index == values[b].index and a < b)
+  end)
 
   for _, id in ipairs(ids) do
     local name = owner[id]
     local record = name and values[name]
-    if record ~= nil and isLive(record) then
-      local ok, err = pcall(self._restoreVariable, self, values, name, record)
-      if not ok then
-        log:error("Restoring variable %s failed: %s", name, err)
+    if isLive(record) then
+      self:_restoreOne(values, name)
+      if record.id == id and Variables[directorName(name, record)] == nil then
+        self:_hold(id) -- it could not be added: held, so no later variable takes its id
       end
     elseif record ~= nil or restarted then
       local held = Variables[tostring(id)] ~= nil or (record ~= nil and Variables[name] ~= nil)
-      if not held then
-        local ok, err = pcall(C4.AddVariable, C4, id, "", record and record.varType or "STRING", true, true)
-        if not ok then
-          log:error("Holding variable id %s failed: %s", id, err)
-        end
+      if not held and not self:_hold(id, record and record.varType) then
+        log:warn("Variable id %s%s is taken by another variable", id, name and (" of " .. name) or "")
+        self._unheld[id] = true
       end
     end
   end
 
-  local unplaced = {}
-  for name, record in pairs(values) do
-    if isLive(record) and record.id == nil then
-      table.insert(unplaced, name)
-    end
-  end
-  table.sort(unplaced, function(a, b)
-    return (values[a].index or 0) < (values[b].index or 0) or (values[a].index == values[b].index and a < b)
-  end)
   for _, name in ipairs(unplaced) do
-    local ok, err = pcall(self._restoreVariable, self, values, name, values[name])
-    if not ok then
-      log:error("Restoring variable %s failed: %s", name, err)
-    end
+    self:_restoreOne(values, name)
+  end
+end
+
+--- Restores one live record's variable; a failure is logged and the rest carry on.
+--- @private
+function Values:_restoreOne(values, name)
+  local record = values[name]
+  if not isLive(record) then
+    return
+  end
+  local ok, err = pcall(self._restoreVariable, self, values, name, record)
+  if not ok then
+    log:error("Restoring variable %s failed: %s", name, err)
   end
 end
 
@@ -998,7 +1234,10 @@ function Values:_restoreVariable(values, name, record)
     log:debug("Restoring %s variable %s at id %s", record.varType, name, record.id)
     self:_createVariable(values, name, record, strValue)
   elseif present ~= strValue then
-    C4:SetVariable(self:_target(name, record), strValue)
+    local target = self:_target(name, record)
+    if target ~= nil then
+      C4:SetVariable(target, strValue)
+    end
   end
 end
 

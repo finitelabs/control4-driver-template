@@ -10,16 +10,37 @@ local T = require("testlib")
 local H = require("values_harness")
 local log = require("lib.logging")
 
--- Every error lib/values logs, formatted.
-local errors = {}
-local realError = log.error
-function log:error(text, ...)
-  local args = { ... }
-  for i = 1, select("#", ...) do
-    args[i] = tostring(args[i])
+-- Every error and warning lib/values logs, formatted.
+local errors, warnings = {}, {}
+local function collect(into, real)
+  return function(self, text, ...)
+    local args = { ... }
+    for i = 1, select("#", ...) do
+      args[i] = tostring(args[i])
+    end
+    table.insert(into(), string.format(text, unpack(args)))
+    return real(self, text, ...)
   end
-  table.insert(errors, string.format(text, unpack(args)))
-  return realError(self, text, ...)
+end
+log.error = collect(function()
+  return errors
+end, log.error)
+log.warn = collect(function()
+  return warnings
+end, log.warn)
+
+--- How many times fn writes the stored values.
+local function writesOf(fn)
+  local count, real = 0, C4.PersistSetValue
+  C4.PersistSetValue = function(self, key, ...)
+    if key == "Values" then
+      count = count + 1
+    end
+    return real(self, key, ...)
+  end
+  fn()
+  C4.PersistSetValue = real
+  return count
 end
 
 local MODES = {
@@ -48,7 +69,7 @@ end
 local function fresh(mode)
   H.mode(mode.rename)
   H.wipe()
-  errors = {}
+  errors, warnings = {}, {}
   return H.load("restart")
 end
 
@@ -94,6 +115,18 @@ for _, mode in ipairs(MODES) do
   values:update("B", "2", "STRING")
   holds("B and D", { A = 1001, B = R and 1002 or 1005, C = 1003, D = 1004 }, none or { 1002 })
 
+  T.section(L .. ": the highest variable deleted, then a new name")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  values:update("B", "2", "STRING")
+  values:update("C", "3", "STRING")
+  values:delete("C")
+  values = H.load("update")
+  values:update("D", "4", "STRING")
+  T.eq("does not take the deleted name's id", H.visible().D, 1004)
+  values:update("C", "3", "STRING")
+  holds("C and D", { A = 1001, B = 1002, C = R and 1003 or 1005, D = 1004 }, none or { 1003 })
+
   T.section(L .. ": deleting a plain value that never was a variable")
   values = fresh(mode)
   values:update("A", "1", "STRING")
@@ -117,6 +150,7 @@ for _, mode in ipairs(MODES) do
     holds("B back", { A = 1001, B = 1002, C = 1003 }, {})
   else
     T.eq("B takes a new id and 1002 stays held", H.snapshot(), "1001=A, 1002=1002(h), 1003=C, 1004=B")
+    T.contains("which is logged", table.concat(warnings, "\n"), "B returns at id 1004; its id 1002 stays held")
     holds("B back", { A = 1001, B = 1004, C = 1003 }, { 1002 })
   end
   T.eq("B has its value", Variables["B"], "2b")
@@ -299,6 +333,44 @@ for _, mode in ipairs(MODES) do
     holds("numeric names", want, {})
   end
 
+  T.section(L .. ": a numeric-looking name Director refuses touches no other variable")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  values:update("B", "2", "STRING")
+  values:update("C", "3", "STRING")
+  local writes = writesOf(function()
+    for _ = 1, 3 do
+      values:update("1003", "x", "STRING")
+    end
+  end)
+  T.eq("an unchanged value is written once", writes, 1)
+  T.eq("and a refusal logged once", #errors, R and 0 or 1)
+  values:delete("1003")
+  T.eq("deleting it leaves C alone", H.visible().C, 1003)
+  T.eq("and keeps a record only if it had an id", values:getValue("1003") ~= nil, R)
+  values:update("1003", "x", "STRING")
+  values:update("1003", "plain")
+  T.eq("so does making it plain", H.visible().C, 1003)
+  values:delete("B")
+  H.calls = {}
+  values:update("1002", "y", "STRING")
+  values:delete("1002")
+  values:update("1002", "y", "STRING")
+  T.eq("and one named like a held id leaves the hold", { H.called("^Delete #1002$"), H.recordIds().B }, { false, 1002 })
+  values = H.load("update")
+  T.eq("restore writes into no other variable", H.called("^Set"), false)
+  values:update("New", "n", "STRING")
+  if R then
+    holds("the ids", { A = 1001, C = 1003, ["1002"] = 1005, New = 1006 }, {})
+  else
+    holds("the ids", { A = 1001, C = 1003, New = 1004 }, { 1002 })
+  end
+  values:reset()
+  T.eq("reset leaves every id reserved", H.recordIds().B, 1002)
+  if not R then
+    T.eq("and held", H.hiddenIds(), { 1001, 1002, 1003, 1004 })
+  end
+
   T.section(L .. ": a variable renamed to another's decimal id")
   if R then
     values = fresh(mode)
@@ -370,20 +442,166 @@ for _, mode in ipairs(MODES) do
     values:update("B", "back", "STRING")
     T.eq("B comes back visible at its id", H.snapshot(), "1001=A, 1002=B")
     holds("B back", { A = 1001, B = 1002 }, {})
+  else
+    T.section(L .. ": a hidden variable under the name at another id")
+    values = fresh(mode)
+    values:update("A", "1", "STRING")
+    values:update("B", "2", "STRING")
+    values:delete("B")
+    C4:AddVariable("B", "", "STRING", true, true) -- a leftover under B's name, at 1003
+    values:update("B", "back", "STRING")
+    T.eq("B is shown at once, at a new id", H.snapshot(), "1001=A, 1002=1002(h), 1003=1003(h), 1004=B")
+    T.eq("with its value", Variables["B"], "back")
+    holds("B back", { A = 1001, B = 1004 }, { 1002, 1003 })
+
+    T.section(L .. ": a held id another variable took is logged")
+    values = fresh(mode)
+    values:update("A", "1", "STRING")
+    values:update("B", "2", "STRING")
+    values:update("C", "3", "STRING")
+    values:delete("B")
+    values = H.load("update")
+    C4:DeleteVariable(1002)
+    C4:AddVariable("Other", "", "STRING") -- the driver's own, by name, lands on 1002
+    warnings = {}
+    H.load("update")
+    T.contains(
+      "restore says who has it",
+      table.concat(warnings, "\n"),
+      "Variable id 1002 of B is taken by variable Other"
+    )
+    T.contains("and that it cannot be held", table.concat(warnings, "\n"), "Variable id 1002 of B is taken by another")
+    T.eq("and B keeps it reserved", H.recordIds().B, 1002)
+
+    T.section(L .. ": the driver's own value named like a held id")
+    values = fresh(mode)
+    values:update("A", "1", "STRING")
+    values:update("B", "2", "STRING")
+    values:delete("B")
+    values:update("B", "2", "STRING") -- 1002 is held under the key "1002"
+    values:reset()
+    values:update("1002", "y", "STRING")
+    T.eq("does not take the held id", H.variables()[1002].hidden, true)
+    T.eq("which stays reserved under another key", H.blob()["#1002"].id, 1002)
   end
 
-  T.section(L .. ": a stored record Director raises on does not stop restore")
+  if R then
+    T.section(L .. ": a rename Director refuses, or raises on")
+    for _, how in ipairs({ "refuses", "raises" }) do
+      values = fresh(mode)
+      values:update("A", "1", "STRING")
+      local realRename = C4.SetVariableName
+      C4.SetVariableName = function(self, id, name)
+        if name == "Odd" then
+          assert(how ~= "raises", "rename failed")
+          return false
+        end
+        return realRename(self, id, name)
+      end
+      local ok = true
+      H.calls = {}
+      for i = 1, 5 do
+        ok = pcall(values.update, values, "Odd", tostring(i), "STRING") and ok
+      end
+      T.check("when it " .. how .. ", update does not raise", ok)
+      T.eq("and the name has one variable", H.count(), 2)
+      local adds = 0
+      for _, call in ipairs(H.calls) do
+        adds = adds + (call:match("^Add") and 1 or 0)
+      end
+      T.eq("added once, not again on each update", adds, 1)
+      values = H.load("update")
+      values:update("Odd", "6", "STRING")
+      T.eq("also in the next load", H.count(), 2)
+      H.load("restart")
+      T.eq("and after a restart, at the same id", H.variables()[1002].name, "1002")
+      C4.SetVariableName = realRename
+    end
+  end
+
+  T.section(L .. ": a plain value keeps its value when another variable takes its old id")
   values = fresh(mode)
   values:update("A", "1", "STRING")
+  values:update("P", "2", "STRING")
+  values:update("C", "3", "STRING")
+  values:update("P", "data")
+  values = H.load("update")
+  C4:DeleteVariable(1002)
+  values:update("X", "x", "STRING")
+  T.eq("P is stored deleted only while it keeps the id", H.blob().P.deleted, R or nil)
+  values = H.load("update")
+  T.eq("P keeps its value", values:getValue("P").value, "data")
+
+  T.section(L .. ": a plain value whose id a variable of another name now has keeps its value")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  values:update("P", "2", "STRING")
+  values:update("P", "data")
+  H.load("update")
+  C4:DeleteVariable(1002) -- without a rename, the hold
+  C4:AddVariable("R", "r", "STRING") -- by name, behind the library's back: 1002
+  local blob = H.blob()
+  blob.R = { index = 3, varType = "STRING", value = "r" }
+  C4:PersistSetValue("Values", Serialize(blob))
+  values = H.load("update")
+  T.eq("R keeps that id", H.recordIds().R, 1002)
+  T.eq("and P its value, as a plain value", { values:getValue("P").value, H.blob().P.deleted }, { "data" })
+
+  T.section(L .. ": a driver update writes the stored value back to a variable that differs")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  ShimWriteVariable(1001, "stale")
+  H.load("update")
+  T.eq("A holds its stored value", Variables["A"], "1")
+
+  T.section(L .. ": a live record with no id gets a variable after a restart")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  blob = H.blob()
+  blob.N = { index = 2, varType = "STRING", value = "n" }
+  C4:PersistSetValue("Values", Serialize(blob))
+  H.load("restart")
+  T.eq("N is shown after A", H.visible(), { A = 1001, N = 1002 })
+
+  T.section(L .. ": a visible variable of the name is taken over, its id written at once")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  values:update("J", "{}")
+  C4:AddVariable("J", "", "STRING", true, false) -- 1002, not added by lib/values
+  C4:AddVariable("Ext", "", "STRING", true, false) -- 1003
+  values:update("J", "x", "STRING")
+  T.eq("a plain value turned variable keeps it", { H.visible().J, Variables.J }, { 1002, "x" })
+  local persist = require("lib.persist")
+  values:setWriteBehind(60000)
+  persist:defer(values.update, values, "Ext", "v", "STRING")
+  T.eq("a new name keeps it too, its id in storage at once", H.recordIds().Ext, 1003)
+  T.eq("and no variable is added", H.count(), 3)
+
+  T.section(L .. ": a hidden variable carrying a new name is not taken over")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  C4:AddVariable("Ghost", "", "STRING", true, true) -- 1002
+  values:update("Ghost", "g", "STRING")
+  holds("Ghost is shown", { A = 1001, Ghost = R and 1002 or 1003 }, none or { 1002 })
+
+  T.section(L .. ": a record Director raises on, in the middle, moves nothing after it")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  values:update("X", "x", "STRING")
   values:update("B", "2", "STRING")
-  local stored = H.blob()
-  stored.Bad = { index = 3, id = 1003, varType = "BOGUS", value = "x" }
-  C4:PersistSetValue("Values", Serialize(stored))
-  for _, how in ipairs({ "update", "restart" }) do
+  values:update("C", "3", "STRING")
+  values:update("X", "x", "BOGUS") -- Director keeps the variable as it is; the record stores the type
+  for _, how in ipairs({ "restart", "update", "restart" }) do
     local ok = pcall(H.load, how)
     T.check("after a " .. how .. " restore completes", ok)
-    T.eq("after a " .. how .. " the others are in place", H.visible(), { A = 1001, B = 1002 })
+    T.eq("after a " .. how .. " the others keep their ids", H.visible(), { A = 1001, B = 1003, C = 1004 })
   end
+  values = H.load("update")
+  values:delete("X") -- without a rename its id is held again, as STRING
+  values:update("D", "4", "STRING")
+  T.eq("and a new name takes none of them", H.visible().D, 1005)
+  H.load("restart")
+  T.eq("which a restart keeps", H.visible(), { A = 1001, B = 1003, C = 1004, D = 1005 })
 
   T.section(L .. ": programming writes reach the callback")
   values = fresh(mode)
