@@ -77,7 +77,8 @@ function H.load(how, build)
   H.calls = {}
   local values = build and require("values_legacy").load(build) or thisBuild()
   values:restoreValues()
-  -- The docs say DeleteVariable should not be invoked during OnDriverInit.
+  -- The docs say DeleteVariable and SetVariable should not be invoked during OnDriverInit; restore
+  -- must bring values up to date, so only a delete fails the load.
   if not build and H.called("^Delete") then
     T.check("restore after a " .. how .. " deletes no variable", false, table.concat(H.calls, ", "))
   end

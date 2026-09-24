@@ -507,8 +507,8 @@ function Values:restoreValues()
   end
 end
 
---- Resets all values: removes every variable and value, but each name keeps its id, so
---- getValue still returns its record, deleted and with no value.
+--- Resets all values: removes every variable and value, but a name that has been a variable keeps
+--- its id, so getValue still returns its record, deleted and with no value.
 function Values:reset()
   log:trace("Values:reset()")
   local values = self:_load()
@@ -831,8 +831,8 @@ function Values:_clearName(values, name, record)
   if owner == nil then
     self:_reserve(values, found.id, name)
   end
-  if not canRename() then
-    self:_hold(found.id)
+  if not canRename() and not self:_hold(found.id) then
+    log:error("Could not hold variable id %s of %s with a hidden variable", found.id, name)
   end
   return owner == nil
 end
@@ -1308,8 +1308,8 @@ function Values:_restoreByName(values, restarted)
     local record = name and values[name]
     if isLive(record) then
       self:_restoreOne(values, name)
-      if record.id == id and Variables[directorName(name, record)] == nil then
-        self:_hold(id) -- it could not be added: held, so no later variable takes its id
+      if record.id == id and Variables[directorName(name, record)] == nil and not self:_hold(id) then
+        log:warn("Variable id %s of %s is taken by another variable", id, name) -- else held: no later name takes it
       end
     elseif record ~= nil or restarted then
       local held = Variables[tostring(id)] ~= nil
