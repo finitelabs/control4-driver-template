@@ -56,12 +56,13 @@ T.eq("restore adds a hidden placeholder in its place", added, { "A", "B", "C (hi
 
 T.section("a blob with a pre-fix placeholder keeps its ids")
 values:reset()
+-- writable is set so restore rewrites nothing, and only the move can save.
 C4:PersistSetValue(
   "Values",
   Serialize({
-    A = { index = 1, varType = "STRING", value = "1" },
+    A = { index = 1, varType = "STRING", value = "1", writable = false },
     Json = { index = 2, deleted = true },
-    B = { index = 3, varType = "STRING", value = "2" },
+    B = { index = 3, varType = "STRING", value = "2", writable = false },
   })
 )
 values, added = reload()

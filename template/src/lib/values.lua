@@ -10,7 +10,6 @@ require("lib.utils")
 
 --- @class Values
 --- @field _callbacks table<string, function?> In-memory registry of OVC callbacks keyed by variable name.
---- @field _migrated boolean? Whether getValues has moved legacy placeholders this session.
 --- A class representing a collection of named values with optional variable/property support.
 local Values = {}
 Values.__index = Values
@@ -296,11 +295,8 @@ end
 function Values:getValues()
   log:trace("Values:getValues()")
   local values = persist:get(VALUES_PERSIST_KEY, {}) or {}
-  if not self._migrated then
-    self._migrated = true
-    if moveLegacyPlaceholders(values) then
-      self:_saveValues(values)
-    end
+  if moveLegacyPlaceholders(values) then
+    self:_saveValues(values)
   end
   return values
 end
