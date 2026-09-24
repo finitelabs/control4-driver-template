@@ -1315,7 +1315,7 @@ for _, mode in ipairs(MODES) do
     old:update("1e3", "y", "STRING") -- 1000, named "1000"
     old:update("0042", "q", "STRING") -- 42, named "42"
     old:update("B", "2", "STRING")
-    -- A restart's list is read before restore adds anything, so it stays empty.
+    -- After a restart the list stays as it was before restore added anything (a model, not measured).
     H.unreadableDirector(how == "restart" and {} or nil)
     local values = H.load(how)
     H.readableDirector()
