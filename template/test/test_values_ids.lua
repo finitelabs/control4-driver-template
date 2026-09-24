@@ -519,6 +519,20 @@ for _, mode in ipairs(MODES) do
     end
   end
 
+  T.section(L .. ": an empty name")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  values:update("B", "2", "STRING")
+  values:delete("A")
+  values:update("", "e", "STRING")
+  T.eq("is the variable's name in Director", H.variables()[1003].name, "")
+  holds("it takes an id nobody had", { B = 1002, [""] = 1003 }, not R and { 1001 } or nil)
+  values:delete("")
+  values = H.load("update")
+  values:update("", "back", "STRING")
+  holds("and comes back", { B = 1002, [""] = R and 1003 or 1004 }, not R and { 1001, 1003 } or nil)
+  T.eq("with its value", Variables[""], "back")
+
   T.section(L .. ": a plain value keeps its value when another variable takes its old id")
   values = fresh(mode)
   values:update("A", "1", "STRING")

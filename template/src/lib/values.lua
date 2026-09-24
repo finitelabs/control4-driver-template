@@ -47,6 +47,12 @@ local function canRename()
   return C4.SetVariableName ~= nil
 end
 
+--- Whether a variable of this name can be created at a chosen id. Director keeps one renamed
+--- to "" under its number (measured on 4.3.0), so that name is added by name.
+local function renamable(name)
+  return canRename() and name ~= ""
+end
+
 --- Renames a variable, false when Director refuses or raises.
 local function rename(id, name)
   local ok, renamed = pcall(C4.SetVariableName, C4, id, name)
@@ -798,7 +804,7 @@ end
 --- @private
 --- @return boolean changed True when a variable was created or an id or record changed.
 function Values:_createVariable(values, name, record, strValue)
-  if canRename() then
+  if renamable(name) then
     return self:_createRenamed(values, name, record, strValue)
   end
   return self:_createByName(values, name, record, strValue)
@@ -884,7 +890,8 @@ function Values:_addAt(values, id, name, strValue, varType, readOnly, own)
   return added and true or false
 end
 
---- Adds the variable by name and records the id Director gives it.
+--- Adds the variable by name and records the id Director gives it. With a rename (only "")
+--- every free id it must not take is held first, so it lands on its own id or on a new one.
 --- @private
 --- @return boolean changed True when a variable was created or an id or record changed.
 function Values:_createByName(values, name, record, strValue)
@@ -892,6 +899,10 @@ function Values:_createByName(values, name, record, strValue)
     return false
   end
   local changed = self:_clearName(values, name, record)
+  local want = canRename() and not record.unverified and record.id or nil
+  if canRename() then
+    self:_holdFor(values, want)
+  end
   for id in pairs(self._unheld) do
     if self:_hold(id) then
       self._unheld[id] = nil
@@ -913,7 +924,11 @@ function Values:_createByName(values, name, record, strValue)
     local found = self:_findVariable(looksNumeric(name) and tostring(parsedId(name)) or name)
     id = found and found.id
   end
-  if record.id ~= nil and id ~= record.id then
+  if want ~= nil and id ~= want then
+    -- Only after another by-name add of "" in this load; its id stays reserved.
+    log:warn("%s returns at id %s; its id %s stays reserved", name, id, want)
+    self:_reserve(values, want, name)
+  elseif record.id ~= nil and id ~= record.id then
     log:error("Variable %s took id %s, not its id %s", name, id, record.id)
   end
   for other, held in pairs(values) do
@@ -930,6 +945,27 @@ function Values:_createByName(values, name, record, strValue)
   record.id = id
   record.unverified = nil
   return true
+end
+
+--- Before a by-name add with a rename: each free recorded id other than `want`, and each free
+--- id below `want`, is held by a hidden variable, so the add cannot land on them.
+--- @private
+function Values:_holdFor(values, want)
+  local director = self:_directorVariables()
+  local ids = {}
+  for _, record in pairs(values) do
+    if record.id ~= nil and record.id ~= want then
+      ids[record.id] = true
+    end
+  end
+  for id = FIRST_ID, (want or FIRST_ID) - 1 do
+    ids[id] = true
+  end
+  for id in pairs(ids) do
+    if director == nil or director[id] == nil then
+      self:_hold(id)
+    end
+  end
 end
 
 --- This device's variables from Director as id -> { name, hidden }, or nil if it cannot say.
@@ -1145,7 +1181,12 @@ function Values:_learnIds(values, director, estimated)
     if variable ~= nil and isLive(record) and canRename() then
       if variable.hidden then
         self._unhide[name] = true
-      elseif variable.name ~= name and variable.name == tostring(record.id) and not rename(record.id, name) then
+      elseif
+        variable.name ~= name
+        and variable.name == tostring(record.id)
+        and renamable(name)
+        and not rename(record.id, name)
+      then
         log:error("Variable %s could not be named %s", record.id, name) -- a numeric name stored under its id
       end
     end
@@ -1178,14 +1219,20 @@ function Values:_learnIds(values, director, estimated)
   return true
 end
 
---- Restore with a rename: each variable Director lacks is added at its id and named.
+--- Restore with a rename: each variable Director lacks is added at its id and named. "" is
+--- added last, by name, so the ids it holds below its own are none a variable needs.
 --- @private
 function Values:_restoreRenamed(values)
-  local names = {}
+  local names, last = {}, nil
   for name, record in pairs(values) do
-    if isLive(record) then
+    if isLive(record) and renamable(name) then
       table.insert(names, name)
+    elseif isLive(record) then
+      last = name
     end
+  end
+  if last ~= nil then
+    table.insert(names, last)
   end
   for _, name in ipairs(names) do
     self:_restoreOne(values, name)
