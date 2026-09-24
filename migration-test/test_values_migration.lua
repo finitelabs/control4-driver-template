@@ -7,17 +7,24 @@ local T = require("testlib")
 local H = require("values_harness")
 local log = require("lib.logging")
 
--- Every warning lib/values logs, formatted.
-local warnings = {}
-local realWarn = log.warn
-function log:warn(text, ...)
-  local args = { ... }
-  for i = 1, select("#", ...) do
-    args[i] = tostring(args[i])
+-- Every warning and error lib/values logs, formatted.
+local warnings, errors = {}, {}
+local function collect(into, real)
+  return function(self, text, ...)
+    local args = { ... }
+    for i = 1, select("#", ...) do
+      args[i] = tostring(args[i])
+    end
+    table.insert(into(), string.format(text, unpack(args)))
+    return real(self, text, ...)
   end
-  table.insert(warnings, string.format(text, unpack(args)))
-  return realWarn(self, text, ...)
 end
+log.warn = collect(function()
+  return warnings
+end, log.warn)
+log.error = collect(function()
+  return errors
+end, log.error)
 
 local MODES = {
   { rename = true, label = "with a rename" },
@@ -1435,6 +1442,22 @@ for _, mode in ipairs(MODES) do
   T.eq("at 42", H.visible()[mode.rename and "0042" or "42"], 42)
 end
 
+T.section("without a rename, Director unreadable at the switch: a deleted name's guess that is taken is logged")
+H.mode(false)
+H.wipe()
+local refused = H.load("restart", "v0.9.28")
+refused:update("D", "d", "STRING")
+refused:update("X", "x", "STRING")
+refused:delete("D")
+refused = H.load("restart", "v0.9.28") -- D(h)=1001
+refused:delete("X") -- both records trimmed; D(h) stays
+refused:update("E", "e", "STRING")
+refused:update("B", "b", "STRING")
+refused:delete("E") -- restore order puts E at 1001, where D(h) is
+warnings = {}
+unreadableSwitch()
+T.contains("E's guess is not held", table.concat(warnings, "\n"), "Variable id 1001 of E is taken")
+
 T.section("with a rename: a variable an older build left hidden is shown at its next update")
 H.mode(true)
 H.wipe()
@@ -1481,6 +1504,19 @@ for i = 1, 3 do
 end
 H.readableDirector()
 T.eq("such a list is asked for once more, not at every update", asked, 2)
+
+T.section("after a restart with no ids recorded, a name Director refuses is logged")
+H.mode(true)
+H.wipe()
+v = H.load("restart", "v0.9.28")
+v:update("A", "1", "STRING")
+v:update("1001", "n", "STRING") -- Director reads 1001, which A has
+local refusedRaw = blobCopy()
+ShimRestartDirector()
+setBlob(refusedRaw)
+errors = {}
+H.load("restart")
+T.contains("by name", table.concat(errors, "\n"), "Director did not add variable 1001")
 
 T.section("without a rename, a restart after the switch holds each gap by number")
 H.mode(false)

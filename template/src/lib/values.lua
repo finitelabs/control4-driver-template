@@ -1116,6 +1116,8 @@ function Values:_learn(values, restarted, director)
           elseif record.deleted and self:_hold(id, record.varType) then
             record.id = id
             held[id] = true
+          elseif record.deleted then
+            log:warn("Variable id %s of %s is taken by another variable", id, row.name)
           end
         end
       end
@@ -1142,9 +1144,9 @@ function Values:_restoreAsOlderBuild(rows)
       local strValue = variableString(record.value)
       ok, added, id = pcall(C4.AddVariable, C4, name, strValue, record.varType, not record.writable, false)
     end
-    if not ok then
-      log:error("Restoring variable %s failed: %s", name, added)
-    elseif added then
+    if not ok or not added then
+      log:error("Director did not add variable %s%s", name, ok and "" or (": " .. tostring(added)))
+    else
       record.id = id -- where Director cannot say, the restore-order id is given below
     end
   end
