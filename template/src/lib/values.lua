@@ -183,8 +183,8 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
       suffix = propertySuffix,
       writable = writable,
     }
-    -- Restore rebuilds the variable ids from the records, so adding or removing a
-    -- variable is written now even under write-behind.
+    -- A change to which variables exist is written now even under write-behind, so a
+    -- restart restores this set; a lost new variable would give its id to another.
     self:_saveValues(values, isVariable(existing) ~= (varType ~= nil))
   end
 
@@ -246,7 +246,7 @@ function Values:delete(name)
 
   local wasVariable = isVariable(values[name])
   if values[name].varType == nil then
-    values[name] = nil -- never a variable, so it holds no id slot
+    values[name] = nil -- restore adds no variable for it, so it holds no id slot
   else
     -- Mark as deleted to preserve the index slot for variable ID ordering
     values[name].deleted = true
