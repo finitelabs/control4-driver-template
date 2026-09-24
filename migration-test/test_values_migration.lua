@@ -935,6 +935,24 @@ end
 T.eq("every room's old id is held", H.hiddenIds(), { 1002, 1003, 1004, 1005, 1006, 1007 })
 T.eq("and Office takes new ones", H.visible()[office[1]], 1009)
 
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ": Director unreadable at the switch, a driver that only updates values keeps its ids")
+  ShimFireTimers() -- no earlier load's timer may run in this section
+  H.mode(mode.rename)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("T", "t", "STRING")
+  old:delete("T") -- trimmed: 1001 is left free, and restore order puts A there
+  old:update("A", "a", "STRING") -- 1002
+  old:update("B", "b", "STRING") -- 1003
+  local values = unreadableSwitch()
+  values:update("A", "a2", "STRING")
+  values:update("B", "b2", "STRING")
+  ShimFireTimers() -- after OnDriverInit
+  H.load("restart")
+  T.eq("after a restart", H.visible(), { A = 1002, B = 1003 })
+end
+
 T.section("without a rename: an id that is only a guess is not held when its name is deleted")
 H.mode(false)
 H.wipe()

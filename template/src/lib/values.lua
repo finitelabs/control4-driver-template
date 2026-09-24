@@ -29,6 +29,9 @@ local FIRST_ID = 1001
 --- How many taken ids a new variable skips before giving up.
 local MAX_ID_TRIES = 1000
 
+--- How long after restore estimated ids are checked against Director, once OnDriverInit is over.
+local RECHECK_MS = 1000
+
 --- Name a variable of ours holds while another variable is added at the id its name spells.
 local ASIDE_NAME = "__values_aside__"
 
@@ -480,6 +483,18 @@ function Values:restoreValues()
   if recordSignature(values) ~= before then
     self:_saveValues(values, true)
   end
+  -- Director may be unreadable in OnDriverInit only: estimated ids are checked again once it is over.
+  for _, record in pairs(values) do
+    if record.unverified then
+      delay(RECHECK_MS):next(function()
+        local current = self:_load()
+        if self:_verify(current) then
+          self:_saveValues(current, true)
+        end
+      end)
+      break
+    end
+  end
 
   for name, record in pairs(values) do
     if holdsValue(record) then
@@ -581,6 +596,7 @@ end
 --- Estimated ids are replaced by the ones Director has for their names, once it can say; an
 --- estimate another name turns out to have is dropped.
 --- @private
+--- @return boolean? checked True when there were estimates and Director could say.
 function Values:_verify(values)
   local director
   for _, record in pairs(values) do
@@ -609,6 +625,7 @@ function Values:_verify(values)
       record.id, record.unverified = nil, nil
     end
   end
+  return true
 end
 
 --- Brings Director in line with a record after an update.
