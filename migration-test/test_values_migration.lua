@@ -832,6 +832,29 @@ for _, mode in ipairs(MODES) do
   T.eq("so they follow the order an older build restores them in", got, { 1007, 1008, 1009, 1010, 1011, 1012 })
 end
 
+for _, build in ipairs({ "F2", "v0.9.28" }) do
+  for _, name in ipairs({ "0042", "1e3", "B" }) do
+    T.section(
+      "with a rename: " .. build .. "'s live " .. name .. ", its variable left hidden, is shown at its next update"
+    )
+    H.mode(true)
+    H.wipe()
+    local old = H.load("restart", build)
+    old:update(name, "1", "STRING")
+    old:update("A", "a", "STRING")
+    old:delete(name)
+    old = H.load("restart", build) -- restores the placeholder, hidden
+    old:update(name, "2", "STRING") -- the value has no visible variable
+    local id = tonumber(name) and math.floor(tonumber(name)) or 1001
+    local values = H.load("update") -- the harness fails a restore that deletes a variable
+    T.eq("restore addresses nothing by name", H.called("^Set [^#]"), false)
+    values:update(name, "3", "STRING")
+    T.eq("it is shown at its id with its value", { H.visible()[name], Variables[name] }, { id, "3" })
+    H.load("restart")
+    T.eq("which a restart keeps", H.visible()[name], id)
+  end
+end
+
 T.section("without a rename: a deleted name's id is held when an older build left its name at another id")
 H.mode(false)
 H.wipe()

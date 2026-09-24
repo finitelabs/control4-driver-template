@@ -1174,12 +1174,8 @@ function Values:_learnIds(values, director, estimated)
     then
       log:warn("Variable id %s of %s is taken by variable %s", record.id, name, variable.name)
     end
-    if variable ~= nil and isLive(record) and canRename() then
-      if variable.hidden then
-        self._unhide[name] = true
-      elseif variable.name ~= name and variable.name == tostring(record.id) and not rename(record.id, name) then
-        log:error("Variable %s could not be named %s", record.id, name) -- a numeric name stored under its id
-      end
+    if variable ~= nil and variable.hidden and isLive(record) and canRename() then
+      self._unhide[name] = true
     end
   end
 
@@ -1301,6 +1297,9 @@ end
 function Values:_restoreVariable(values, name, record)
   local strValue = variableString(record.value)
   local present = Variables[directorName(name, record)]
+  if present == nil and self._unhide[name] then
+    present = Variables[tostring(record.id)] -- a numeric name left hidden under its id: shown at its next update
+  end
   if present == nil then
     log:debug("Restoring %s variable %s at id %s", record.varType, name, record.id)
     self:_createVariable(values, name, record, strValue)
