@@ -442,6 +442,14 @@ T.raisesAt("C4:KillTimer blames the caller, not the shim", function()
   C4:KillTimer(C4:SetTimer(5000, function() end, false))
 end)
 
+local oldLoadFired = 0
+C4:SetTimer(5000, function()
+  oldLoadFired = oldLoadFired + 1
+end, false)
+ShimCancelTimers()
+ShimFireTimers()
+T.eq("a new driver load drops the old load's timers", oldLoadFired, 0)
+
 for _, hasSocket in ipairs({ false, true }) do
   local label = hasSocket and "with luasocket" or "without luasocket"
 

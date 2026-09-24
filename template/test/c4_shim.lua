@@ -1379,6 +1379,15 @@ function ShimFireTimers()
   end
 end
 
+--- Harness, not a controller API: a new driver load. Director drops every timer the old
+--- load set, so none of them fires into the new one.
+function ShimCancelTimers()
+  for id, timer in pairs(timers) do
+    timer.cancelled = true
+    timers[id] = nil
+  end
+end
+
 if has_socket then
   --- TCP Client implementation
   local TCPClient = {}

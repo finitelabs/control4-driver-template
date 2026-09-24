@@ -69,6 +69,7 @@ end
 --- restores in OnDriverInit. Returns the build's values module. Shipped builds come from
 --- values_legacy, which only the template's own CI has.
 function H.load(how, build)
+  ShimCancelTimers()
   if how == "restart" then
     ShimRestartDirector()
   else

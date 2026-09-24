@@ -1009,7 +1009,6 @@ T.eq("and Office takes new ones", H.visible()[office[1]], 1009)
 
 for _, mode in ipairs(MODES) do
   T.section(mode.label .. ": Director unreadable at the switch, a driver that only updates values keeps its ids")
-  ShimFireTimers() -- no earlier load's timer may run in this section
   H.mode(mode.rename)
   H.wipe()
   local old = H.load("restart", "v0.9.28")
