@@ -11,11 +11,13 @@ local T = require("testlib")
 require("c4_shim")
 require("drivers-common-public.global.lib") -- Serialize
 
--- Every storage call, in order, as "set <key>" or "delete <key>".
-local calls = {}
+-- Every storage call, in order, as "set <key>" or "delete <key>", and the
+-- encrypted flag of each key's last write.
+local calls, encryptedFlag = {}, {}
 local realSet, realDelete = C4.PersistSetValue, C4.PersistDeleteValue
 function C4:PersistSetValue(key, value, encrypted)
   table.insert(calls, "set " .. key)
+  encryptedFlag[key] = encrypted
   return realSet(self, key, value, encrypted)
 end
 function C4:PersistDeleteValue(key)
@@ -31,7 +33,7 @@ function C4:SetTimer(ms, ...)
 end
 
 local function reset()
-  calls, timers = {}, {}
+  calls, timers, encryptedFlag = {}, {}, {}
 end
 
 local function stored(key)
@@ -106,6 +108,16 @@ T.eq("flush() writes the rest", calls, { "set Hot", "set Warm" })
 p:flush()
 ShimFireTimers()
 T.eq("a second flush and the timer write nothing", #calls, 2)
+
+p = newPersist()
+p:setWriteBehind("Secret", 60000)
+p:setWriteBehind("Hot", 60000)
+p:defer(function()
+  p:set("Secret", { n = 1 }, true)
+  p:set("Hot", { n = 1 })
+end)
+p:flush()
+T.eq("each keeps its encrypted flag", encryptedFlag, { Secret = true, Hot = false })
 
 -- ── Delete and reset with a write pending ────────────────────────────────────
 
