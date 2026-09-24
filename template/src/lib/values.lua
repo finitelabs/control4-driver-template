@@ -200,7 +200,7 @@ local function recordSignature(values)
   local parts = {}
   for name, record in pairs(values) do
     local fields = { name, tostring(record.id), tostring(record.deleted), tostring(record.placeholder) }
-    table.insert(fields, tostring(record.unverified) .. tostring(record.value ~= nil))
+    table.insert(fields, tostring(record.unverified))
     table.insert(parts, table.concat(fields, "\1"))
   end
   table.sort(parts)
@@ -1199,11 +1199,7 @@ function Values:_learnIds(values, director, estimated)
     end
   end
   for _, name in ipairs(names) do
-    if wasEverVariable(values[name]) then
-      claim(name, byName[name] or numbered(name))
-    else
-      claim(name, numbered(name))
-    end
+    claim(name, byName[name] or numbered(name))
   end
   for _, name in ipairs(names) do
     local record = values[name]
