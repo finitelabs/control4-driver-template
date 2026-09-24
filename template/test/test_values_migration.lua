@@ -542,6 +542,42 @@ for _, mode in ipairs(MODES) do
     T.eq("and it keeps its id", H.visible()[mode.rename and name or tostring(id)], id)
   end
 
+  T.section(mode.label .. ": a numeric name the older build made plain keeps the id of the variable it left")
+  H.mode(mode.rename)
+  H.wipe()
+  old = H.load("restart", "v0.9.28")
+  old:update("A", "1", "STRING")
+  old:update("02000", "x", "STRING") -- at 2000, named "2000"
+  old:update("02000", "p") -- v0.9.28 looks for Variables["02000"], so "2000" stays
+  local values = H.load("update")
+  T.eq("its id is recorded", H.recordIds()["02000"], 2000)
+  T.eq("with its value", values:getValue("02000").value, "p")
+  values:update("N", "n", "STRING")
+  values:update("02000", "v", "STRING")
+  local shownAs = mode.rename and "02000" or "2000"
+  T.eq("it comes back there", H.visible()[shownAs], 2000)
+  H.load("restart")
+  T.eq("after a restart too", H.visible()[shownAs], 2000)
+
+  for _, restartFirst in ipairs({ false, true }) do
+    T.section(
+      mode.label
+        .. ": a numeric name the older build reset takes back the id it spells"
+        .. (restartFirst and ", after a restart" or "")
+    )
+    H.mode(mode.rename)
+    H.wipe()
+    old = H.load("restart", "v0.9.28")
+    old:update("0042", "x", "STRING")
+    old:reset() -- v0.9.28 looks for Variables["0042"], so "42" stays
+    values = H.load("update")
+    if restartFirst then
+      values = H.load("restart")
+    end
+    values:update("0042", "back", "STRING")
+    T.eq("at 42", H.visible()[mode.rename and "0042" or "42"], 42)
+  end
+
   for _, plain in ipairs({ true, false }) do
     T.section(
       mode.label

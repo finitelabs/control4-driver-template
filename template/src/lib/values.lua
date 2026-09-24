@@ -643,6 +643,7 @@ function Values:_applyVariable(values, name, record, existing, strValue)
   if not canRename() and existing ~= nil and existing.id ~= nil and not wasVariable then
     left = self:_leaveBehind(values, name, record, existing.varType)
   end
+  local claimed = record.id == nil and self:_claimNumbered(values, name, record)
   local created = self:_createVariable(values, name, record, strValue)
   if left ~= nil and record.id ~= nil then
     log:warn(
@@ -652,7 +653,31 @@ function Values:_applyVariable(values, name, record, existing, strValue)
       left
     )
   end
-  return created or left ~= nil
+  return created or left ~= nil or claimed
+end
+
+--- Below the first id only a numeric-looking name can own an id, so a variable there named
+--- by the id this name spells is this name's, left by an older build that lost its record.
+--- @private
+function Values:_claimNumbered(values, name, record)
+  local id = parsedId(name)
+  if id == nil or id >= FIRST_ID then
+    return false
+  end
+  local ownerName, owner = ownerOf(values, id)
+  if owner == nil and Variables[tostring(id)] == nil then
+    return false
+  elseif owner ~= nil and (holdsValue(owner) or not (owner.placeholder or ownerName == tostring(id))) then
+    return false
+  end
+  if ownerName ~= nil then
+    values[ownerName] = nil
+  end
+  if Variables[tostring(id)] ~= nil then
+    C4:DeleteVariable(id)
+  end
+  record.id = id
+  return true
 end
 
 --- Removes a record's variable. Without a rename its id stays held by a hidden variable,
@@ -938,7 +963,7 @@ function Values:_findVariable(name)
 end
 
 --- Whether Director was restarted: a driver update keeps every variable, an older build's hidden
---- ones included; a restart keeps none.
+--- ones and numeric leftovers below the first id included; a restart keeps none.
 --- @private
 --- @return boolean restarted
 --- @return table? director
@@ -954,7 +979,7 @@ function Values:_regime(values)
   end
   local director = self:_directorVariables()
   for id, variable in pairs(director or {}) do
-    if variable.hidden then
+    if variable.hidden or id < FIRST_ID then
       return false, director
     end
   end
@@ -1040,7 +1065,8 @@ function Values:_learnIds(values, director, estimated)
   end
   local names = {}
   for name, record in pairs(values) do
-    if wasEverVariable(record) then
+    -- An older build turning a numeric-looking name plain left its variable, named by the id.
+    if wasEverVariable(record) or looksNumeric(name) then
       if Variables[name] ~= nil and byName[name] == nil then
         return false
       end
@@ -1082,7 +1108,11 @@ function Values:_learnIds(values, director, estimated)
     end
   end
   for _, name in ipairs(names) do
-    claim(name, shown(name) or numbered(name))
+    if wasEverVariable(values[name]) then
+      claim(name, shown(name) or numbered(name))
+    else
+      claim(name, numbered(name))
+    end
   end
   for _, name in ipairs(names) do
     local id = estimated[name]
