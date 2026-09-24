@@ -550,13 +550,30 @@ for _, mode in ipairs(MODES) do
     H.mode(mode.rename)
     H.wipe()
     old = H.load("restart", "v0.9.28")
+    old:update("P", "{}")
     old:update(name, "x", "STRING") -- Director names it by the id
     old:update("J", "{}")
+    old:delete("P") -- a tombstone the older build has added no variable for yet
     H.load("update")
-    T.eq("a driver update is not taken for a restart", H.count(), 1)
+    -- With a rename it is named at once; without, P's slot is held by number, not added by name.
+    local want = mode.rename and (id .. "=" .. name)
+      or (id < 1001 and (id .. "=" .. id .. ", 1001=1001(h)") or ("1001=1001(h), " .. id .. "=" .. id))
+    T.eq("a driver update is not taken for a restart", H.snapshot(), want)
     H.load("restart")
     T.eq("and it keeps its id", H.visible()[mode.rename and name or tostring(id)], id)
   end
+
+  T.section(mode.label .. ": a device whose only variable is an older build's numeric leftover")
+  H.mode(mode.rename)
+  H.wipe()
+  old = H.load("restart", "v0.9.28")
+  old:update("0042", "x", "STRING")
+  old:reset() -- v0.9.28 looks for Variables["0042"], so "42" stays, and no record names it
+  old:update("P", "{}")
+  old:update("J", "{}")
+  old:delete("P")
+  H.load("update")
+  T.eq("a driver update is not taken for a restart", H.snapshot(), mode.rename and "42=42" or "42=42, 1001=1001(h)")
 
   T.section(mode.label .. ": a numeric name the older build made plain keeps the id of the variable it left")
   H.mode(mode.rename)
@@ -655,10 +672,13 @@ for _, mode in ipairs(MODES) do
   H.unreadableDirector({})
   values = H.load("update")
   H.readableDirector() -- readable again after OnDriverInit
+  warnings = {}
   values:update("E", "e", "STRING")
   T.eq("Dv keeps its id", H.visible().Dv, 1004)
   if mode.rename then
     T.eq("E comes back at the id Director had for it", H.visible().E, 1003)
+  else
+    T.contains("E's return at a new id is logged", table.concat(warnings, "\n"), "its id 1003 stays held")
   end
   local now = H.visible()
   H.load("restart")
@@ -1038,6 +1058,11 @@ local healed = H.load("update")
 T.eq("still hidden after the switch", H.variables()[1002].hidden, true)
 healed:update("B", "2b", "STRING")
 T.eq("shown at its id, with its value", { H.visible().B, Variables.B }, { 1002, "2b" })
+H.calls = {}
+for i = 1, 3 do
+  healed:update("B", "2" .. i, "STRING")
+end
+T.eq("once: later updates only set its value", H.called("^Delete"), false)
 
 T.section("GetDeviceVariables leaving out a name Director shows: every id comes from restore order")
 H.mode(true)
@@ -1140,6 +1165,105 @@ for _, rename in ipairs({ true, false }) do
     T.eq(how .. ": and is named as the driver names it", H.visible()[rename and "0042" or "42"], 42)
   end
 end
+
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ": a name that reads as another's number does not take that name's id")
+  H.mode(mode.rename)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("A", "1", "STRING")
+  old:update("42", "x", "STRING") -- at 42
+  old:update("0042", "y", "STRING") -- Director reads 42, which is taken: no variable
+  old:delete("42")
+  H.load("update", "v0.9.28") -- 42 is held hidden for "42", and "0042" is refused again
+  local values = H.load("update")
+  T.eq("42 stays with the name that had it", H.recordIds()["42"], 42)
+  if mode.rename then
+    values:update("0042", "z", "STRING")
+    T.eq("and the other name does not get it", H.visible()["0042"], 1002)
+  end
+
+  T.section(mode.label .. ": the id of a variable that is not ours, gone before a deleted name returns")
+  H.mode(mode.rename)
+  H.wipe()
+  old = H.load("restart", "v0.9.28")
+  old:update("A", "1", "STRING")
+  C4:AddVariable("STRING", "", "STRING", true, false) -- another's, 1002: restore order gives B this id
+  old:update("B", "2", "STRING") -- 1003
+  old:update("C", "3", "STRING") -- 1004
+  old:delete("B")
+  values = H.load("update")
+  C4:DeleteVariable("STRING") -- variable_expressions, in OnDriverLateInit
+  values:update("B", "back", "STRING")
+  T.eq("is not the name's", H.visible().B, mode.rename and 1005 or 1003)
+end
+
+T.section("with a rename: an id a name had to leave to another variable is held from older builds")
+H.mode(true)
+H.wipe()
+v = H.load("restart")
+v:update("A", "1", "STRING")
+v:update("B", "2", "STRING")
+v:update("C", "3", "STRING")
+v:delete("B")
+v = H.load("update")
+C4:AddVariable("Other", "", "STRING", true, false) -- the driver's own, by name: B's 1002
+v:update("B", "back", "STRING") -- 1004
+C4:DeleteVariable("Other")
+H.load("update", "v0.9.28"):update("Q", "q", "STRING")
+T.eq("so a downgraded build's new name does not take it", H.visible().Q, 1005)
+
+T.section("without a rename, Director unreadable: a deleted name's placeholder still gives way to a hold")
+H.mode(false)
+H.wipe()
+v = H.load("restart", "v0.9.28")
+v:update("A", "1", "STRING")
+v:update("B", "2", "STRING")
+v:update("C", "3", "STRING")
+v:delete("B")
+H.load("update", "v0.9.28") -- B comes back hidden at 1002
+v = H.load("update")
+H.unreadableDirector()
+v:update("B", "back", "STRING")
+H.readableDirector()
+T.eq("B takes a new id, and its old one is held", H.snapshot(), "1001=A, 1002=1002(h), 1003=C, 1004=B")
+
+T.section("without a rename, Director unreadable throughout: a guessed id is never deleted")
+H.mode(false)
+H.wipe()
+v = H.load("restart", "v0.9.28")
+v:update("A", "1", "STRING")
+v:update("B", "2", "STRING")
+v:update("C", "3", "STRING")
+v = H.load("update", "v0.9.28")
+v:delete("B")
+v:update("E", "5", "STRING") -- 1002, where restore order puts B
+H.load("update", "v0.9.28") -- B's placeholder by name, at 1004, where restore order puts E
+H.unreadableDirector()
+v = H.load("update")
+v:update("B", "back", "STRING")
+H.readableDirector()
+T.eq("B's guess is E's id, and E keeps its variable", Variables.E, "5")
+
+T.section("the ids learned are stored before restore changes any variable")
+H.mode(true)
+H.wipe()
+v = H.load("restart", "v0.9.28")
+v:update("A", "1", "STRING")
+pcall(v.update, v, "-5", "x", "STRING") -- the shipped build raises, after storing the record
+v:update("B", "2", "STRING")
+ShimUpdateDriver()
+T.unload("^lib%.persist$", "^lib%.values$")
+local killed = require("lib.values")
+local realAdd = C4.AddVariable
+C4.AddVariable = function()
+  coroutine.yield() -- Director goes away while restore adds "-5", never to resume this load
+end
+coroutine.wrap(function()
+  killed:restoreValues()
+end)()
+C4.AddVariable = realAdd
+T.eq("so a load that dies there keeps them", H.recordIds(), { A = 1001, B = 1002 })
 
 T.section("the migration is written at once under write-behind")
 H.mode(true)

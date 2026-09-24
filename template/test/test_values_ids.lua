@@ -431,6 +431,19 @@ for _, mode in ipairs(MODES) do
   end
   T.check("restore completed", Variables["C"] ~= nil)
 
+  if not R then
+    T.section(L .. ": a returning name whose hold was deleted behind the library's back")
+    values = fresh(mode)
+    values:update("A", "1", "STRING")
+    values:update("B", "2", "STRING")
+    values:update("C", "3", "STRING")
+    values:delete("B")
+    values = H.load("update")
+    C4:DeleteVariable(1002)
+    values:update("B", "back", "STRING")
+    T.eq("takes a new id, its old one held again", H.snapshot(), "1001=A, 1002=1002(h), 1003=C, 1004=B")
+  end
+
   T.section(L .. ": a held id deleted behind the library's back")
   values = fresh(mode)
   values:update("A", "1", "STRING")
@@ -455,6 +468,20 @@ for _, mode in ipairs(MODES) do
     values:update("B", "back", "STRING")
     T.eq("B comes back visible at its id", H.snapshot(), "1001=A, 1002=B")
     holds("B back", { A = 1001, B = 1002 }, {})
+    values:update("N", "n", "STRING")
+    T.eq("and the leftover's id stays reserved", H.visible().N, 1011)
+
+    T.section(L .. ": a hidden variable under the name, with Director unreadable")
+    values = fresh(mode)
+    values:update("A", "1", "STRING")
+    values:update("B", "2", "STRING")
+    values:delete("B")
+    C4:AddVariable(1010, "", "STRING", true, true)
+    C4:SetVariableName(1010, "B")
+    H.unreadableDirector()
+    values:update("B", "back", "STRING")
+    H.readableDirector()
+    T.eq("B still comes back visible at its id", H.visible(), { A = 1001, B = 1002 })
   else
     T.section(L .. ": a hidden variable under the name at another id")
     values = fresh(mode)
@@ -762,6 +789,52 @@ for _, mode in ipairs(MODES) do
   T.eq("OnVariableChanged names the variable, before and after a restart", seen, { "b", "c" })
   T.eq("and the id did not move", H.visible().Mode, id)
   T.eq("it comes back writable", H.variables()[id].name, "Mode")
+
+  T.section(L .. ": an unchanged update that finds its variable writes the id it found")
+  values = fresh(mode)
+  C4:AddVariable(1001, "", "STRING", true, true) -- the id another record keeps
+  for _, filler in ipairs({ "f2", "f3", "f4" }) do
+    C4:AddVariable(filler, "", "STRING")
+  end
+  C4:AddVariable("A", "a", "STRING", true, false) -- 1005
+  for _, filler in ipairs({ "f2", "f3", "f4" }) do
+    C4:DeleteVariable(filler)
+  end
+  local stored = {
+    A = { index = 1, varType = "STRING", value = "a", writable = false },
+    Z = { index = 2, id = 1001, varType = "STRING", deleted = true, placeholder = true },
+  }
+  C4:PersistSetValue("Values", Serialize(stored))
+  H.unreadableDirector() -- A's restore-order id is Z's, so A is left with none
+  values = H.load("update")
+  H.readableDirector()
+  T.eq("A has no id yet", H.recordIds().A, nil)
+  T.eq("an unchanged update", values:update("A", "a", "STRING"), false)
+  T.eq("stores where A is", H.recordIds().A, 1005)
+  H.load("restart")
+  T.eq("so a restart keeps it there", H.visible().A, 1005)
+
+  T.section(L .. ": a property that fails to show does not stop restore")
+  values = fresh(mode)
+  Properties["P1"], Properties["P2"] = "", ""
+  values:update("P1", "1", "STRING")
+  values:update("P2", "2", "STRING")
+  local realShow = C4.SetPropertyAttribs
+  C4.SetPropertyAttribs = function(self, name, attrib)
+    assert(name ~= "P1", "no such property")
+    return realShow(self, name, attrib)
+  end
+  local shownP2
+  local realUpdateProperty = C4.UpdateProperty
+  C4.UpdateProperty = function(self, name, value)
+    shownP2 = shownP2 or name == "P2"
+    return realUpdateProperty(self, name, value)
+  end
+  Properties["P1"], Properties["P2"] = "", ""
+  T.check("restore completes", pcall(H.load, "update"))
+  T.eq("and shows the next one", shownP2, true)
+  C4.SetPropertyAttribs, C4.UpdateProperty = realShow, realUpdateProperty
+  Properties["P1"], Properties["P2"] = nil, nil
 
   T.section(L .. ": restore shows the property of every value, including one that kept an id")
   values = fresh(mode)
