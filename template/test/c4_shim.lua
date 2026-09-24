@@ -1315,25 +1315,30 @@ end
 -- PersistGetValue/SetValue/DeleteValue globals belong to global/lib.lua, whose
 -- wrappers delegate here when C4.PersistSetValue exists; stubbing the globals
 -- instead would be paved over the moment any module requires global.lib.
--- As on 4.3.0: a value keeps its type, a string is cut at its first NUL, "" reads back as nil, and a
--- read under the other encrypted flag returns ciphertext. The controller rejects a nil flag; here it is false.
+-- As on 4.3.0: a value keeps its type, a string is cut at its first NUL, a plain "" deletes and an
+-- encrypted one is ignored. The controller rejects a nil encrypted flag; here it is false.
 local persist_store = {}
 
+-- A read under the other flag returns ciphertext; reversal stands in for the length-keeping cipher.
 function C4:PersistGetValue(key, encrypted)
   local entry = persist_store[key]
   if entry == nil or entry.encrypted == (encrypted == true) then
     return entry and entry.value
   elseif entry.encrypted then
-    return base64_encode_impl("\0" .. tostring(entry.value)) -- the ciphertext, as stored
+    return base64_encode_impl(tostring(entry.value):reverse())
   end
-  return "\230" .. tostring(entry.value):reverse() -- plain bytes run through decryption
+  return base64_decode_impl(tostring(entry.value)):reverse()
 end
 
 function C4:PersistSetValue(key, value, encrypted)
   if type(value) == "string" then
     value = value:match("^[^%z]*")
   end
-  persist_store[key] = value ~= "" and { value = value, encrypted = encrypted == true } or nil
+  if value ~= "" then
+    persist_store[key] = { value = value, encrypted = encrypted == true }
+  elseif encrypted ~= true then
+    persist_store[key] = nil
+  end
 end
 
 function C4:PersistDeleteValue(key)
