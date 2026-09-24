@@ -1025,6 +1025,22 @@ for _, mode in ipairs(MODES) do
   T.eq("after a restart", H.visible(), { A = 1002, B = 1003 })
 end
 
+T.section(
+  "without a rename, Director unreadable: a deleted name's id is held when an older build left its name elsewhere"
+)
+H.mode(false)
+H.wipe()
+walked = H.load("restart")
+walked:update("C", "c", "STRING") -- 1001
+walked:update("A", "a", "STRING") -- 1002
+walked:update("E", "e", "STRING") -- 1003
+walked:delete("E")
+H.load("update", "v0.9.28"):update("C", "{}")
+H.load("restart", "v0.9.28") -- A=1001, E(h)=1002
+walked = unreadableSwitch()
+walked:update("N", "n", "STRING")
+T.eq("so a new name does not take it", H.visible().N, 1004)
+
 T.section("without a rename: an id that is only a guess is not held when its name is deleted")
 H.mode(false)
 H.wipe()
