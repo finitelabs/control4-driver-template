@@ -32,7 +32,8 @@ local MAX_ID_TRIES = 1000
 --- How long after restore estimated ids are checked against Director, once OnDriverInit is over.
 local RECHECK_MS = 1000
 
---- Name a variable of ours holds while another variable is added at the id its name spells.
+--- Name a variable of ours holds while another variable is added at the id its name spells (a "_"
+--- is added while a variable has it).
 local ASIDE_NAME = "__values_aside__"
 
 --- @class Value
@@ -904,14 +905,17 @@ function Values:_addAt(values, id, name, strValue, varType, readOnly, own)
   end
   local aside
   if not added then
-    -- A variable of ours named like this id blocks the add; it steps aside for a moment.
-    local holder = values[tostring(id)]
+    -- A variable of ours named like this id blocks the add; it steps aside under a name no variable has.
+    local holder, asideName = values[tostring(id)], ASIDE_NAME
+    while Variables[asideName] ~= nil do
+      asideName = asideName .. "_"
+    end
     if
       Variables[tostring(id)] ~= nil
       and isLive(holder)
       and holder.id ~= nil
       and holder.id ~= id
-      and rename(holder.id, ASIDE_NAME)
+      and rename(holder.id, asideName)
     then
       aside = holder.id
       added = C4:AddVariable(id, strValue, varType, readOnly, false)

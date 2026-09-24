@@ -373,6 +373,19 @@ for _, mode in ipairs(MODES) do
 
   T.section(L .. ": a variable renamed to another's decimal id")
   if R then
+    for _, aside in ipairs({ false, true }) do
+      values = fresh(mode)
+      values:update("A", "1", "STRING")
+      values:update("B", "2", "STRING")
+      values:update("1002", "n", "STRING") -- 1003, named "1002"
+      if aside then
+        values:update("__values_aside__", "x", "STRING") -- the name the library steps a variable aside to
+      end
+      values:delete("B")
+      values:update("B", "back", "STRING")
+      T.eq("B returns at its id" .. (aside and ", whatever names the driver uses" or ""), H.visible().B, 1002)
+    end
+
     values = fresh(mode)
     values:update("A", "1", "STRING")
     values:update("1004", "n", "STRING") -- 1002
