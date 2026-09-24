@@ -23,6 +23,7 @@ _exclude:
   - "{% if 'protobuf' not in vendor_modules.split() %}vendor/protobuf.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_alias.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_self_last.lua{% endif %}"
+  - "{% if 'oss' not in distributions.split() %}test/test_github_updater_min_os.lua{% endif %}"
 
 project_name:
   type: str

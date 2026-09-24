@@ -177,6 +177,19 @@ function F.zip(files)
   return table.concat(body) .. directory .. tail .. littleEndian(offset, 4) .. littleEndian(0, 2)
 end
 
+--- A .c4z whose driver.xml declares `version` and, unless nil, `minimumOs`.
+--- @param version string
+--- @param minimumOs? string
+--- @return string
+function F.c4z(version, minimumOs)
+  local xml = '<?xml version="1.0"?>\n<devicedata>\n  <version>' .. version .. "</version>\n"
+  if minimumOs ~= nil then
+    xml = xml .. "  <minimum_os_version>" .. minimumOs .. "</minimum_os_version>\n"
+  end
+  xml = xml .. "  <name>Example</name>\n</devicedata>\n"
+  return F.zip({ { "driver.lua", "-- driver" }, { "driver.xml", xml } })
+end
+
 --- The driver.xml inside F.packagedC4z().
 F.PACKAGED_DRIVER_XML = [[
 <?xml version="1.0"?>
