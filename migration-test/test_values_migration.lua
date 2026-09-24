@@ -1063,24 +1063,49 @@ for _, mode in ipairs(MODES) do
   T.eq("a new name does not take it", H.visible().Q, 1005)
 end
 
-T.section("without a rename: an id that is only a guess is not held when its name is deleted")
+T.section("without a rename, Director unreadable: a name deleted in OnDriverInit keeps its guessed id held")
 H.mode(false)
 H.wipe()
 local h13 = H.load("restart", "v0.9.28")
 h13:update("A", "1", "STRING")
 h13:update("B", "2", "STRING")
 h13:update("C", "3", "STRING")
-h13 = H.load("update", "v0.9.28")
-h13:delete("B")
-h13:update("E", "5", "STRING") -- at 1002; restore order says 1004
-H.unreadableDirector()
-h13 = H.load("update")
-warnings = {}
-h13:delete("E")
+H.load("restart", "v0.9.28") -- restore order is Director's order
+h13 = unreadableSwitchInInit()
+h13:delete("B") -- zigbee3's prune, in OnDriverInit
 H.readableDirector()
-T.eq("E is gone", H.visible(), { A = 1001, C = 1003 })
-T.eq("and nothing is held at the guessed id", H.hiddenIds(), {})
-T.contains("which is logged", table.concat(warnings, "\n"), "not known")
+ShimFireTimers()
+h13:update("N", "n", "STRING")
+T.eq("so a new name does not take it", { H.visible(), H.hiddenIds() }, { { A = 1001, C = 1003, N = 1004 }, { 1002 } })
+
+for _, taken in ipairs({ false, true }) do
+  T.section(
+    "without a rename, Director unreadable: a wrong guess "
+      .. (taken and "another variable has is not held" or "that is free is held")
+  )
+  H.wipe()
+  h13 = H.load("restart", "v0.9.28")
+  h13:update("A", "1", "STRING")
+  h13:update("B", "2", "STRING")
+  h13:update("C", "3", "STRING")
+  h13 = H.load("update", "v0.9.28")
+  h13:delete("B")
+  h13:update("E", "5", "STRING") -- at 1002; restore order says 1004
+  if taken then
+    h13:update("F", "6", "STRING") -- at 1004
+  end
+  h13 = unreadableSwitchInInit()
+  warnings = {}
+  h13:delete("E")
+  H.readableDirector()
+  T.eq("E is gone", H.visible(), taken and { A = 1001, C = 1003, F = 1004 } or { A = 1001, C = 1003 })
+  if taken then
+    T.eq("nothing is held where F is", H.hiddenIds(), {})
+    T.contains("which is logged", table.concat(warnings, "\n"), "not known")
+  else
+    T.eq("the guessed id is held: it never was another name's", H.hiddenIds(), { 1004 })
+  end
+end
 
 --- v0.9.28's in-load split: A deleted and added back in one load, so restore order (A at 1001) is
 --- not where A is (1004).

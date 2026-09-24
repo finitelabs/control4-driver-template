@@ -719,9 +719,13 @@ function Values:_removeVariable(values, name, record, varType)
     return
   end
   if record.unverified then
-    -- Only a guess from restore order: holding it could hold someone else's id.
-    log:warn("The variable id of %s is not known, so nothing holds it", name)
-    record.id, record.unverified = nil, nil
+    -- Only a guess from restore order, held if free as the switch holds a deleted name's guess.
+    if self:_hold(record.id, varType) then
+      record.unverified = nil
+    else
+      log:warn("The variable id of %s is not known, so nothing holds it", name)
+      record.id, record.unverified = nil, nil
+    end
   elseif not self:_hold(record.id, varType) then
     log:error("Could not hold variable id %s of %s with a hidden variable", record.id, name)
   end
