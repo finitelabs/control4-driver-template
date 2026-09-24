@@ -1011,7 +1011,7 @@ function Values:_directorVariables()
       end
     end
     if next(out) == nil and next(Variables) ~= nil then
-      out, failure = nil, "it lists none of the driver's variables" -- read before any was added
+      out, failure = nil, "it lists none of the driver's variables" -- so it cannot be current
     end
   end
   if out == nil and not self._unreadWarned then
