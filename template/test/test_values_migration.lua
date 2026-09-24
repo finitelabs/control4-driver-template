@@ -371,6 +371,31 @@ for _, mode in ipairs(MODES) do
 end
 
 for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ": zigbee3 un-hides Last Action that an older build left hidden")
+  H.mode(mode.rename)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("Last Seen", "now", "STRING")
+  old:update("Last Action", "single", "STRING")
+  old:update("Battery", "90", "NUMBER")
+  old:delete("Last Action")
+  old = H.load("update", "v0.9.28") -- Last Action comes back hidden at 1002
+  old:update("Last Action", "single", "STRING") -- the older build's reseed: a normal record, still hidden
+  local values = H.load("update")
+  T.eq("still hidden after the switch", H.variables()[1002].hidden, true)
+  local keep = values:getValue("Last Action").value
+  values:update("Last Action", nil) -- button.lua:111-115
+  values:update("Last Action", keep, "STRING")
+  if mode.rename then
+    T.eq("shown at its id with its value", { H.visible()["Last Action"], Variables["Last Action"] }, { 1002, "single" })
+  else
+    T.eq("shown at a new id, 1002 held", H.snapshot(), "1001=Last Seen, 1002=1002(h), 1003=Battery, 1004=Last Action")
+  end
+  H.load("restart")
+  T.eq("and stays there", H.visible()["Last Action"], mode.rename and 1002 or 1004)
+end
+
+for _, mode in ipairs(MODES) do
   for _, failure in ipairs({ { "raises" }, { "returns a string", "x" }, { "returns an empty table", {} } }) do
     T.section(mode.label .. ": GetDeviceVariables " .. failure[1] .. " on the first load after a driver update")
     H.mode(mode.rename)

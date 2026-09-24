@@ -359,6 +359,19 @@ for _, mode in ipairs(MODES) do
   holds("X keeps the id it was given", { A = 1001, C = 1003, X = placed })
   T.eq("and no other record claims it", H.recordIds().B ~= placed, true)
 
+  if R then
+    T.section(L .. ": a hidden variable under the name at another id")
+    values = fresh(mode)
+    values:update("A", "1", "STRING")
+    values:update("B", "2", "STRING")
+    values:delete("B")
+    C4:AddVariable(1010, "", "STRING", true, true)
+    C4:SetVariableName(1010, "B") -- a leftover under B's name, not at 1002
+    values:update("B", "back", "STRING")
+    T.eq("B comes back visible at its id", H.snapshot(), "1001=A, 1002=B")
+    holds("B back", { A = 1001, B = 1002 }, {})
+  end
+
   T.section(L .. ": a stored record Director raises on does not stop restore")
   values = fresh(mode)
   values:update("A", "1", "STRING")

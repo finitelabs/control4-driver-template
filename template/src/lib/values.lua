@@ -630,8 +630,9 @@ end
 function Values:_createRenamed(values, name, record, strValue)
   local readOnly = not record.writable
   if Variables[name] ~= nil then
-    -- An older build's hidden placeholder, or a leftover, still carries the name.
-    C4:DeleteVariable(self:_target(name, record))
+    -- An older build's hidden placeholder, or a leftover, still carries the name; wherever it is.
+    local found = self:_findVariable(name)
+    C4:DeleteVariable(found and found.id or self:_target(name, record))
   end
   if record.id ~= nil and not self:_addAt(values, record.id, name, strValue, record.varType, readOnly) then
     log:error("Variable id %s of %s is taken by another variable; %s gets a new id", record.id, name, name)
