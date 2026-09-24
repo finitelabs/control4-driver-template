@@ -1056,10 +1056,10 @@ function Values:_learn(values, restarted, director)
     if pending and not anyId then
       self:_restoreAsOlderBuild(values, estimated, rows)
     end
-    -- A downgrade's rewrite drops a record's id: it takes the id the older build's restart gives it, if free.
+    -- A record an older build wrote has no id: it takes the one that build's restart gives it, if free.
     for _, row in ipairs(rows) do
       local id = estimated[row.name]
-      if isLive(row.record) and row.record.id == nil and id ~= nil and ownerOf(values, id) == nil then
+      if row.record.id == nil and id ~= nil and ownerOf(values, id) == nil then
         row.record.id = id
       end
     end

@@ -1041,6 +1041,23 @@ walked = unreadableSwitch()
 walked:update("N", "n", "STRING")
 T.eq("so a new name does not take it", H.visible().N, 1004)
 
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ": a name an older build added and deleted keeps its id after a restart")
+  H.mode(mode.rename)
+  H.wipe()
+  local values = H.load("restart")
+  values:update("A", "a", "STRING")
+  values:update("B", "b", "STRING")
+  local old = H.load("update", "v0.9.28")
+  old:update("N", "n", "STRING") -- 1003
+  old:update("Z", "z", "STRING") -- 1004, so N's record stays
+  old:delete("N")
+  ShimRestartDirector()
+  values = H.load("restart")
+  values:update("Q", "q", "STRING")
+  T.eq("a new name does not take it", H.visible().Q, 1005)
+end
+
 T.section("without a rename: an id that is only a guess is not held when its name is deleted")
 H.mode(false)
 H.wipe()
