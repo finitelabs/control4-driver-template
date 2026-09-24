@@ -333,6 +333,17 @@ for _, mode in ipairs(MODES) do
     holds("numeric names", want, {})
   end
 
+  T.section(L .. ": two names that spell one id below the first")
+  values = fresh(mode)
+  values:update("A", "1", "STRING")
+  values:update("42", "x", "STRING")
+  values:update("0042", "y", "STRING") -- Director reads 42 from both
+  if R then
+    holds("the second gets a new id above every other", { A = 1001, ["42"] = 1002, ["0042"] = 1003 }, {})
+  else
+    holds("the second is refused", { A = 1001, ["42"] = 42 }, {})
+  end
+
   T.section(L .. ": a numeric-looking name Director refuses touches no other variable")
   values = fresh(mode)
   values:update("A", "1", "STRING")

@@ -701,10 +701,11 @@ function Values:_claimNumbered(values, name, record)
     return false
   end
   local ownerName, owner = ownerOf(values, id)
-  if owner == nil and Variables[tostring(id)] == nil then
-    return false
-  elseif owner ~= nil and (holdsValue(owner) or not (owner.placeholder or ownerName == tostring(id))) then
-    return false
+  local named = values[tostring(id)]
+  if owner ~= nil and not owner.placeholder then
+    return false -- another name's id
+  elseif owner == nil and (Variables[tostring(id)] == nil or (named ~= nil and named.id ~= nil)) then
+    return false -- nothing there, or the variable named by the id is another record's, renamed at its own id
   end
   if ownerName ~= nil then
     values[ownerName] = nil
@@ -1257,12 +1258,16 @@ function Values:_learnIds(values, director, estimated)
   table.sort(others)
   for _, id in ipairs(others) do
     local variable = director[id]
-    if variable.hidden and values[variable.name] == nil then
-      log:info("Holding variable id %s of hidden variable %s", id, variable.name)
-      values[variable.name] = { index = maxIndex(values) + 1, id = id, varType = "STRING", deleted = true }
-    else
+    if not variable.hidden then
       log:info("Holding variable id %s of variable %s, which is not ours", id, variable.name)
       self:_reserve(values, id)
+    else
+      log:info("Holding variable id %s of hidden variable %s", id, variable.name)
+      if values[variable.name] == nil and id >= FIRST_ID then
+        values[variable.name] = { index = maxIndex(values) + 1, id = id, varType = "STRING", deleted = true }
+      else
+        self:_reserve(values, id) -- below the first id it is named for any name that spells its id
+      end
     end
   end
   return true

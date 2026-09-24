@@ -1398,6 +1398,43 @@ own:update("N", "n", "STRING")
 T.eq("nothing is logged", warnings, {})
 T.eq("and no id moves", H.visible(), { A = 1001, Own = 1002, N = 1003 })
 
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ": a name that spells a deleted numeric name's id does not take it")
+  H.mode(mode.rename)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("A", "a", "STRING")
+  old:update("42", "x", "STRING") -- at 42
+  old:update("B", "b", "STRING") -- so the older build keeps 42's record when it goes
+  old:delete("42")
+  local values = H.load("update")
+  values:update("0042", "y", "STRING")
+  values:update("42", "x", "STRING")
+  local want = mode.rename and { A = 1001, B = 1002, ["42"] = 42, ["0042"] = 1003 } or { A = 1001, B = 1002 }
+  if mode.rename then
+    T.eq("42 is back where it was", H.visible(), want)
+    H.load("restart")
+    T.eq("which a restart keeps", H.visible(), want)
+  end
+  T.eq("42's record keeps its id", H.recordIds()["42"], 42)
+end
+
+for _, mode in ipairs(MODES) do
+  T.section(mode.label .. ": a numeric name whose record an older build trimmed gets its hidden variable's id back")
+  H.mode(mode.rename)
+  H.wipe()
+  local old = H.load("restart", "v0.9.28")
+  old:update("A", "a", "STRING")
+  old:update("0042", "q", "STRING") -- at 42
+  old:update("B", "b", "STRING")
+  old:delete("0042")
+  old = H.load("restart", "v0.9.28") -- its placeholder, hidden at 42 and named "42"
+  old:delete("B") -- both trailing records trimmed; the placeholder stays
+  local values = H.load("update")
+  values:update("0042", "q2", "STRING")
+  T.eq("at 42", H.visible()[mode.rename and "0042" or "42"], 42)
+end
+
 T.section("with a rename: a variable an older build left hidden is shown at its next update")
 H.mode(true)
 H.wipe()
