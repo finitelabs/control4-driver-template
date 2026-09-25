@@ -321,6 +321,22 @@ T.eq("a set of B reaches B's variable", { Variables.B, Variables.P }, { "b2", "p
 values:delete("B")
 T.eq("and so does a delete", H.visible(), { A = 1001, P = 1002 })
 
+T.section("a deleted name keeps its id when v0.9.28 put its placeholder at another's")
+-- X was a plain value when B was added, so this build gave B 1002 and X 1003, then deleted both.
+-- v0.9.28's restore at a driver update adds their placeholders by name, X's at 1002 and B's at 1003.
+stored({
+  A = { index = 1, id = 1001, varType = "STRING", value = "a", writable = false },
+  X = { index = 2, id = 1003, varType = "STRING", writable = false, deleted = true },
+  B = { index = 3, id = 1002, varType = "STRING", writable = false, deleted = true },
+})
+C4:AddVariable("A", "a", "STRING", true, false)
+C4:AddVariable("X", "", "STRING", true, true)
+C4:AddVariable("B", "", "STRING", true, true)
+values = H.load("update")
+values:update("X", "x", "STRING")
+values:update("B", "b", "STRING")
+holds("so each comes back at its own id", { A = 1001, B = 1002, X = 1003 })
+
 T.section("a name v0.9.28 deleted with no id does not take an id a deleted value keeps")
 -- This build gave X 1003, as F, a variable no record names, had 1002. v0.9.28 then rewrote A,
 -- deleted X, and rewrote and deleted Y.

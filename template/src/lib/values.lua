@@ -12,6 +12,7 @@ require("lib.utils")
 --- @field _callbacks table<string, function?> In-memory registry of OVC callbacks keyed by variable name.
 --- @field _byId boolean Whether variables are added at their ids in this load.
 --- @field _rejected table<string, boolean> Names Director would not give a variable in this load.
+--- @field _placeholders table<integer, string> The name of each hidden variable Director listed in this load, by id.
 --- A class representing a collection of named values with optional variable/property support.
 local Values = {}
 Values.__index = Values
@@ -94,6 +95,7 @@ function Values:new()
   instance._callbacks = {}
   instance._byId = false
   instance._rejected = {}
+  instance._placeholders = {}
   return instance
 end
 
@@ -221,7 +223,7 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
   local idChanged = false
   if varType ~= nil then
     if Variables[name] ~= nil and not isVariable(existing) and record.id ~= nil then
-      -- An older build's hidden placeholder for the name gives way to it, at the same id
+      -- An older build's hidden placeholder for the name gives way to it
       C4:DeleteVariable(variableKey(name, record.id))
       Variables[name] = nil
     end
@@ -448,6 +450,12 @@ function Values:_addVariable(values, name, value, strValue)
   end
 
   local id = value.id
+  local placeholder = self._placeholders[id]
+  if placeholder ~= nil and Variables[placeholder] ~= nil and not isVariable(values[placeholder]) then
+    -- An older build put another deleted name's hidden placeholder at this id; it holds no programming
+    C4:DeleteVariable(variableKey(placeholder, id))
+    Variables[placeholder] = nil
+  end
   if id ~= nil and not C4:AddVariable(id, strValue, value.varType, readOnly, false) then
     log:warn("Variable id %d of %s is taken; it gets a new one", id, name)
     id = nil
@@ -476,9 +484,9 @@ function Values:_addVariable(values, name, value, strValue)
   return changed
 end
 
---- Whether variables are added at their ids in this load. Each record takes its
---- variable's id from Director's list by name, or with no variable and no id, the
---- id an older build's restore gives it.
+--- Whether variables are added at their ids in this load. A record takes the id of
+--- its visible variable in Director's list; with no id, that of its hidden one, and
+--- with no variable either, the id an older build's restore gives it.
 --- @private
 --- @param values table<string, Value> The values table, which takes the ids.
 --- @return boolean byId True if variables are added at their ids.
@@ -524,7 +532,13 @@ function Values:_learnIds(values)
     if value.deleted and value.varType ~= nil and variable.hidden == "False" then
       value.deleted = nil -- the older build deleted it, then added it again
     end
-    value.id = tonumber(id)
+    if variable.hidden == "True" then
+      -- An older build's placeholder holds no programming, so a record's own id stands over it
+      self._placeholders[tonumber(id)] = variable.name
+      value.id = value.id or tonumber(id)
+    else
+      value.id = tonumber(id)
+    end
     values[variable.name] = value
   end
 
