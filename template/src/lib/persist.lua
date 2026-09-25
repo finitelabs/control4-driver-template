@@ -41,9 +41,9 @@
 --- ## Storage format
 ---
 --- Every value is stored as base64 of its JSON, so a string, number or boolean reads back as
---- itself. Older builds stored scalars raw; a read still returns such a UTF-8 string, and the
---- key takes the new form at its next `set()`. A NaN, or a string that is not UTF-8 text, is
---- logged and its key deleted.
+--- itself. An older build's raw string is still read as it is when `Deserialize` reads it as
+--- nothing, and takes the new form at its next `set()`. A NaN, or a string that is not UTF-8
+--- text, set on its own is logged and its key deleted.
 
 local log = require("lib.logging")
 

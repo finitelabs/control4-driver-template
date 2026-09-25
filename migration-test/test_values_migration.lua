@@ -353,7 +353,7 @@ for _, mode in ipairs(MODES) do
   local values = H.load("update")
   local existing = values:getValue("Last Action")
   T.eq("the tombstone is still a tombstone", existing.deleted, true)
-  values:update("Last Action", nil)
+  values:update("Last Action", nil) -- as the zigbee3 button handler resets it
   values:update("Last Action", "", "STRING")
   if mode.rename then
     T.eq("Last Action is shown at its id", H.visible()["Last Action"], 1002)
@@ -386,7 +386,7 @@ for _, mode in ipairs(MODES) do
   local values = H.load("update")
   T.eq("still hidden after the switch", H.variables()[1002].hidden, true)
   local keep = values:getValue("Last Action").value
-  values:update("Last Action", nil)
+  values:update("Last Action", nil) -- as the zigbee3 button handler resets it
   values:update("Last Action", keep, "STRING")
   if mode.rename then
     T.eq("shown at its id with its value", { H.visible()["Last Action"], Variables["Last Action"] }, { 1002, "single" })

@@ -1530,11 +1530,8 @@ function C4:GetDeviceVariables(deviceId)
   return variables
 end
 
--- The C4:Persist* SDK methods, backed by an in-memory store. The bare
--- PersistGetValue/SetValue/DeleteValue globals belong to global/lib.lua, whose
--- wrappers delegate here when C4.PersistSetValue exists; stubbing the globals
--- instead would be paved over the moment any module requires global.lib.
--- As on 4.3.0, except that a nil encrypted flag, which the controller rejects, is false here.
+-- C4:Persist* in memory, as on 4.3.0 except that a nil encrypted flag (rejected there) is false.
+-- Not the bare Persist* globals: global/lib.lua redefines those on require, delegating here.
 local persist_store = {}
 
 -- The controller's cipher XORs a fixed keystream; the shim repeats its first 40 bytes.

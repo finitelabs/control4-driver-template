@@ -500,7 +500,7 @@ function Values:restoreValues()
   if recordSignature(values) ~= before then
     self:_saveValues(values, true)
   end
-  -- Director may be unreadable only in OnDriverInit, so retry once it is over.
+  -- Director may be unreadable only in OnDriverInit: retry once it is over, or at the first change.
   if self._stale then
     delay(RECHECK_MS):next(function()
       self:_recheck(self:_load())
@@ -574,7 +574,6 @@ function Values:_saveValues(values, durable)
   end
 end
 
---- Shows the property of that name, if any, with the record's value.
 --- @private
 function Values:_showProperty(name, record)
   if Properties[name] == nil then
@@ -746,7 +745,7 @@ function Values:_hold(id, varType)
   return added and true or false
 end
 
---- Holds the first free id, where a by-name add would land.
+--- Holds the first free id, where a by-name add would land while nothing below has been deleted.
 --- @private
 --- @return integer? id
 function Values:_holdFree()
@@ -1280,8 +1279,8 @@ function Values:_restoreRenamed(values)
   end
 end
 
---- Restore without a rename, from the first id up, so each by-name add lands on its id; every other
---- id gets a hidden variable by number.
+--- Restore without a rename, from the first id up, so each by-name add lands on its id; the other ids
+--- are held by number, after a driver update only where missing.
 --- @private
 function Values:_restoreByName(values, restarted)
   local owner, ids, walkTo = {}, {}, FIRST_ID - 1
