@@ -40,6 +40,20 @@ local blob = H.blob()
 T.eq("each record keeps its id", { blob.A.id, blob.B.id, blob.C.id }, { 1001, 1002, 1003 })
 T.eq("a plain value has none", blob.Json.id, nil)
 
+T.section("a load that changes no id does not write the values")
+values = fresh()
+values:update("A", "1", "STRING")
+values:update("B", "2", "STRING")
+local set, writes = C4.PersistSetValue, 0
+C4.PersistSetValue = function(self, key, ...)
+  writes = writes + (key == "Values" and 1 or 0)
+  return set(self, key, ...)
+end
+H.load("update")
+H.load("restart")
+C4.PersistSetValue = set
+T.eq("through a driver update and a Director restart", writes, 0)
+
 T.section("a deleted name's id is not given to another")
 values = fresh()
 values:update("A", "1", "STRING")
@@ -413,6 +427,15 @@ C4:AddVariable("B", "", "NUMBER", true, false)
 H.load("update")
 H.load("restart")
 T.eq("through the switch and a restart", H.visible(), { A = 1001, B = 1004, C = 1003 })
+-- Had this build given B 1002, its record would keep it, and v0.9.28 could add B back there
+stored({
+  A = { index = 1, id = 1001, varType = "STRING", value = "a", writable = false },
+  B = { index = 2, id = 1002, varType = "NUMBER", writable = false, deleted = true },
+})
+C4:AddVariable("A", "a", "STRING", true, false)
+C4:AddVariable("B", "", "NUMBER", true, false)
+H.load("update")
+T.eq("and at the id its record keeps, the switch leaves its variable be", H.calls, {})
 
 T.section("a plain value v0.9.28 deleted keeps its placeholder's id at a restart")
 -- J was a variable, then a plain value, then deleted; v0.9.28's restore holds its id with a placeholder

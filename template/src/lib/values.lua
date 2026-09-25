@@ -529,10 +529,13 @@ function Values:_learnIds(values)
   end)
 
   -- Each variable keeps its id, under a deleted record of its name if no record has one
+  local changed = false
   for id, variable in pairs(variables) do
     local value = values[variable.name] or { index = tonumber(id), deleted = true }
+    local recorded = value.id
     if value.deleted and value.varType ~= nil and variable.hidden == "False" then
       value.deleted = nil -- the older build deleted it, then added it again
+      changed = true
     end
     if variable.hidden == "True" then
       -- An older build's placeholder holds no programming, so a record's own id stands over it
@@ -541,6 +544,7 @@ function Values:_learnIds(values)
     else
       value.id = tonumber(id)
     end
+    changed = changed or value.id ~= recorded
     values[variable.name] = value
   end
 
@@ -559,9 +563,12 @@ function Values:_learnIds(values)
     if value.id == nil and not taken[id] then
       value.id = id
       taken[id] = true
+      changed = true
     end
   end
-  self:_saveValues(values, true)
+  if changed then
+    self:_saveValues(values, true)
+  end
   return true
 end
 
