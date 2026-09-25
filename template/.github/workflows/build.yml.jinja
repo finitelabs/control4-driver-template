@@ -77,6 +77,12 @@ jobs:
         run: make test
 
       - name: Build
+{%- if build_secrets %}
+        env:
+{%- for secret in build_secrets.split() %}
+          {{ secret }}: {{ '${{' }} secrets.{{ secret }} {{ '}}' }}
+{%- endfor %}
+{%- endif %}
         run: make build
 
       - name: Verify PDFs were generated
