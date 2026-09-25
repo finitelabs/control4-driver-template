@@ -23,7 +23,8 @@
 --      Upstream indexes it unguarded, so such an update threw before any
 --      UpdatePropertyList call.
 --
--- test/test_watched_variable.lua covers 5; test/test_update_property.lua covers 6 and 7.
+-- test/test_dispatch.lua covers 2 and 3; test/test_watched_variable.lua covers 5;
+-- test/test_update_property.lua covers 6 and 7.
 
 require("drivers-common-public.global.lib")
 
