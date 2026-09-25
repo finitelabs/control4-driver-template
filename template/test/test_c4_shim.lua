@@ -279,7 +279,7 @@ T.check("every variable has a distinct id", reported == tracked, reported .. " r
 T.section("variable ids across driver loads")
 --------------------------------------------------------------------------------
 
--- Measured on a 4.3.0 controller (probe driver, 2026-09-23).
+-- As on OS 4.3.0.
 ShimRestartDirector()
 local function idOf(name)
   return tonumber((select(2, variableByName(name))))
@@ -360,7 +360,6 @@ ShimWriteVariable(1010, "w")
 T.eq("a write from programming names the variable as renamed", fired, "Named Ten")
 OnVariableChanged = realOnVariableChanged
 ShimRestartDirector()
--- Measured on 4.3.0 (2026-09-24): a rename to "" does not take.
 C4:AddVariable(1061, "x", "STRING")
 T.eq('a rename to "" returns true', C4:SetVariableName(1061, ""), true)
 T.eq("but Director keeps its number as its name", variableField("1061", "name"), "1061")
@@ -876,7 +875,7 @@ T.eq("a malformed reference stays literal", C4:ParseXml("<v>&#;</v>").Value, "&#
 T.section("C4 file API")
 --------------------------------------------------------------------------------
 
--- Measured on a dev controller (OS 4.3.0) in a lab driver's sandbox.
+-- As on OS 4.3.0, in a driver's sandbox.
 T.eq("nothing is open to start with", C4:FileGetOpenedHandles(), nil)
 T.eq("with nothing open it returns no value at all", select("#", C4:FileGetOpenedHandles()), 0)
 

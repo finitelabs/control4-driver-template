@@ -1,7 +1,5 @@
--- Tests src/lib/zip.lua: reading one file out of an in-memory .c4z, which the GitHub
--- updater does to learn a release's minimum C4 OS before installing it. The deflate
--- streams below were produced by zlib (raw, wbits -15), the compressor behind the
--- driver packager's zipfile.ZIP_DEFLATED.
+-- Tests src/lib/zip.lua reading one file out of an in-memory .c4z. The deflate streams below
+-- come from zlib (raw, wbits -15), the compressor behind the packager's zipfile.ZIP_DEFLATED.
 --
 -- Run from the driver root:
 --   make test

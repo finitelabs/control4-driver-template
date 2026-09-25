@@ -1,7 +1,5 @@
--- The first load of this lib/values after a shipped build (legacy/, byte-identical copies) keeps
--- every variable id Director has, after a driver update or a Director restart, and later loads keep it.
---
--- The template's CI copies migration-test/ into a render's test/ and runs it with `make test`.
+-- The first load of this lib/values after a shipped build (legacy/) keeps every variable id
+-- Director has, after a driver update or a Director restart, and later loads keep it.
 
 local T = require("testlib")
 local H = require("values_harness")
@@ -31,8 +29,7 @@ local MODES = {
   { rename = false, label = "without a rename" },
 }
 
--- Histories an older build can leave behind (research notes H1 to H15, and two dev devices).
--- Each runs from a clean install under `build`; `v` is that build's module.
+-- Histories an older build can leave behind, each run from a clean install under `build`.
 local HISTORIES = {
   {
     name = "H1 a deleted variable, then a driver update",
@@ -356,7 +353,7 @@ for _, mode in ipairs(MODES) do
   local values = H.load("update")
   local existing = values:getValue("Last Action")
   T.eq("the tombstone is still a tombstone", existing.deleted, true)
-  values:update("Last Action", nil) -- button.lua:104-106
+  values:update("Last Action", nil)
   values:update("Last Action", "", "STRING")
   if mode.rename then
     T.eq("Last Action is shown at its id", H.visible()["Last Action"], 1002)
@@ -389,7 +386,7 @@ for _, mode in ipairs(MODES) do
   local values = H.load("update")
   T.eq("still hidden after the switch", H.variables()[1002].hidden, true)
   local keep = values:getValue("Last Action").value
-  values:update("Last Action", nil) -- button.lua:111-115
+  values:update("Last Action", nil)
   values:update("Last Action", keep, "STRING")
   if mode.rename then
     T.eq("shown at its id with its value", { H.visible()["Last Action"], Variables["Last Action"] }, { 1002, "single" })

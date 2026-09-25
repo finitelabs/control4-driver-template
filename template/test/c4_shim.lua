@@ -478,8 +478,7 @@ function C4:UnregisterDeviceEvent() end
 
 ---------------------------------------------------------------------------
 -- Files
--- One in-memory directory per FileSetDir target, so what a driver writes it can
--- read back. Return values and positioning were measured on a controller (OS 4.3.0).
+-- One in-memory directory per FileSetDir target; return values and positioning match OS 4.3.0.
 ---------------------------------------------------------------------------
 
 -- Mirrors the controller: C4Z_ROOT errors until unlocked with the key below.
@@ -526,7 +525,7 @@ function C4:FileOpen(name)
   return lastFileHandle
 end
 
--- Measured: a handle keeps its file after FileDelete, apart from a new file of that name.
+-- A handle keeps its file after FileDelete, apart from a new file of that name.
 local function contents(file)
   return file.detached or ShimFiles(file.dir)[file.name] or ""
 end
@@ -591,13 +590,12 @@ function C4:FileClose(fh)
   return 0
 end
 
--- Handle to file name, or nil with nothing open.
+-- Handle to file name; no value at all, not even nil, with nothing open.
 function C4:FileGetOpenedHandles()
   local handles = {}
   for fh, file in pairs(openFiles) do
     handles[fh] = file.name
   end
-  -- The controller returns no value at all when nothing is open (measured on 4.3.0).
   if next(handles) then
     return handles
   end
@@ -657,8 +655,8 @@ local function base64_encode_impl(data)
   )
 end
 
--- C4:Base64Decode as measured on 4.3.0 (test_shim_base64.lua): OpenSSL's base64 BIO over the input
--- cut at its first NUL and trimmed, as one line (BIO_FLAGS_BASE64_NO_NL) unless it has a newline.
+-- C4:Base64Decode as on 4.3.0: OpenSSL's base64 BIO over the input cut at its first NUL and
+-- trimmed, as one line (BIO_FLAGS_BASE64_NO_NL) unless it has a newline.
 local B64_WS, B64_EOLN, B64_CR, B64_EOF, B64_ERROR = 0xE0, 0xF0, 0xF1, 0xF2, 0xFF
 local B64_BLOCK_SIZE = 1024
 
@@ -1194,8 +1192,8 @@ local var_type_codes = {
   DEVICE = 14,
 }
 
--- Measured on a 4.3.0 controller. A variable added by name takes the first free id at
--- or after a counter that starts at 1001 in each driver load and never goes back in it.
+-- A variable added by name takes the first free id at or after a counter that starts at 1001
+-- in each driver load and never goes back in it.
 local next_variable_id = 1001
 
 --- Each variable by id, and each id by name. The value lives in Variables under `key`, the
@@ -1327,7 +1325,7 @@ local function set_variable_name(_, id, name)
   end
   Variables[name], meta.key = value, name
   if name == "" then
-    -- Measured: true, but Director keeps the number as its name, and the key "" lasts only this load.
+    -- True, but Director keeps the number as its name, and the key "" lasts only this load.
     return true
   end
   variable_ids[meta.name], variable_ids[name] = nil, id
@@ -1536,13 +1534,10 @@ end
 -- PersistGetValue/SetValue/DeleteValue globals belong to global/lib.lua, whose
 -- wrappers delegate here when C4.PersistSetValue exists; stubbing the globals
 -- instead would be paved over the moment any module requires global.lib.
--- As on 4.3.0: a number or boolean keeps its type, but a NaN comes back as text and a number past
--- the 64-bit range is clamped (1e300 and inf read back as 2^64, -inf as -2^63). A string is cut at
--- its first NUL, a plain "" deletes and an encrypted one is ignored. The controller rejects a nil
--- encrypted flag; here it is false.
+-- As on 4.3.0, except that a nil encrypted flag, which the controller rejects, is false here.
 local persist_store = {}
 
--- The controller's cipher XORs a fixed keystream; its first 40 bytes as measured on 4.3.0, repeated.
+-- The controller's cipher XORs a fixed keystream; the shim repeats its first 40 bytes.
 local PERSIST_KEYSTREAM = "402afa804cc62af27f5ebb2ed09026b2d1835e311aef3c3efed28088612f2b8efd3d6f410e019451"
 
 local function persist_cipher(data)
@@ -1704,8 +1699,7 @@ function ShimFireTimers()
   end
 end
 
---- Harness, not a controller API: a new driver load. Assumed, not measured: a load starts a new
---- Lua state, so no timer the old load set fires into it.
+--- Harness: a new driver load. Assumed: its new Lua state gets no timer the old load set.
 function ShimCancelTimers()
   for id, timer in pairs(timers) do
     timer.cancelled = true
