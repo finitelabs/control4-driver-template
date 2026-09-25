@@ -146,12 +146,14 @@ function GitHubUpdater:downloadOutdatedDrivers(dir, repo, driverFilenames, inclu
         UnlockC4ZRoot()
         C4:FileSetDir(dir)
         local currentContents = C4:FileExists(asset.name) and FileRead(asset.name) or nil
-        if FileWrite(asset.name, response.body, true) == -1 then
+        FileWrite(asset.name, response.body, true)
+        -- The vendored FileWrite returns nothing, so only reading the file back shows a failed write.
+        if FileRead(asset.name) ~= response.body then
           -- Restore the previous contents if the write failed
           if currentContents ~= nil then
             FileWrite(asset.name, currentContents, true)
           end
-          return reject(string.format("failed to download asset %s", asset.name))
+          return reject(string.format("failed to write asset %s", asset.name))
         end
         log:info("Downloaded asset %s (%d bytes)", asset.name, downloadSize)
         return asset.name
