@@ -974,14 +974,13 @@ local var_type_codes = {
   DEVICE = 14,
 }
 
--- Director numbers each device's variables from 1001 and never reuses an id, so
--- a deleted name returns at the end of the range. lib/values.lua restores hidden
--- placeholders to keep that range stable, which is what makes ids worth modelling.
+-- A variable added by name takes the first free id at or after a counter that
+-- starts at 1001 in each driver load, so a load fills the gaps a delete left.
 local next_variable_id = 1001
 
---- Id and attributes per variable name, behind C4:GetDeviceVariables. The value
+--- Name and attributes per variable id, behind C4:GetDeviceVariables. The value
 --- is read from Variables at call time so a SetVariable needs no bookkeeping here.
---- @type table<string, { id: string, type: string, readonly: string, hidden: string }>
+--- @type table<integer, { name: string, type: string, readonly: string, hidden: string }>
 local variable_meta = {}
 
 -- Strings and numbers only; nil means the controller would reject the value.
@@ -993,10 +992,24 @@ local function var_value(value)
   end
 end
 
+-- The id a Set or Delete reaches. Director reads a number, or a string that
+-- reads as one, as an id rather than a name.
+local function var_id(identifier)
+  local id = tonumber(identifier)
+  if id ~= nil then
+    return id
+  end
+  for candidate, meta in pairs(variable_meta) do
+    if meta.name == identifier then
+      return candidate
+    end
+  end
+end
+
 -- Checks run in the controller's order: the value, then that varType is a
 -- string, then the existing-name return, and only then whether varType names a
 -- real type. An existing name returns false without ever validating varType.
-function C4:AddVariable(name, value, varType, readOnly, hidden)
+function C4:AddVariable(identifier, value, varType, readOnly, hidden)
   local strValue = var_value(value)
   if strValue == nil then
     error("strValue should be a string", 2)
@@ -1005,10 +1018,15 @@ function C4:AddVariable(name, value, varType, readOnly, hidden)
     error("strVarType should be a string", 2)
   end
 
-  name = tostring(name)
+  -- Added by id, a variable takes exactly that id, named after it, and leaves the counter alone.
+  local id = tonumber(identifier)
+  if id ~= nil and id < 1 then
+    error("id must be greater than zero (unsigned)", 2)
+  end
+  local name = tostring(id or identifier)
 
   -- Already present: the controller keeps the existing value and type
-  if Variables[name] ~= nil then
+  if Variables[name] ~= nil or variable_meta[id] ~= nil then
     return false
   end
 
@@ -1016,38 +1034,84 @@ function C4:AddVariable(name, value, varType, readOnly, hidden)
     error("Invalid variable type.  Valid types include: BOOL, LEVEL, NUMBER, STRING.", 2)
   end
 
+  if id == nil then
+    id = next_variable_id
+    while variable_meta[id] ~= nil do
+      id = id + 1
+    end
+    next_variable_id = id + 1
+  end
   Variables[name] = strValue
-  variable_meta[name] = {
-    id = tostring(next_variable_id),
+  variable_meta[id] = {
+    name = name,
     type = tostring(var_type_codes[varType]),
     readonly = readOnly == true and "True" or "False",
     hidden = hidden == true and "True" or "False",
   }
-  next_variable_id = next_variable_id + 1
-  return true
+  return true, id
 end
 
 -- The value is checked before the name is looked up, so a bad value raises even
 -- on a name that was never added.
-function C4:SetVariable(name, value)
+function C4:SetVariable(identifier, value)
   local strValue = var_value(value)
   if strValue == nil then
     error("strValue should be a string", 2)
   end
-  name = tostring(name)
+  local meta = variable_meta[var_id(identifier)]
 
   -- Never added: silently does nothing, and does not create it
-  if Variables[name] == nil then
+  if meta == nil then
     return
   end
 
-  Variables[name] = strValue
+  Variables[meta.name] = strValue
 end
 
-function C4:DeleteVariable(name)
+function C4:DeleteVariable(identifier)
+  local id = var_id(identifier)
+  if variable_meta[id] ~= nil then
+    Variables[variable_meta[id].name] = nil
+    variable_meta[id] = nil
+  end
+end
+
+-- Undocumented; first-party drivers call it unguarded from OS 4.0.0. It keeps
+-- the id, and returns false for a missing id or a name any variable has.
+local function set_variable_name(_, id, name)
+  local meta = variable_meta[tonumber(id)]
   name = tostring(name)
-  Variables[name] = nil
-  variable_meta[name] = nil
+  if meta == nil or Variables[name] ~= nil then
+    return false
+  elseif name == "" then
+    return true -- but Director keeps the number as the name
+  end
+  Variables[name] = Variables[meta.name]
+  Variables[meta.name] = nil
+  meta.name = name
+  return true
+end
+C4.SetVariableName = set_variable_name
+
+--- Harness: whether C4.SetVariableName exists, as it does from OS 4.0.0 (the
+--- default). Without it lib/values adds variables by name.
+function ShimVariableRename(enabled)
+  C4.SetVariableName = enabled and set_variable_name or nil
+end
+
+--- Harness: a driver update. Director keeps every variable, and the new load's
+--- counter starts again at 1001.
+function ShimUpdateDriver()
+  next_variable_id = 1001
+end
+
+--- Harness: a Director restart or controller boot. No driver variable survives it.
+function ShimRestartDirector()
+  for _, meta in pairs(variable_meta) do
+    Variables[meta.name] = nil
+  end
+  variable_meta = {}
+  next_variable_id = 1001
 end
 
 -- Keyed by id as a string, with every field a string: `type` is a numeric code,
@@ -1192,11 +1256,11 @@ function C4:GetDeviceVariables(deviceId)
   -- The running driver's own variables, as created through C4:AddVariable.
   local variables = {}
   if tonumber(deviceId) == tonumber(C4:GetDeviceID()) then
-    for name, meta in pairs(variable_meta) do
-      variables[meta.id] = {
-        name = name,
+    for id, meta in pairs(variable_meta) do
+      variables[tostring(id)] = {
+        name = meta.name,
         description = "",
-        value = Variables[name],
+        value = Variables[meta.name],
         type = meta.type,
         readonly = meta.readonly,
         hidden = meta.hidden,
