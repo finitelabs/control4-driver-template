@@ -791,5 +791,24 @@ C4:PersistSetValue("Secret", "", true)
 T.eq("and leaves an encrypted one as it was", C4:PersistGetValue("Secret", true), "x")
 
 --------------------------------------------------------------------------------
+T.section("C4:FileOpen / C4:FileWrite / C4:FileDelete")
+--------------------------------------------------------------------------------
+
+-- Measured on 4.3.0. FileOpen never truncates, which is why the vendored FileWrite
+-- deletes a file before it overwrites it.
+local fh = C4:FileOpen("shim.bin")
+C4:FileWrite(fh, 6, "hello!")
+C4:FileClose(fh)
+fh = C4:FileOpen("shim.bin")
+T.eq("a reopened file reads nothing from the end", C4:FileRead(fh, 100), "")
+C4:FileSetPos(fh, 0)
+C4:FileWrite(fh, 2, "XY")
+C4:FileSetPos(fh, 0)
+T.eq("a write lands at the position, over what is there", C4:FileRead(fh, 100), "XYllo!")
+C4:FileClose(fh)
+T.eq("FileDelete returns true when it deletes", C4:FileDelete("shim.bin"), true)
+T.eq("the file is gone", C4:FileExists("shim.bin"), false)
+
+--------------------------------------------------------------------------------
 
 T.finish()

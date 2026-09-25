@@ -164,17 +164,6 @@ end
 function C4:GetDriverFileName()
   return "example.c4z"
 end
--- Mirrors the controller: C4Z_ROOT errors until unlocked with the key below, and
--- every other argument is a no-op.
-local FILE_SET_DIR_UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
-local c4zRootUnlocked = false
-function C4:FileSetDir(dir)
-  if dir == FILE_SET_DIR_UNLOCK_KEY then
-    c4zRootUnlocked = true
-  elseif dir == "C4Z_ROOT" and not c4zRootUnlocked then
-    error("Invalid alias: C4Z_ROOT", 2)
-  end
-end
 function C4:SendToDevice() end
 function C4:SendToProxy() end
 
@@ -486,23 +475,97 @@ function C4:UnregisterVariableListener() end
 function C4:UnregisterAllVariableListeners() end
 function C4:RegisterDeviceEvent() end
 function C4:UnregisterDeviceEvent() end
-function C4:FileExists()
-  return false
+
+---------------------------------------------------------------------------
+-- Files
+-- Kept in memory per FileSetDir target, so a driver reads back what it wrote.
+-- Opening, positioning and writing follow a controller (OS 4.3.0).
+---------------------------------------------------------------------------
+
+-- Mirrors the controller: C4Z_ROOT errors until unlocked with the key below.
+local FILE_SET_DIR_UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
+local c4zRootUnlocked = false
+local files = {}
+-- A driver starts in its sandbox.
+local file_dir = "SANDBOX"
+local open_files = {}
+local file_handle_count = 0
+
+--- The files in one FileSetDir target, keyed by name. Live, so a test can seed or inspect them.
+--- @param dir string "C4Z_ROOT", or "C4Z_ROOT/example" after C4:FileSetDir("C4Z_ROOT", "example").
+--- @return table<string, string> files
+function ShimFiles(dir)
+  files[dir] = files[dir] or {}
+  return files[dir]
 end
-function C4:FileOpen()
-  return nil
+
+function C4:FileSetDir(dir, subdir)
+  if dir == FILE_SET_DIR_UNLOCK_KEY then
+    c4zRootUnlocked = true
+    return
+  elseif dir == "C4Z_ROOT" and not c4zRootUnlocked then
+    error("Invalid alias: C4Z_ROOT", 2)
+  end
+  file_dir = subdir and (dir .. "/" .. subdir) or dir
 end
-function C4:FileGetSize()
-  return 0
+
+function C4:FileExists(name)
+  return ShimFiles(file_dir)[name] ~= nil
 end
-function C4:FileSetPos() end
-function C4:FileRead()
-  return ""
+
+-- Creates a missing file and never truncates; the position starts at the end.
+function C4:FileOpen(name)
+  local dir = ShimFiles(file_dir)
+  dir[name] = dir[name] or ""
+  file_handle_count = file_handle_count + 1
+  open_files[file_handle_count] = { dir = dir, name = name, pos = #dir[name] }
+  return file_handle_count
 end
-function C4:FileClose() end
-function C4:FileDelete() end
-function C4:FileWrite()
-  return 0
+
+function C4:FileGetSize(fh)
+  local file = open_files[fh]
+  return file and #(file.dir[file.name] or "") or -1
+end
+
+function C4:FileSetPos(fh, pos)
+  local file = open_files[fh]
+  if file then
+    file.pos = pos
+  end
+  return file ~= nil
+end
+
+function C4:FileRead(fh, count)
+  local file = open_files[fh]
+  if file == nil then
+    return ""
+  end
+  local data = (file.dir[file.name] or ""):sub(file.pos + 1, file.pos + count)
+  file.pos = file.pos + #data
+  return data
+end
+
+-- Writes at the position, over what is there. A count of 0 returns -1, as on the controller.
+function C4:FileWrite(fh, count, data)
+  local file = open_files[fh]
+  if file == nil or count <= 0 then
+    return -1
+  end
+  local old = file.dir[file.name] or ""
+  file.dir[file.name] = old:sub(1, file.pos) .. data:sub(1, count) .. old:sub(file.pos + count + 1)
+  file.pos = file.pos + count
+  return count
+end
+
+function C4:FileClose(fh)
+  open_files[fh] = nil
+end
+
+function C4:FileDelete(name)
+  local dir = ShimFiles(file_dir)
+  local existed = dir[name] ~= nil
+  dir[name] = nil
+  return existed
 end
 
 --- Logging functions for C4 compatibility
