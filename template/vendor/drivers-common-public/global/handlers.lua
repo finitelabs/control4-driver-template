@@ -529,27 +529,30 @@ function UpdateProperty(strProperty, strValue, notifyChange)
   end
 
   -- Scanning the config on every call cost about 4 ms on a large driver.xml, which
-  -- cannot change during a load, so parse its properties once on first use.
+  -- cannot change during a load, so parse its properties the first time it reads back.
   if PropertyConfig == nil then
-    PropertyConfig = {}
-    for propertyXML in XMLgCapture(C4:GetDriverConfigInfo("config"), "property") do
-      local propertyName = XMLCapture(propertyXML, "name")
-      if propertyName and PropertyConfig[propertyName] == nil then
-        local propertyInfo = { type = XMLCapture(propertyXML, "type"), items = {} }
-        if propertyInfo.type == "LIST" then
-          for listItem in XMLgCapture(propertyXML, "item") do
-            table.insert(propertyInfo.items, listItem)
+    local configXML = C4:GetDriverConfigInfo("config")
+    if type(configXML) == "string" then
+      PropertyConfig = {}
+      for propertyXML in XMLgCapture(configXML, "property") do
+        local propertyName = XMLCapture(propertyXML, "name")
+        if propertyName and PropertyConfig[propertyName] == nil then
+          local propertyInfo = { type = XMLCapture(propertyXML, "type"), items = {} }
+          if propertyInfo.type == "LIST" then
+            for listItem in XMLgCapture(propertyXML, "item") do
+              table.insert(propertyInfo.items, listItem)
+            end
+          elseif propertyInfo.type == "RANGED_INTEGER" or propertyInfo.type == "RANGED_FLOAT" then
+            propertyInfo.minimum = tonumber(XMLCapture(propertyXML, "minimum"))
+            propertyInfo.maximum = tonumber(XMLCapture(propertyXML, "maximum"))
           end
-        elseif propertyInfo.type == "RANGED_INTEGER" or propertyInfo.type == "RANGED_FLOAT" then
-          propertyInfo.minimum = tonumber(XMLCapture(propertyXML, "minimum"))
-          propertyInfo.maximum = tonumber(XMLCapture(propertyXML, "maximum"))
+          PropertyConfig[propertyName] = propertyInfo
         end
-        PropertyConfig[propertyName] = propertyInfo
       end
     end
   end
 
-  local propertyInfo = PropertyConfig[strProperty]
+  local propertyInfo = PropertyConfig and PropertyConfig[strProperty]
   if propertyInfo then
     local propertyType = propertyInfo.type
     if propertyType == "LIST" then

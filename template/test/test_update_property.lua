@@ -1,6 +1,7 @@
 -- UpdateProperty drops a value driver.xml does not allow (upstream Handlers 37).
--- The fork reads the config once per load instead of on every call, and a
--- DYNAMIC_LIST update before any UpdatePropertyList call no longer throws.
+-- The fork reads the config once per load instead of on every call, reading it
+-- again while it comes back nil as upstream does, and a DYNAMIC_LIST update before
+-- any UpdatePropertyList call no longer throws.
 --
 -- Run from the driver root:
 --   make test
@@ -22,11 +23,11 @@ local CONFIG = table.concat({
   "</properties>",
 })
 
-local configReads = 0
+local config, configReads = nil, 0
 function C4:GetDriverConfigInfo(section)
   if section == "config" then
     configReads = configReads + 1
-    return CONFIG
+    return config
   end
 end
 
@@ -47,6 +48,11 @@ local function update(name, value)
   return sent, output, ok and "" or err
 end
 
+T.section("A config that reads back nil is read again on the next call")
+T.eq("a value goes unchecked while it is nil", update("Mode", "On"), "On")
+config = CONFIG
+T.eq("and is checked once it reads back", update("Mode", "Heat"), nil)
+
 T.section("A value is checked against driver.xml")
 T.eq("a listed item is sent", update("Mode", "Auto"), "Auto")
 local value, output = update("Mode", "On")
@@ -58,7 +64,7 @@ T.eq("nor is a fraction", update("Level", 2.5), nil)
 T.eq("a float in range is sent", update("Offset", -0.5), "-0.5")
 T.eq("one out of range is not", update("Offset", 2), nil)
 T.eq("an unchecked type is sent as is", update("Status", "anything"), "anything")
-T.eq("the config was read once", configReads, 1)
+T.eq("the config is not read again once it has read back", configReads, 2)
 
 T.section("A DYNAMIC_LIST is checked only once UpdatePropertyList has set it")
 local _, _, err = update("Target", "Kitchen")
