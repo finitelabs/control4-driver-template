@@ -57,6 +57,10 @@ Persist.__index = Persist
 --- @type table
 local EMPTY = {}
 
+--- Director's text for a NaN stored on its own. It reads as the default, not as this text.
+--- @type string
+local STORED_NAN = '{":number:":null}'
+
 --- Migration functions loaded from the driver's `migrations.lua` module.
 --- Populated lazily on first get() call. Each entry maps a persist key to a function that
 --- transforms the old value format into the new format.
@@ -132,7 +136,13 @@ function Persist:_get(key, default, encrypted)
   local value = self._persist[key]
 
   if value == nil then
-    value = Deserialize(PersistGetValue(key, encrypted))
+    local stored = PersistGetValue(key, encrypted)
+    value = Deserialize(stored)
+    -- A string is stored raw, and C4:Base64Decode reads one under four characters or with a space or
+    -- punctuation as "", which Deserialize reads as nil.
+    if value == nil and type(stored) == "string" and stored ~= STORED_NAN then
+      value = stored
+    end
     if value == nil then
       value = default
     end
