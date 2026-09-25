@@ -28,6 +28,11 @@ local FIRST_VARIABLE_ID = 1001
 --- @type integer
 local MAX_ID_TRIES = 100
 
+--- Reserved name prefix, followed by the record's index, under which an older
+--- build's placeholder for a plain value keeps its id slot.
+--- @type string
+local LEGACY_PLACEHOLDER_PREFIX = "__deleted__"
+
 --- Whether restore adds a visible variable for this record.
 local function isVariable(record)
   return record ~= nil and record.varType ~= nil and not record.deleted
@@ -53,6 +58,26 @@ end
 --- @field suffix string? Optional suffix for property display (e.g., " °C", " %")
 --- @field writable boolean? Whether the variable accepts writes from programming. Persisted so restore can recreate the C4 variable with the correct readOnly flag.
 --- @field deleted boolean? If true, the value has no variable now; its record keeps its id, if it has one
+
+--- Deleting a plain value in an older build left a deleted record, which restore
+--- by name adds as a hidden placeholder. Each such slot moves to a name built from
+--- its index, which no other record has, so a later value of the old name cannot take it.
+--- @param values table<string, Value> The values table, changed in place.
+--- @return boolean moved True if any record moved.
+local function moveLegacyPlaceholders(values)
+  local legacy = {}
+  for name, value in pairs(values) do
+    if value.deleted and value.varType == nil then
+      table.insert(legacy, name)
+    end
+  end
+  for _, name in ipairs(legacy) do
+    values[name].varType = "STRING"
+    values[string.format("%s%d", LEGACY_PLACEHOLDER_PREFIX, values[name].index)] = values[name]
+    values[name] = nil
+  end
+  return #legacy > 0
+end
 
 --- Creates a new Values instance.
 --- @return Values values A new Values instance.
@@ -317,6 +342,9 @@ end
 function Values:restoreValues()
   log:trace("Values:restoreValues()")
   local values = self:getValues()
+  if C4.SetVariableName == nil and moveLegacyPlaceholders(values) then
+    self:_saveValues(values, true)
+  end
   self._byId = self:_learnIds(values)
 
   -- Build sorted array with names (table.sort doesn't work on string-keyed tables)

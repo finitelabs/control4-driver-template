@@ -365,6 +365,20 @@ values:delete("B")
 H.load("restart")
 T.eq("in index order, B held by a hidden placeholder", H.layout(), { [1001] = "A", [1002] = "B(h)", [1003] = "C" })
 T.eq("and no record has an id", H.blob().A.id, nil)
+
+T.section("without a rename, a plain value v0.9.28 deleted keeps its placeholder's slot")
+stored({
+  A = { index = 1, varType = "STRING", value = "a", writable = false },
+  J = { index = 2, writable = false, deleted = true },
+  C = { index = 3, varType = "STRING", value = "c", writable = false },
+})
+values = H.load("restart")
+values:update("J", "{}")
+values = H.load("restart")
+T.eq("so C keeps its id while J is saved again", H.visible(), { A = 1001, C = 1003 })
+values:delete("J")
+H.load("restart")
+T.eq("and after J is deleted", H.visible(), { A = 1001, C = 1003 })
 ShimVariableRename(true)
 
 T.finish()
