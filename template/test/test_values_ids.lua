@@ -161,22 +161,28 @@ local ok, loaded = pcall(H.load, "update")
 T.check("restore does not raise", ok, loaded)
 T.eq("and starts with no values", ok and loaded:getValues(), {})
 
---- Records as v0.9.28 stores them, with no ids: B deleted, J a plain value.
+--- A clean install with `records` stored, as v0.9.28 writes them.
+local function stored(records)
+  H.wipe()
+  C4:PersistSetValue("Values", Serialize(records))
+end
+
+--- Records as v0.9.28 stores them, with no ids: B deleted, and J, a plain value, deleted too.
 local OLDER_VALUES = {
   A = { index = 1, varType = "STRING", value = "a", writable = false },
   B = { index = 2, varType = "STRING", writable = false, deleted = true },
-  J = { index = 3, value = "{}", writable = false },
+  J = { index = 3, writable = false, deleted = true },
   C = { index = 4, varType = "NUMBER", value = 3, suffix = " %", writable = true },
   E = { index = 5, varType = "BOOL", value = true, writable = false },
 }
 
---- Storage and Director as v0.9.28 leaves them: A 1001, E 1002, C 1003, B hidden at 1004.
+--- Storage and Director as v0.9.28 leaves them: A 1001, E 1002, C 1004, and J and B hidden at 1003 and 1005.
 local function older()
-  H.wipe()
-  C4:PersistSetValue("Values", Serialize(OLDER_VALUES))
-  -- Its restore after a restart adds each variable by name in index order
+  stored(OLDER_VALUES)
+  -- Its restore after a restart adds each variable by name in index order, J's as a hidden placeholder
   C4:AddVariable("A", "a", "STRING", true, false)
   C4:AddVariable("B", "b", "STRING", true, false)
+  C4:AddVariable("J", "", "STRING", true, true)
   C4:AddVariable("C", "3", "NUMBER", false, false)
   -- After an update B is deleted and E takes its id; the next update's restore adds B's placeholder
   ShimUpdateDriver()
@@ -198,22 +204,23 @@ end
 T.section("the switch from an older build at a driver update keeps every id Director has")
 older()
 H.load("update")
-T.eq("each record takes its variable's id, B's hidden one too", ids(), { A = 1001, B = 1004, C = 1003, E = 1002 })
+T.eq("each record takes its variable's id, hidden or not", ids(), { A = 1001, B = 1005, C = 1004, E = 1002, J = 1003 })
 values = H.load("restart")
-T.eq("which a Director restart keeps", H.visible(), { A = 1001, C = 1003, E = 1002 })
+T.eq("which a Director restart keeps", H.visible(), { A = 1001, C = 1004, E = 1002 })
 values:update("B", "b", "STRING")
-T.eq("and B comes back at its id", H.visible().B, 1004)
+T.eq("and B comes back at its id", H.visible().B, 1005)
 
 T.section("the switch from an older build at a Director restart restores as that build did")
 older()
 values = H.load("restart")
-T.eq("by name in index order, B hidden", H.layout(), { [1001] = "A", [1002] = "B(h)", [1003] = "C", [1004] = "E" })
-T.eq("then each record takes its variable's id", ids(), { A = 1001, B = 1002, C = 1003, E = 1004 })
+local layout = { [1001] = "A", [1002] = "B(h)", [1003] = "J(h)", [1004] = "C", [1005] = "E" }
+T.eq("by name in index order, B and J hidden", H.layout(), layout)
+T.eq("then each record takes its variable's id", ids(), { A = 1001, B = 1002, C = 1004, E = 1005, J = 1003 })
 values:update("B", "b", "STRING")
 T.eq("B comes back at its id in that load", H.visible().B, 1002)
 H.load("update")
 H.load("restart")
-T.eq("and later loads keep every id", H.visible(), { A = 1001, B = 1002, C = 1003, E = 1004 })
+T.eq("and later loads keep every id", H.visible(), { A = 1001, B = 1002, C = 1004, E = 1005 })
 
 T.section("Director's variable list failing at the switch loses no variable")
 older()
@@ -231,9 +238,103 @@ C4.GetDeviceVariables = list
 T.eq("an empty one is not trusted, so no record takes an id", ids(), {})
 values:update("B", "b", "STRING")
 T.eq("and a name back in that load moves no variable, as on v0.9.28", H.layout(), before)
+values:update("N", "n", "STRING")
+T.eq("nor does a new name take an id", ids(), {})
 H.load("update")
 H.load("restart")
-T.eq("the next load learns each id, which a restart keeps", H.visible(), { A = 1001, B = 1004, C = 1003, E = 1002 })
+local want = { A = 1001, B = 1005, C = 1004, E = 1002, N = 1006 }
+T.eq("the next load learns each id, which a restart keeps", H.visible(), want)
+
+T.section("a variable v0.9.28 rewrote keeps its id through a downgrade and back")
+-- This build gave A, B and C their ids; v0.9.28 rewrote A's record without its id
+stored({
+  A = { index = 1, varType = "STRING", value = "a2", writable = false },
+  B = { index = 2, id = 1002, varType = "STRING", value = "b", writable = false },
+  C = { index = 3, id = 1003, varType = "STRING", value = "c", writable = false },
+})
+C4:AddVariable("A", "a2", "STRING", true, false)
+C4:AddVariable("B", "b", "STRING", true, false)
+C4:AddVariable("C", "c", "STRING", true, false)
+H.load("update")
+T.eq("the load back records A's id", ids(), { A = 1001, B = 1002, C = 1003 })
+H.load("restart")
+T.eq("which a restart keeps", H.visible(), { A = 1001, B = 1002, C = 1003 })
+local asked = false
+C4.GetDeviceVariables = function(...)
+  asked = true
+  return list(...)
+end
+H.load("update")
+C4.GetDeviceVariables = list
+T.eq("and a later load does not ask Director for its variables", asked, false)
+
+T.section("a name v0.9.28 deleted with no id does not take an id a deleted value keeps")
+-- This build gave X 1003, as F, a variable no record names, had 1002. v0.9.28 then rewrote A,
+-- deleted X, and rewrote and deleted Y.
+stored({
+  A = { index = 1, varType = "STRING", value = "a2", writable = false },
+  X = { index = 2, id = 1003, varType = "STRING", writable = false, deleted = true },
+  Y = { index = 3, varType = "STRING", writable = false, deleted = true },
+  Z = { index = 4, value = "z", writable = false },
+})
+C4:AddVariable("A", "a2", "STRING", true, false)
+C4:AddVariable("F", "", "STRING", true, false)
+values = H.load("update")
+T.eq("Y takes none, and F keeps its id under a deleted record", ids(), { A = 1001, F = 1002, X = 1003 })
+values:update("Y", "y", "STRING")
+values:update("X", "x", "STRING")
+T.eq("so Y comes back at a new id, X at its own", H.visible(), { A = 1001, F = 1002, X = 1003, Y = 1004 })
+
+T.section("a name v0.9.28 deleted in its last load takes the id its restore gave it, if no variable has it")
+stored({
+  A = { index = 1, varType = "STRING", value = "a", writable = false },
+  J = { index = 2, value = "{}", writable = false },
+  B = { index = 3, varType = "STRING", value = "b", writable = false },
+  C = { index = 4, varType = "STRING", writable = false, deleted = true },
+  D = { index = 5, varType = "STRING", writable = false, deleted = true },
+  E = { index = 6, varType = "STRING", value = "e", writable = false },
+})
+C4:AddVariable("A", "a", "STRING", true, false)
+C4:AddVariable("B", "b", "STRING", true, false)
+C4:AddVariable("C", "c", "STRING", true, false)
+C4:AddVariable("D", "d", "STRING", true, false)
+-- In its last load, after an update, C was deleted, E took C's id, and D was deleted
+ShimUpdateDriver()
+C4:DeleteVariable("C")
+C4:AddVariable("E", "e", "STRING", true, false)
+C4:DeleteVariable("D")
+H.load("update")
+T.eq("D takes 1004, and C none, as E has 1003", ids(), { A = 1001, B = 1002, D = 1004, E = 1003 })
+values = H.load("restart")
+values:update("C", "c", "STRING")
+values:update("D", "d", "STRING")
+T.eq("so D comes back there, and C at a new id", H.visible(), { A = 1001, B = 1002, C = 1005, D = 1004, E = 1003 })
+
+T.section("a deleted name v0.9.28 added back is shown at its id")
+-- v0.9.28 deleted B and saved it again with no value, which left its record deleted but added its variable
+stored({
+  A = { index = 1, varType = "STRING", value = "a", writable = false },
+  B = { index = 2, varType = "NUMBER", writable = false, deleted = true },
+  C = { index = 3, varType = "STRING", value = "c", writable = false },
+})
+C4:AddVariable("A", "a", "STRING", true, false)
+C4:AddVariable("B", "2", "NUMBER", true, false)
+C4:AddVariable("C", "c", "STRING", true, false)
+C4:DeleteVariable("B")
+C4:AddVariable("B", "", "NUMBER", true, false)
+H.load("update")
+H.load("restart")
+T.eq("through the switch and a restart", H.visible(), { A = 1001, B = 1004, C = 1003 })
+
+T.section("a plain value v0.9.28 deleted keeps its placeholder's id at a restart")
+-- J was a variable, then a plain value, then deleted; v0.9.28's restore holds its id with a placeholder
+stored({
+  J = { index = 1, writable = false, deleted = true },
+  K = { index = 2, value = "{}", writable = false },
+})
+values = H.load("restart")
+values:update("N", "n", "STRING")
+T.eq("so a new name takes the next id", H.layout(), { [1001] = "J(h)", [1002] = "N" })
 
 T.section("without a rename, restore adds variables by name as older builds did")
 ShimVariableRename(false)
