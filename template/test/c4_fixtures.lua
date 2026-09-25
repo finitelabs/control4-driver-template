@@ -147,8 +147,7 @@ end
 --- A zip archive laid out as the driver packager writes one, with every file stored
 --- uncompressed. CRCs are left zero: lib.zip does not read them.
 --- @param files { [1]: string, [2]: string, extra?: string, centralExtra?: string, comment?: string }[]
---- Ordered { name, contents } pairs, each with optional extra fields for its local header and its
---- central directory entry, and a comment for the latter.
+--- Ordered { name, contents } pairs, with optional header extra fields and an entry comment.
 --- @return string
 function F.zip(files)
   local body, central = {}, {}
@@ -216,9 +215,8 @@ F.PACKAGED_DRIVER_XML = [[
 </devicedata>
 ]]
 
---- A .c4z written by Python's zipfile with ZIP_DEFLATED, as the driver packager writes
---- one: driver.xml (F.PACKAGED_DRIVER_XML), driver.lua ("-- driver\n" x 20) and
---- www/documentation/index.html ("<html></html>"), all deflated.
+--- A .c4z deflated by Python's zipfile, as the driver packager writes one: driver.xml
+--- (F.PACKAGED_DRIVER_XML), driver.lua and www/documentation/index.html.
 --- @return string
 function F.packagedC4z()
   return C4:Base64Decode(table.concat({

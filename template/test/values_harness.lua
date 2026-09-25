@@ -65,9 +65,8 @@ local function thisBuild()
   return require("lib.values")
 end
 
---- A driver load after `how` ("update" or "restart") of `build` (nil for this build), which
---- restores in OnDriverInit. Returns the build's values module. Shipped builds come from
---- values_legacy, which only the template's own CI has.
+--- A driver load after `how` ("update" or "restart") of `build` (nil for this build), restoring in
+--- OnDriverInit. Shipped builds come from values_legacy, which only the template's own CI has.
 function H.load(how, build)
   ShimCancelTimers()
   if how == "restart" then

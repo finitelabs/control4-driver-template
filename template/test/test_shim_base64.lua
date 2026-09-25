@@ -1,7 +1,5 @@
--- The shim's C4:Base64Decode and C4:Base64Encode against what a 4.3.0 controller
--- returned for the same input (4.2.1 decodes identically). lib/persist.lua tells a
--- stored value from an older build's raw string by how it decodes, so this has to
--- be the controller's decoder, not a lenient one.
+-- The shim's C4:Base64Decode and C4:Base64Encode against a 4.3.0 controller (4.2.1 decodes the
+-- same). lib/persist.lua relies on the controller's exact decoder, not a lenient one.
 --
 -- Run from the driver root:
 --   make test
@@ -169,7 +167,7 @@ decodes({
   { R("QUJD", 300) .. "\nQUJD", "" },
 })
 
--- Measured as the output's length and a rolling hash of its bytes.
+-- Compared by the output's length and a rolling hash of its bytes.
 local function digest(s)
   local h = 0
   for k = 1, #s do

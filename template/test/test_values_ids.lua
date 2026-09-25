@@ -232,7 +232,7 @@ for _, mode in ipairs(MODES) do
   for i = 1, 6 do
     values = H.load(i % 3 == 0 and "restart" or "update")
     if values:getValue("Relay State") then
-      values:delete("Relay State") -- device.lua:389-390, a phantom relay
+      values:delete("Relay State") -- a phantom relay
     end
     values:update("DesiredConfig", i % 2 == 0 and "{}" or '{"a":1}')
     layout = layout or H.snapshot()

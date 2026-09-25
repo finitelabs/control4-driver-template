@@ -1,6 +1,5 @@
--- Tests that the GitHub updater notices a .c4z it failed to write and puts every driver
--- file of the update back. Director installs from the written file, so an unnoticed
--- failure would send it a truncated or missing driver, or half of a suite.
+-- The GitHub updater notices a .c4z it failed to write and puts every driver file of the
+-- update back, since Director installs from the written file.
 --
 -- Run from the driver root:
 --   make test
