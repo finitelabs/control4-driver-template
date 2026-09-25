@@ -542,199 +542,34 @@ local function base64_encode_impl(data)
   )
 end
 
--- C4:Base64Decode as measured on 4.3.0 (test_shim_base64.lua): OpenSSL's base64 BIO over the input
--- cut at its first NUL and trimmed, as one line (BIO_FLAGS_BASE64_NO_NL) unless it has a newline.
-local B64_WS, B64_EOLN, B64_CR, B64_EOF, B64_ERROR = 0xE0, 0xF0, 0xF1, 0xF2, 0xFF
-local B64_BLOCK_SIZE = 1024
-
--- OpenSSL's data_ascii2bin: a 6-bit value, or the class of a byte the decoder treats specially.
-local b64_ascii2bin = {}
-for b = 0, 255 do
-  b64_ascii2bin[b] = B64_ERROR
-end
-for n = 1, 64 do
-  b64_ascii2bin[base64_chars:byte(n)] = n - 1
-end
-b64_ascii2bin[string.byte("=")] = 0
-b64_ascii2bin[string.byte("\t")], b64_ascii2bin[string.byte(" ")] = B64_WS, B64_WS
-b64_ascii2bin[string.byte("\n")], b64_ascii2bin[string.byte("\r")] = B64_EOLN, B64_CR
-b64_ascii2bin[string.byte("-")] = B64_EOF
-
-local function b64_not_base64(v)
-  return v == B64_WS or v == B64_EOLN or v == B64_CR or v == B64_EOF
-end
-
--- evp_decodeblock_int: every group or nil. "=" decodes as zero bits; callers drop the padding.
-local function b64_decode_block(s)
-  local i, n = 1, #s
-  while n > 0 and b64_ascii2bin[s:byte(i)] == B64_WS do
-    i, n = i + 1, n - 1
-  end
-  while n > 3 and b64_not_base64(b64_ascii2bin[s:byte(i + n - 1)]) do
-    n = n - 1
-  end
-  if n % 4 ~= 0 then
-    return nil
-  end
-  local out = {}
-  for g = i, i + n - 1, 4 do
-    local a, b = b64_ascii2bin[s:byte(g)], b64_ascii2bin[s:byte(g + 1)]
-    local c, d = b64_ascii2bin[s:byte(g + 2)], b64_ascii2bin[s:byte(g + 3)]
-    if a >= 0x80 or b >= 0x80 or c >= 0x80 or d >= 0x80 then
-      return nil
-    end
-    local l = ((a * 64 + b) * 64 + c) * 64 + d
-    out[#out + 1] = string.char(math.floor(l / 65536), math.floor(l / 256) % 256, l % 256)
-  end
-  return table.concat(out)
-end
-
--- EVP_DecodeUpdate: rv 1 (more), 0 (end seen) or -1 (error), and the bytes this call made.
-local function b64_decode_update(ctx, input)
-  local n, d = ctx.num, ctx.data
-  local eof, seof, out = 0, false, {}
-  if n > 0 and d[n] == 61 then
-    eof = (n > 1 and d[n - 1] == 61) and 2 or 1
-  end
-  if #input == 0 then
-    return 0, ""
-  end
-  local function flush()
-    local block = b64_decode_block(string.char(unpack(d, 1, n)))
-    n = 0
-    if block == nil or eof > #block then
-      return false
-    end
-    out[#out + 1] = block:sub(1, #block - eof)
-    return true
-  end
-  local function finish(rv)
-    ctx.num = n
-    return rv, table.concat(out)
-  end
-  for i = 1, #input do
-    local byte = input:byte(i)
-    local v = b64_ascii2bin[byte]
-    if v == B64_ERROR then
-      return finish(-1)
-    end
-    if byte == 61 then
-      eof = eof + 1
-    elseif eof > 0 and not b64_not_base64(v) then
-      return finish(-1)
-    end
-    if eof > 2 then
-      return finish(-1)
-    end
-    if v == B64_EOF then
-      seof = true
-      break
-    end
-    if not b64_not_base64(v) then
-      if n >= 64 then
-        return finish(-1)
-      end
-      n = n + 1
-      d[n] = byte
-    end
-    if n == 64 and not flush() then
-      return finish(-1)
-    end
-  end
-  if n > 0 then
-    if n % 4 == 0 then
-      if not flush() then
-        return finish(-1)
-      end
-    elseif seof then
-      return finish(-1)
-    end
-  end
-  return finish((seof or (n == 0 and eof > 0)) and 0 or 1)
-end
-
--- b64_read over a memory BIO holding `input`, read to the end.
-local function b64_read(input, noNl)
-  local pos, tmp, start, cont, tmpNl = 1, "", true, 1, false
-  local dec = { num = 0, data = {} }
-  local out = {}
-  while cont > 0 do
-    local chunk = input:sub(pos, pos + (B64_BLOCK_SIZE - #tmp) - 1)
-    pos = pos + #chunk
-    if #chunk == 0 then
-      cont = 0
-      if #tmp == 0 then
-        break
-      end
-    end
-    tmp = tmp .. chunk
-    local i = #tmp
-    local decodeNow = true
-    if start and not noNl then
-      -- Lines are skipped until one decodes; a first line longer than a block is dropped.
-      local p, num, found = 1, 0, false
-      for q = 1, i do
-        if tmp:byte(q) == 10 then
-          if tmpNl then
-            p, tmpNl = q + 1, false
-          else
-            local k, produced = b64_decode_update(dec, tmp:sub(p, q))
-            num = #produced
-            dec = { num = 0, data = {} }
-            if k > 0 or num > 0 then
-              tmp, start, found = tmp:sub(p), false, true
-              i = #tmp
-              break
-            end
-            p = q + 1
-          end
-        end
-      end
-      if not found and num == 0 then
-        if p == 1 then
-          if i == B64_BLOCK_SIZE then
-            tmpNl, tmp = true, ""
-          end
-        elseif p ~= i + 1 then
-          tmp = tmp:sub(p)
-        end
-        decodeNow = false
-      end
-    elseif not start and i < B64_BLOCK_SIZE and cont > 0 then
-      decodeNow = false
-    end
-    if decodeNow then
-      local rv, bytes
-      if noNl then
-        local jj = i - i % 4
-        local block = b64_decode_block(tmp:sub(1, jj))
-        rv = block and #block or -1
-        if jj > 2 and tmp:byte(jj) == 61 then
-          rv = rv - ((tmp:byte(jj - 1) == 61) and 2 or 1)
-        end
-        tmp, bytes = tmp:sub(jj + 1), rv > 0 and block:sub(1, rv) or ""
-      else
-        rv, bytes = b64_decode_update(dec, tmp)
-        tmp = ""
-      end
-      cont = rv -- an end marker or an error ends the read
-      if rv < 0 then
-        break
-      end
-      out[#out + 1] = bytes
-    end
-  end
-  return table.concat(out)
-end
-
 local function base64_decode_impl(data)
-  if type(data) == "number" then
-    data = tostring(data)
-  elseif type(data) ~= "string" then
-    error("strDecode should be a string", 3)
+  if type(data) ~= "string" then
+    error("Invalid base64 data type")
   end
-  data = data:match("^[^%z]*"):match("^%s*(.-)%s*$")
-  return b64_read(data, data:find("\n", 1, true) == nil)
+  data = string.gsub(data, "[^" .. base64_chars .. "=]", "")
+  return (
+    data
+      :gsub(".", function(x)
+        if x == "=" then
+          return ""
+        end
+        local r, f = "", (base64_chars:find(x) - 1)
+        for i = 6, 1, -1 do
+          r = r .. (f % 2 ^ i - f % 2 ^ (i - 1) > 0 and "1" or "0")
+        end
+        return r
+      end)
+      :gsub("%d%d%d?%d?%d?%d?%d?%d?", function(x)
+        if #x ~= 8 then
+          return ""
+        end
+        local c = 0
+        for i = 1, 8 do
+          c = c + (x:sub(i, i) == "1" and 2 ^ (8 - i) or 0)
+        end
+        return string.char(c)
+      end)
+  )
 end
 
 -- Handle both C4:Base64Encode() and C4.Base64Encode(C4, ...) calling styles
@@ -1315,59 +1150,14 @@ end
 -- PersistGetValue/SetValue/DeleteValue globals belong to global/lib.lua, whose
 -- wrappers delegate here when C4.PersistSetValue exists; stubbing the globals
 -- instead would be paved over the moment any module requires global.lib.
--- As on 4.3.0: a number or boolean keeps its type, but a NaN comes back as text and a number past
--- the 64-bit range is clamped (1e300 and inf read back as 2^64, -inf as -2^63). A string is cut at
--- its first NUL, a plain "" deletes and an encrypted one is ignored. The controller rejects a nil
--- encrypted flag; here it is false.
 local persist_store = {}
 
--- The controller's cipher XORs a fixed keystream; its first 40 bytes as measured on 4.3.0, repeated.
-local PERSIST_KEYSTREAM = "402afa804cc62af27f5ebb2ed09026b2d1835e311aef3c3efed28088612f2b8efd3d6f410e019451"
-
-local function persist_cipher(data)
-  local out = {}
-  for i = 1, #data do
-    local k = (i - 1) % (#PERSIST_KEYSTREAM / 2) * 2 + 1
-    local a, b, x, bit = data:byte(i), tonumber(PERSIST_KEYSTREAM:sub(k, k + 1), 16), 0, 1
-    for _ = 1, 8 do
-      if a % 2 ~= b % 2 then
-        x = x + bit
-      end
-      a, b, bit = math.floor(a / 2), math.floor(b / 2), bit * 2
-    end
-    out[i] = string.char(x)
-  end
-  return table.concat(out)
-end
-
--- Under the other flag, an encrypted value reads as base64 of its ciphertext, and a plain one as
--- its base64 deciphered, or nothing if it is not a string or decodes to nothing.
 function C4:PersistGetValue(key, encrypted)
-  local entry = persist_store[key]
-  if entry == nil or entry.encrypted == (encrypted == true) then
-    return entry and entry.value
-  elseif entry.encrypted then
-    return base64_encode_impl(persist_cipher(tostring(entry.value)))
-  end
-  local decoded = type(entry.value) == "string" and base64_decode_impl(entry.value) or ""
-  if decoded ~= "" then
-    return persist_cipher(decoded)
-  end
+  return persist_store[key]
 end
 
 function C4:PersistSetValue(key, value, encrypted)
-  if type(value) == "string" then
-    value = value:match("^[^%z]*")
-  elseif value ~= value then
-    value = '{":number:":null}'
-  elseif type(value) == "number" then
-    value = math.max(math.min(value, 2 ^ 64), -2 ^ 63)
-  end
-  if value ~= "" then
-    persist_store[key] = { value = value, encrypted = encrypted == true }
-  elseif encrypted ~= true then
-    persist_store[key] = nil
-  end
+  persist_store[key] = value
 end
 
 function C4:PersistDeleteValue(key)
