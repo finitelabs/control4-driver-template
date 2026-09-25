@@ -496,8 +496,15 @@ function Values:_learnIds(values)
     return values[a].index < values[b].index
   end)
 
-  -- Each variable keeps its id, under a deleted record of its name if no record has one
+  -- A deleted record's id is taken though Director has no variable at it
   local taken = {}
+  for _, value in pairs(values) do
+    if value.id ~= nil then
+      taken[value.id] = true
+    end
+  end
+
+  -- Each variable keeps its id, under a deleted record of its name if no record has one
   for id, variable in pairs(variables) do
     local value = values[variable.name] or { index = tonumber(id), deleted = true }
     if value.deleted and value.varType ~= nil and variable.hidden == "False" then

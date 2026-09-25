@@ -344,4 +344,23 @@ H.load("update")
 C4.GetDeviceVariables = list
 T.eq("and a later load does not ask Director for its variables", asked, false)
 
+T.section("a name v0.9.28 deleted does not take an id a deleted value keeps")
+H.wipe()
+values = H.load("restart")
+values:update("A", "1", "STRING")
+C4:AddVariable("F", "", "STRING", true, false) -- a variable no record names, 1002
+values:update("X", "x", "STRING")
+values:update("Y", "y", "STRING")
+old = H.load("update", OLDER)
+old:update("Z", "z")
+old:update("A", "1b", "STRING")
+old:delete("X") -- X's record keeps 1003, where restore order puts Y
+old:update("Y", "y2", "STRING")
+old:delete("Y")
+values = H.load("update")
+T.neq("Y does not take X's id", H.blob().Y.id, 1003)
+values:update("Y", "back", "STRING")
+values:update("X", "back", "STRING")
+T.eq("and X comes back at it", H.visible().X, 1003)
+
 T.finish()
