@@ -11,12 +11,12 @@ require("lib.utils")
 
 --- @class Values
 --- @field _callbacks table<string, function?> In-memory registry of OVC callbacks keyed by variable name.
---- @field _rejected table<string, boolean> Names Director refused to add or rename to in this load.
---- @field _unhide table<string, boolean> Live names an older build left hidden, shown at their next update.
---- @field _unheld table<integer, boolean> Ids another variable had at restore, held once it is gone.
---- @field _emptyWarned boolean? Whether this load has warned about the name "".
---- @field _stale boolean? Whether ids are still to be learned because Director could not be read.
---- @field _unreadWarned boolean? Whether this load has warned that Director could not be read.
+--- @field _rejected table<string, boolean> Names Director refused to add, or to rename to, in this load.
+--- @field _unhide table<string, boolean> Live names an older build left hidden, shown again at their next update.
+--- @field _unheld table<integer, boolean> Ids another variable sat on at restore, held once it is gone.
+--- @field _emptyWarned boolean? Whether this load has logged that "" is kept as a plain value.
+--- @field _stale boolean? Ids not yet learned from Director in this load, because it could not be read.
+--- @field _unreadWarned boolean? Whether this load has logged that Director's variables could not be read.
 --- A class representing a collection of named values with optional variable/property support.
 local Values = {}
 Values.__index = Values
@@ -31,10 +31,11 @@ local FIRST_ID = 1001
 --- How many taken ids a new variable skips before giving up.
 local MAX_ID_TRIES = 1000
 
---- Delay before retrying the ids restore could not learn.
+--- How long after restore the ids it could not learn are learned, if a timer set in OnDriverInit runs.
 local RECHECK_MS = 1000
 
---- Temporary name for a variable of ours while another is added at the id its name spells.
+--- Name a variable of ours holds while another variable is added at the id its name spells (a "_"
+--- is added while a variable, or the name being added, has it).
 local ASIDE_NAME = "__values_aside__"
 
 --- @class Value
@@ -44,9 +45,9 @@ local ASIDE_NAME = "__values_aside__"
 --- @field value string|integer|number|boolean|nil The stored value
 --- @field suffix string? Optional suffix for property display (e.g., " °C", " %")
 --- @field writable boolean? Whether the variable accepts writes from programming. Persisted so restore can recreate the C4 variable with the correct readOnly flag.
---- @field deleted boolean? No live variable; older builds add a hidden placeholder for it.
---- @field placeholder boolean? A reserved id no name owns.
---- @field unverified boolean? An id guessed from restore order because Director could not be read.
+--- @field deleted boolean? No live variable of its own; older builds add a hidden placeholder for it.
+--- @field placeholder boolean? An id no name owns any more (left behind, or another's), kept reserved.
+--- @field unverified boolean? An id taken from restore order because Director could not be read.
 
 --- Whether this OS can rename a variable, so one can be created at a chosen id (OS 4.0+).
 local function canRename()
@@ -83,17 +84,17 @@ local function isLive(record)
   return record ~= nil and record.varType ~= nil and not record.deleted
 end
 
---- Whether the record holds a value: a variable or a plain value.
+--- Whether the record holds a value: a variable, or a plain value (with or without an old id).
 local function holdsValue(record)
   return not record.deleted or record.value ~= nil
 end
 
---- Whether the record is or has been a variable.
+--- Whether the record is or has been a variable, as opposed to a plain value that never was one.
 local function wasEverVariable(record)
   return record.id ~= nil or record.deleted or record.varType ~= nil
 end
 
---- Drops each deleted record with no id.
+--- Drops each deleted record left with no id: it has nothing to keep.
 local function dropIdless(values)
   for name, record in pairs(values) do
     if record.id == nil and not holdsValue(record) then
@@ -124,7 +125,8 @@ local function variableString(value)
   return tostring(value)
 end
 
---- The id a numeric-looking name's variable has when Director cannot list them, if it spells one.
+--- The id a numeric-looking name's variable has when Director cannot list them: the one it spells,
+--- where a variable is named by it and no other record is.
 local function spelledId(values, name)
   local id = parsedId(name)
   if id ~= nil and Variables[tostring(id)] ~= nil and (values[tostring(id)] == nil or tostring(id) == name) then
@@ -132,7 +134,8 @@ local function spelledId(values, name)
   end
 end
 
---- The name Director shows for a record's variable; without a rename, a numeric name shows as its id.
+--- The name Director shows for a record's variable: without a rename, a numeric-looking name
+--- is stored under the id Director read from it.
 local function directorName(name, record)
   if not canRename() and record.id ~= nil and looksNumeric(name) then
     return tostring(record.id)
@@ -213,7 +216,8 @@ local function placeholderKey(values, id, avoid)
   return key
 end
 
---- The ids an older build's restore gives each record on an empty Director, in index order.
+--- The ids an older build's restore gives each record on an empty Director: by name, in
+--- index order, a hidden placeholder for each deleted record. Numeric names take their own id.
 local function olderBuildIds(values)
   local rows = {}
   for name, record in pairs(values) do
@@ -413,6 +417,7 @@ function Values:delete(name)
 
   log:debug("Deleting value %s", name)
 
+  -- Remove the OVC handler
   OVC[ovcKey(name)] = nil
   self._callbacks[name] = nil
 
@@ -476,7 +481,7 @@ function Values:getValue(name)
   return Select(self:getValues(), name)
 end
 
---- Restores every value, each variable at its id.
+--- Restores every value, each variable at its id; the first run after an older build keeps Director's ids.
 --- Call it first in OnDriverInit, and add variables only through lib/values, never C4:AddVariable.
 --- @return void
 function Values:restoreValues()
@@ -500,7 +505,7 @@ function Values:restoreValues()
   if recordSignature(values) ~= before then
     self:_saveValues(values, true)
   end
-  -- Director may be unreadable only in OnDriverInit: retry once it is over, or at the first change.
+  -- Director may be unreadable in OnDriverInit only: ids are learned once it is over, or at the first change.
   if self._stale then
     delay(RECHECK_MS):next(function()
       self:_recheck(self:_load())
@@ -574,13 +579,16 @@ function Values:_saveValues(values, durable)
   end
 end
 
+--- Shows the property of that name, if any, with the record's value.
 --- @private
 function Values:_showProperty(name, record)
   if Properties[name] == nil then
     return
   end
+  -- Ensure the property is visible
   C4:SetPropertyAttribs(name, constants.SHOW_PROPERTY)
 
+  -- Format property value with optional suffix
   local strValue = variableString(record.value)
   local propValue = strValue
   if record.suffix and strValue ~= "" then
@@ -591,7 +599,8 @@ function Values:_showProperty(name, record)
   end
 end
 
---- The id or name to address a record's variable by, or nil when there is none.
+--- What to address a record's variable by: its id, else its name while Director shows it and
+--- does not read the name as another id. Nil when there is no variable to address.
 --- @private
 function Values:_target(name, record)
   if record.id ~= nil and not record.unverified then
@@ -601,7 +610,8 @@ function Values:_target(name, record)
   end
 end
 
---- Learns the ids a restore could not read from Director, once Director can say.
+--- After a restore that could not read Director, learns every id from it as a driver update does,
+--- once it can say, and writes the result at once.
 --- @private
 --- @return boolean? learned
 function Values:_recheck(values)
@@ -682,8 +692,8 @@ function Values:_applyVariable(values, name, record, existing, strValue)
   return created or left ~= nil or claimed
 end
 
---- Claims the variable below the first id that this numeric name spells: an older build left it
---- without a record.
+--- Below the first id only a numeric-looking name can own an id, so a variable there named
+--- by the id this name spells is this name's, left by an older build that lost its record.
 --- @private
 function Values:_claimNumbered(values, name, record)
   local id = parsedId(name)
@@ -707,7 +717,8 @@ function Values:_claimNumbered(values, name, record)
   return true
 end
 
---- Removes a record's variable. Without a rename a hidden variable holds its id.
+--- Removes a record's variable. Without a rename its id stays held by a hidden variable,
+--- so nothing after it moves.
 --- @private
 function Values:_removeVariable(values, name, record, varType)
   local target = self:_target(name, record)
@@ -718,7 +729,7 @@ function Values:_removeVariable(values, name, record, varType)
     return
   end
   if record.unverified then
-    -- Only a guess from restore order: held if free.
+    -- Only a guess from restore order, held if free as the switch holds a deleted name's guess.
     if self:_hold(record.id, varType) then
       record.unverified = nil
     else
@@ -798,7 +809,8 @@ function Values:_leaveBehind(values, name, record, varType)
   return id
 end
 
---- Deletes a variable that carries the name but is not the record's; its id stays reserved.
+--- Deletes a variable that carries the name but is not the record's (an older build's hidden
+--- placeholder, or a stray). Its id stays reserved, and without a rename held.
 --- @private
 --- @return boolean changed True when a record was added or the record took an id.
 function Values:_clearName(values, name, record)
@@ -879,8 +891,8 @@ function Values:_createRenamed(values, name, record, strValue)
   return true
 end
 
---- Adds a variable at exactly that id and names it. At a record's own id, a variable named by
---- the number is ours and a hidden one gives way.
+--- Adds a variable at exactly that id and names it. At a record's own id, one named by its number
+--- (an older build's numeric name, or a failed rename) is ours and is named; a hidden one gives way.
 --- @private
 --- @return boolean added
 function Values:_addAt(values, id, name, strValue, varType, readOnly, own)
@@ -1019,7 +1031,8 @@ function Values:_findVariable(name)
   end
 end
 
---- Whether Director was restarted: a driver update keeps every variable, a restart none.
+--- Whether Director was restarted: a driver update keeps every variable, an older build's hidden
+--- ones and numeric leftovers below the first id included; a restart keeps none.
 --- @private
 --- @return boolean restarted
 --- @return table? director
@@ -1117,7 +1130,8 @@ function Values:_learn(values, restarted, director)
   dropIdless(values)
 end
 
---- On a restart with no ids recorded, restores as the older build did and records each id.
+--- On a Director restart with no ids recorded, does what the older build's restore did,
+--- and records the id each variable gets.
 --- @private
 function Values:_restoreAsOlderBuild(rows)
   for _, row in ipairs(rows) do
@@ -1279,8 +1293,8 @@ function Values:_restoreRenamed(values)
   end
 end
 
---- Restore without a rename, from the first id up, so each by-name add lands on its id; the other ids
---- are held by number, after a driver update only where missing.
+--- Restore without a rename, from the first id up: a variable by name lands on its id since every lower id
+--- is taken, any other id gets a hidden variable by number. After a driver update only what is missing.
 --- @private
 function Values:_restoreByName(values, restarted)
   local owner, ids, walkTo = {}, {}, FIRST_ID - 1

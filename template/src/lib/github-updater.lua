@@ -97,7 +97,8 @@ local function readFile(name)
   return contents
 end
 
---- Replace a file in the current directory (the vendored FileWrite hides a failed write).
+--- Replace a file in the current directory. The vendored FileWrite returns nothing, so a
+--- failed write through it cannot be seen.
 --- @param name string
 --- @param contents string
 --- @return boolean ok True only when the file reads back as contents.
@@ -208,7 +209,8 @@ function GitHubUpdater:getOutdatedDriverAssets(repo, driverFilenames, includePre
 end
 
 --- Download outdated driver assets from GitHub and write them to the specified directory.
---- Writes nothing when any asset requires a newer C4 OS, and puts every file back when one fails.
+--- Writes nothing when any asset requires a newer C4 OS than this controller runs, and puts
+--- every file back when one of them fails to write.
 --- @param dir string Target directory to save downloaded driver assets.
 --- @param repo string The GitHub repository, in the format "owner/repo".
 --- @param driverFilenames string[] List of driver filenames to update.
@@ -260,7 +262,8 @@ function GitHubUpdater:downloadOutdatedDrivers(dir, repo, driverFilenames, inclu
     end
 
     return deferred.all(downloads):next(function(downloaded)
-      -- Checked before any write, so a suite is never left on mismatched versions.
+      -- Checked before any write: a written .c4z is what Director installs from, and a
+      -- partial suite would leave the drivers on mismatched versions.
       for _, download in ipairs(downloaded) do
         local reason = unsupportedReason(download.asset, download.requirement)
         if reason then
@@ -327,7 +330,7 @@ end
 --- @param driverFilenames string[] List of driver filenames to update.
 --- @param includePrereleases? boolean If true, includes pre-releases (optional).
 --- @param forceUpdate? boolean If true, runs update even if drivers are up to date (optional).
---- @return Deferred<string[], string|table<number, string>> updatedDrivers Deferred resolving to a list of updated driver filenames, or rejected with an error message or a table of error messages indexed by number.
+--- @return Deferred<string[], string|table<number, string>> updatedDrivers Deferred resolving to a list of updated driver filenames, or rejected with an error message (a release the OS cannot run, among others) or a table of error messages indexed by number.
 function GitHubUpdater:updateAll(repo, driverFilenames, includePrereleases, forceUpdate)
   log:trace("GitHubUpdater:updateAll(%s, %s, %s, %s)", repo, driverFilenames, includePrereleases, forceUpdate)
   -- Only update drivers that are already installed.

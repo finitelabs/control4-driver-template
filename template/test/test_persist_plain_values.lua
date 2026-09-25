@@ -1,6 +1,13 @@
--- lib/persist.lua stores every value as base64 of its JSON, so a plain string, number or
--- boolean reads back as itself after a driver update, and still reads what shipped builds
--- stored raw (most of which their own Deserialize read back as nil).
+-- lib/persist.lua stores every value as base64 of its JSON, so a plain string, a
+-- number or a boolean reads back as itself after a driver update, and still reads
+-- what earlier builds stored.
+--
+-- Every shipped build (template v0.1.0 to v0.9.29, and the esphome and mqtt copies
+-- before the template) wrote PersistSetValue(key, Serialize(value), encrypted): a
+-- table as base64 of its JSON, anything else raw. C4:Base64Decode returns "" for a raw
+-- string under four characters, or with a character outside the alphabet in one of its
+-- whole groups of four, and JSON:decode("") returns nil, so their Deserialize read such
+-- a string as nil and the caller got its default.
 --
 -- Run from the driver root:
 --   make test
@@ -35,7 +42,8 @@ local function encoded(value)
   return C4:Base64Encode(JSON:encode(value))
 end
 
--- A value as a test name: strings quoted with control and high bytes escaped, numbers in full.
+-- A value for a test name: a string quoted with its control and high bytes escaped, a
+-- number in full.
 local function label(value)
   if type(value) == "number" then
     return string.format("%.17g", value)
@@ -63,7 +71,8 @@ local STRINGS = {
   { "true" },
 }
 
--- Each with its stored JSON; `kept` is what Director keeps when an older build stores it raw.
+-- Each with the JSON it is stored as; `kept` is what Director keeps when an older build
+-- stores it raw.
 local SCALARS = {
   { 12.5, "12.5" },
   { 66568, "66568" },

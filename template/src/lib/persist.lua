@@ -40,10 +40,24 @@
 ---
 --- ## Storage format
 ---
---- Every value is stored as base64 of its JSON, so a string, number or boolean reads back as
---- itself. An older build's raw string is still read as it is when `Deserialize` reads it as
---- nothing, and takes the new form at its next `set()`. A NaN, or a string that is not UTF-8
---- text, set on its own is logged and its key deleted.
+--- Every value is stored as base64 of its JSON, so a string, number or boolean reads
+--- back as itself after a reload; a number on its own is written in as many digits as
+--- that takes. A table is stored as `Serialize` writes it, its numbers kept to 14
+--- significant digits as before. A NaN, or a string that is not UTF-8 text, set on its
+--- own is logged and its key deleted.
+---
+--- Builds before this one stored a scalar raw and read every value through `Deserialize`.
+--- A value `Deserialize` reads is that value, as it was for them, so a raw string in which
+--- it finds base64 of JSON reads as that JSON. A raw string it reads as nothing is
+--- returned as it is when it is UTF-8 text with no control bytes; anything else it reads
+--- as nothing, such as the text Director hands back for an older build's NaN, is absent.
+---
+--- Read encrypted, a key stored plain comes back from Director deciphered: as bytes, or as
+--- nothing when its base64 decodes to nothing, and only nothing makes global.lib read it
+--- plain and store it encrypted. So when the bytes read as nothing and the plain read
+--- holds a value in this build's form, that value is returned. Beyond that fallback, a
+--- read does not rewrite an older value; the key takes the new form, and flag, at its
+--- next `set()`.
 
 local log = require("lib.logging")
 
@@ -74,7 +88,7 @@ local MIGRATIONS = {}
 --- @type boolean
 local migrationsLoaded = false
 
---- What Director (4.3.0) returns for a NaN an older build stored raw.
+--- What Director (measured on 4.3.0) hands back for a NaN an older build stored raw.
 local STORED_NAN = '{":number:":null}'
 
 --- Whether JSON carries a string unchanged.
@@ -100,7 +114,7 @@ local function numberJson(value)
       break
     end
   end
-  -- JSON wants a period whatever the locale.
+  -- JSON wants a period whatever the locale, as JSON:encode writes it.
   return (text:gsub(",", "."))
 end
 
@@ -113,7 +127,7 @@ local function encode(value)
   end
   local json
   if type(value) == "number" and value > -math.huge and value < math.huge then
-    -- JSON:encode keeps only 14 significant digits.
+    -- JSON:encode keeps 14 significant digits, and an older build stored the number exactly.
     json = numberJson(value)
   else
     json = JSON:encode(value)
@@ -143,7 +157,7 @@ local function readStored(key, encrypted)
     return value
   end
   if encrypted and stored ~= nil then
-    -- A key stored plain reads encrypted as deciphered bytes, which keep global.lib from reading it plain.
+    -- Maybe a key stored plain, whose deciphered bytes kept global.lib from reading it plain.
     local plain = PersistGetValue(key, false)
     local inPlain = Deserialize(plain)
     if inPlain ~= nil and inPlain ~= plain then
@@ -151,6 +165,8 @@ local function readStored(key, encrypted)
     end
   end
   if isRawString(stored) then
+    -- C4:Base64Decode gives "" for a string under four characters, or with a character outside
+    -- the alphabet in one of its whole groups of four.
     return stored
   end
   return nil

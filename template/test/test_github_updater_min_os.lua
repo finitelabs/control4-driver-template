@@ -1,5 +1,6 @@
--- The GitHub updater installs nothing from a release whose .c4z needs a newer C4 OS than the
--- controller's; such a driver disables itself on load (CheckMinimumVersion).
+-- Tests that the GitHub updater installs nothing from a release whose .c4z declares a
+-- minimum_os_version above the controller's OS. Such a driver disables itself on load
+-- (CheckMinimumVersion), so installing it would take a working driver offline.
 --
 -- Run from the driver root:
 --   make test
@@ -145,7 +146,8 @@ osVersion = "4.2.1.757028"
 T.section("one driver of a suite above the OS holds back the whole suite")
 ---------------------------------------------------------------------------
 
--- The companion is last, so writing each download at once would already have replaced RUNNING.
+-- The blocking companion is last, so writing each asset as it downloads would already
+-- have replaced the running driver's .c4z.
 local suite = update("4.0.0", {
   { name = RUNNING, minimumOs = "4.2.0" },
   { name = COMPANION, minimumOs = "4.99.0" },
@@ -183,6 +185,7 @@ local noDevicedata = update("6.1.0", { { name = RUNNING, body = F.zip({ { "drive
 T.contains("a driver.xml with no devicedata is rejected", describe(noDevicedata.err), "no devicedata")
 T.eq("and writes nothing", noDevicedata.writes, {})
 
+-- A failed download used to leave the drivers that had already arrived written but not installed.
 local failed = update("6.2.0", { { name = COMPANION, minimumOs = "4.2.0" }, { name = RUNNING, missing = true } })
 T.contains("a failed download rejects", describe(failed.err), "404")
 T.eq("and writes none of the drivers that did download", failed.writes, {})
