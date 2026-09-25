@@ -44,7 +44,7 @@ updater.getLatestRelease = function()
   })
 end
 http.get = function()
-  return deferred.new():resolve({ body = "payload" })
+  return deferred.new():resolve({ body = F.c4z("2.0.0", "3.3.0") })
 end
 
 -- Capture the order filenames are handed to UpdateProjectC4i.
