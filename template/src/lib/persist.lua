@@ -57,7 +57,8 @@ Persist.__index = Persist
 --- @type table
 local EMPTY = {}
 
---- Director's text for a NaN stored on its own. It reads as the default, not as this text.
+--- What Director stores for a NaN: it keeps a number as {":number:":<n>}, and JSON has no NaN.
+--- An older build's stored NaN reads as the default, not as this text.
 --- @type string
 local STORED_NAN = '{":number:":null}'
 
@@ -166,7 +167,7 @@ end
 --- @return void
 function Persist:set(key, value, encrypted)
   log:trace("Persist:set(%s, %s, %s)", key, value, encrypted)
-  -- Director ignores "" set encrypted, which would leave the old value, and keeps a NaN as text.
+  -- Director ignores an encrypted "", which would leave the old value, and stores a NaN as STORED_NAN.
   if value == nil or value == "" or value ~= value then
     self._persist[key] = EMPTY
     self._pending[key] = nil -- a later flush must not bring the key back
