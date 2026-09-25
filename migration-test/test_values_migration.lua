@@ -323,7 +323,7 @@ values = H.load("restart")
 values:update("D", "4", "STRING")
 T.eq("nor once it is gone", H.visible(), { A = 1001, C = 1003, D = 1004 })
 
-T.section("a downgrade to v0.9.28 and back keeps every id")
+T.section("a variable v0.9.28 rewrote keeps its id through a downgrade and back")
 H.wipe()
 values = H.load("restart")
 values:update("A", "1", "STRING")
@@ -335,5 +335,13 @@ H.load("update")
 T.eq("the load back records A's id", H.blob().A.id, 1001)
 H.load("restart")
 T.eq("which a restart keeps", H.visible(), { A = 1001, B = 1002, C = 1003 })
+local list, asked = C4.GetDeviceVariables, false
+C4.GetDeviceVariables = function(...)
+  asked = true
+  return list(...)
+end
+H.load("update")
+C4.GetDeviceVariables = list
+T.eq("and a later load does not ask Director for its variables", asked, false)
 
 T.finish()
