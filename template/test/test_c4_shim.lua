@@ -762,5 +762,34 @@ T.eq("&#0; is dropped", zero.Value, "")
 T.eq("a malformed reference stays literal", C4:ParseXml("<v>&#;</v>").Value, "&#;")
 
 --------------------------------------------------------------------------------
+T.section("C4:Base64Decode")
+--------------------------------------------------------------------------------
+
+-- Measured on 4.3.0. Deserialize reads every stored string through this, so a
+-- lenient decode would hide a string lib/persist.lua cannot read back.
+T.eq("decodes base64", C4:Base64Decode("eyJhIjoxfQ=="), '{"a":1}')
+T.eq('a character outside the alphabet gives ""', C4:Base64Decode("Living Room"), "")
+T.eq("so does a string shorter than one group", C4:Base64Decode("Den"), "")
+T.eq("a trailing partial group is dropped", C4:Base64Decode("MTIzN"), "123")
+T.eq("the input is trimmed", C4:Base64Decode(" MTIz "), "123")
+T.eq("and cut at its first NUL", C4:Base64Decode("MTIz\0MTIz"), "123")
+
+--------------------------------------------------------------------------------
+T.section("C4:PersistSetValue")
+--------------------------------------------------------------------------------
+
+-- Measured on 4.3.0.
+C4:PersistSetValue("Nul", "a\0b")
+T.eq("a string is cut at its first NUL", C4:PersistGetValue("Nul"), "a")
+C4:PersistSetValue("NaN", 0 / 0)
+T.eq("a NaN is stored as Director's text for it", C4:PersistGetValue("NaN"), '{":number:":null}')
+C4:PersistSetValue("Plain", "x")
+C4:PersistSetValue("Plain", "")
+T.eq('"" deletes a plain key', C4:PersistGetValue("Plain"), nil)
+C4:PersistSetValue("Secret", "x", true)
+C4:PersistSetValue("Secret", "", true)
+T.eq("and leaves an encrypted one as it was", C4:PersistGetValue("Secret", true), "x")
+
+--------------------------------------------------------------------------------
 
 T.finish()
