@@ -258,7 +258,11 @@ local connections = {}
 
 local BINDING_TYPE_IDS = { CONTROL = 1, PROXY = 2 }
 
+--- A nil name raises, as on 4.3.0.
 function C4:AddDynamicBinding(idBinding, strType, bIsProvider, strName, strClass, bHidden, bAutoBind)
+  if strName == nil then
+    error("strName should be a string", 2)
+  end
   dynamic_bindings[idBinding] = {
     id = idBinding,
     type = strType,
