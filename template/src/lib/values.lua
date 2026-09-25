@@ -308,8 +308,8 @@ end
 --- the id its record keeps and then named. Without it, variables are added by
 --- name in index order, with hidden placeholders for deleted values, as older
 --- builds did. The first load after an older build keeps the ids Director gave
---- that build's variables, learned by name; after a Director restart it first
---- restores as that build did.
+--- that build's variables, learned by name; after a Director restart, a record
+--- that build wrote without an id takes the id its restore gives it.
 ---
 --- Call this from OnDriverInit: programming attached to variables added
 --- after OnDriverInit may not work after a Director restart.
@@ -317,7 +317,6 @@ end
 function Values:restoreValues()
   log:trace("Values:restoreValues()")
   local values = self:getValues()
-  local restarted = next(Variables) == nil
   self._byId = self:_learnIds(values)
 
   -- Build sorted array with names (table.sort doesn't work on string-keyed tables)
@@ -346,11 +345,6 @@ function Values:restoreValues()
     if not ok then
       log:error("Failed to restore value %s: %s", entry.name, err)
     end
-  end
-
-  if restarted and not self._byId then
-    -- Restore added an older build's variables as that build did, so Director has their ids now
-    self._byId = self:_learnIds(self:getValues())
   end
 end
 
@@ -449,7 +443,8 @@ end
 
 --- Whether variables are added at their ids in this load. An older build's
 --- records have no ids, so the first load of this build learns them by name from
---- Director, which a restart leaves empty until restore has added them again.
+--- Director. A Director restart leaves no variable, so there a record with no id
+--- takes the id that build's restore gives it, if no record has it.
 --- @private
 --- @param values table<string, Value> The values table, which takes the ids.
 --- @return boolean byId True if variables are added at their ids.
@@ -458,30 +453,31 @@ function Values:_learnIds(values)
   if C4.SetVariableName == nil then
     return false
   end
-  local learned, pending, rewritten = false, false, false
+  local restarted, learned, rewritten = next(Variables) == nil, false, false
   for name, value in pairs(values) do
     learned = learned or value.id ~= nil
-    pending = pending or value.varType ~= nil or value.deleted == true
     -- An older build drops the id of each record it rewrites, so the load back from a downgrade learns again
     rewritten = rewritten or (value.id == nil and Variables[name] ~= nil)
   end
-  if learned and not rewritten then
+  if learned and not rewritten and not restarted then
     return true
-  elseif next(Variables) == nil then
-    return not pending
   end
 
-  -- The DriverWorks docs advise against this call in OnDriverInit, where restore runs, so its list is checked
-  local ok, variables = pcall(C4.GetDeviceVariables, C4, C4:GetDeviceID())
-  local listed = {}
-  for _, variable in pairs(ok and type(variables) == "table" and variables or {}) do
-    listed[variable.name] = true
-  end
-  -- A list that leaves out a variable the driver has is not current
-  for name in pairs(Variables) do
-    if not listed[name] then
-      log:warn("Could not read this device's variables from Director; they are added by name in this load")
-      return false
+  local variables = {}
+  if not restarted then
+    -- The DriverWorks docs advise against this call in OnDriverInit, where restore runs, so its list is checked
+    local ok, list = pcall(C4.GetDeviceVariables, C4, C4:GetDeviceID())
+    variables = ok and type(list) == "table" and list or {}
+    local listed = {}
+    for _, variable in pairs(variables) do
+      listed[variable.name] = true
+    end
+    -- A list that leaves out a variable the driver has is not current
+    for name in pairs(Variables) do
+      if not listed[name] then
+        log:warn("Could not read this device's variables from Director; they are added by name in this load")
+        return false
+      end
     end
   end
 
@@ -515,11 +511,11 @@ function Values:_learnIds(values)
     taken[value.id] = true
   end
 
-  -- A name deleted in the older build's last load has no variable left. It takes the id
-  -- that build's restore gave it, counting from the first id, if no variable has it.
+  -- A name deleted in the older build's last load has no variable to learn from, nor has any after a restart.
+  -- One with no id takes the id that build's restore gives it, counting from the first id, if free.
   for rank, name in ipairs(order) do
     local value, id = values[name], FIRST_VARIABLE_ID + rank - 1
-    if value.id == nil and value.deleted and not taken[id] then
+    if value.id == nil and (value.deleted or restarted) and not taken[id] then
       value.id = id
       taken[id] = true
     end

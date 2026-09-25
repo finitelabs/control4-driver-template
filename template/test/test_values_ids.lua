@@ -210,12 +210,10 @@ T.eq("which a Director restart keeps", H.visible(), { A = 1001, C = 1004, E = 10
 values:update("B", "b", "STRING")
 T.eq("and B comes back at its id", H.visible().B, 1005)
 
-T.section("the switch from an older build at a Director restart restores as that build did")
+T.section("the switch from an older build at a Director restart keeps the ids that build's restore gives")
 older()
 values = H.load("restart")
-local layout = { [1001] = "A", [1002] = "B(h)", [1003] = "J(h)", [1004] = "C", [1005] = "E" }
-T.eq("by name in index order, B and J hidden", H.layout(), layout)
-T.eq("then each record takes its variable's id", ids(), { A = 1001, B = 1002, C = 1004, E = 1005, J = 1003 })
+T.eq("each record takes its id in index order", ids(), { A = 1001, B = 1002, C = 1004, E = 1005, J = 1003 })
 values:update("B", "b", "STRING")
 T.eq("B comes back at its id in that load", H.visible().B, 1002)
 H.load("update")
@@ -267,6 +265,19 @@ end
 H.load("update")
 C4.GetDeviceVariables = list
 T.eq("and a later load does not ask Director for its variables", asked, false)
+
+T.section("a variable v0.9.28 rewrote keeps its id when the way back is a Director restart")
+-- v0.9.28 rewrote A and D without their ids, and deleted J, a plain value its restore
+-- holds 1003 for with a placeholder
+stored({
+  A = { index = 1, varType = "STRING", value = "a2", writable = false },
+  B = { index = 2, id = 1002, varType = "STRING", value = "b", writable = false },
+  J = { index = 3, writable = false, deleted = true },
+  C = { index = 4, id = 1004, varType = "STRING", value = "c", writable = false },
+  D = { index = 5, varType = "STRING", value = "d2", writable = false },
+})
+H.load("restart")
+holds("each takes the id v0.9.28's restore gives it", { A = 1001, B = 1002, C = 1004, D = 1005 })
 
 T.section("a name v0.9.28 deleted with no id does not take an id a deleted value keeps")
 -- This build gave X 1003, as F, a variable no record names, had 1002. v0.9.28 then rewrote A,
@@ -334,7 +345,7 @@ stored({
 })
 values = H.load("restart")
 values:update("N", "n", "STRING")
-T.eq("so a new name takes the next id", H.layout(), { [1001] = "J(h)", [1002] = "N" })
+T.eq("so a new name takes the next id", ids(), { J = 1001, N = 1002 })
 
 T.section("without a rename, restore adds variables by name as older builds did")
 ShimVariableRename(false)
