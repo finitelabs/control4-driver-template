@@ -76,12 +76,6 @@ jobs:
             --data vendor_modules="$VENDOR_MODULES" \
             . "$RUNNER_TEMP/render"
 
-      # The switch from v0.9.28's lib/values is tested here, not in every driver repo.
-      - name: Add the migration tests
-        run: |
-          cp -R migration-test/. "$RUNNER_TEMP/render/test/"
-          git show v0.9.28:template/src/lib/values.lua > "$RUNNER_TEMP/render/test/values_v0928.lua"
-
       # make test only loads modules that call a drivers-common-public global.
       - name: Every rendered src/lib module loads
         working-directory: ${{ runner.temp }}/render

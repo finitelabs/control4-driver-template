@@ -31,9 +31,7 @@ function C4:DeleteVariable(identifier)
 end
 
 --- A driver load after `how`, "update" or "restart", that restores its values.
---- `module` is the lib/values build it runs, this one by default.
-function H.load(how, module)
-  module = module or "lib.values"
+function H.load(how)
   if how == "restart" then
     ShimRestartDirector()
   else
@@ -41,11 +39,10 @@ function H.load(how, module)
   end
   H.calls = {}
   T.unload("^lib%.persist$", "^lib%.values$")
-  package.loaded[module] = nil
-  local values = require(module)
+  local values = require("lib.values")
   values:restoreValues()
   -- The DriverWorks docs say not to call DeleteVariable in OnDriverInit, where restore runs.
-  if module == "lib.values" and H.called("^Delete") then
+  if H.called("^Delete") then
     T.check("restore deletes no variable (" .. how .. ")", false, table.concat(H.calls, ", "))
   end
   return values

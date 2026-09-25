@@ -1,7 +1,7 @@
 -- Variable ids in lib/values.lua. Programming binds to a variable's id, so with
 -- C4.SetVariableName (OS 4.0+) each name keeps its id through driver updates,
--- Director restarts, deletes and reset. Without it, restore adds variables by
--- name as older builds did.
+-- Director restarts, deletes, reset and the switch from an older build. Without
+-- it, restore adds variables by name as older builds did.
 --
 -- Run from the driver root:
 --   make test
@@ -160,6 +160,80 @@ C4:PersistSetValue("Values", "not a table")
 local ok, loaded = pcall(H.load, "update")
 T.check("restore does not raise", ok, loaded)
 T.eq("and starts with no values", ok and loaded:getValues(), {})
+
+--- Records as v0.9.28 stores them, with no ids: B deleted, J a plain value.
+local OLDER_VALUES = {
+  A = { index = 1, varType = "STRING", value = "a", writable = false },
+  B = { index = 2, varType = "STRING", writable = false, deleted = true },
+  J = { index = 3, value = "{}", writable = false },
+  C = { index = 4, varType = "NUMBER", value = 3, suffix = " %", writable = true },
+  E = { index = 5, varType = "BOOL", value = true, writable = false },
+}
+
+--- Storage and Director as v0.9.28 leaves them: A 1001, E 1002, C 1003, B hidden at 1004.
+local function older()
+  H.wipe()
+  C4:PersistSetValue("Values", Serialize(OLDER_VALUES))
+  -- Its restore after a restart adds each variable by name in index order
+  C4:AddVariable("A", "a", "STRING", true, false)
+  C4:AddVariable("B", "b", "STRING", true, false)
+  C4:AddVariable("C", "3", "NUMBER", false, false)
+  -- After an update B is deleted and E takes its id; the next update's restore adds B's placeholder
+  ShimUpdateDriver()
+  C4:DeleteVariable("B")
+  C4:AddVariable("E", "1", "BOOL", true, false)
+  ShimUpdateDriver()
+  C4:AddVariable("B", "", "STRING", true, true)
+end
+
+--- name -> id of every record that has one.
+local function ids()
+  local out = {}
+  for name, record in pairs(H.blob()) do
+    out[name] = record.id
+  end
+  return out
+end
+
+T.section("the switch from an older build at a driver update keeps every id Director has")
+older()
+H.load("update")
+T.eq("each record takes its variable's id, B's hidden one too", ids(), { A = 1001, B = 1004, C = 1003, E = 1002 })
+values = H.load("restart")
+T.eq("which a Director restart keeps", H.visible(), { A = 1001, C = 1003, E = 1002 })
+values:update("B", "b", "STRING")
+T.eq("and B comes back at its id", H.visible().B, 1004)
+
+T.section("the switch from an older build at a Director restart restores as that build did")
+older()
+values = H.load("restart")
+T.eq("by name in index order, B hidden", H.layout(), { [1001] = "A", [1002] = "B(h)", [1003] = "C", [1004] = "E" })
+T.eq("then each record takes its variable's id", ids(), { A = 1001, B = 1002, C = 1003, E = 1004 })
+values:update("B", "b", "STRING")
+T.eq("B comes back at its id in that load", H.visible().B, 1002)
+H.load("update")
+H.load("restart")
+T.eq("and later loads keep every id", H.visible(), { A = 1001, B = 1002, C = 1003, E = 1004 })
+
+T.section("Director's variable list failing at the switch loses no variable")
+older()
+local before, list = H.layout(), C4.GetDeviceVariables
+C4.GetDeviceVariables = function()
+  error("unavailable")
+end
+ok, loaded = pcall(H.load, "update")
+T.check("a list that raises does not fail restore", ok, loaded)
+C4.GetDeviceVariables = function()
+  return {}
+end
+values = H.load("update")
+C4.GetDeviceVariables = list
+T.eq("an empty one is not trusted, so no record takes an id", ids(), {})
+values:update("B", "b", "STRING")
+T.eq("and a name back in that load moves no variable, as on v0.9.28", H.layout(), before)
+H.load("update")
+H.load("restart")
+T.eq("the next load learns each id, which a restart keeps", H.visible(), { A = 1001, B = 1004, C = 1003, E = 1002 })
 
 T.section("without a rename, restore adds variables by name as older builds did")
 ShimVariableRename(false)
