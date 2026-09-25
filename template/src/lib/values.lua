@@ -279,7 +279,8 @@ function Values:delete(name)
   log:debug("Deleting value %s at index %d", name, value.index)
 
   local wasVariable = isVariable(value)
-  if value.varType == nil and value.id == nil then
+  -- A plain value with no id goes, unless a load by name on OS 4.0+ keeps it for the next restart's order
+  if value.varType == nil and value.id == nil and (self._byId or C4.SetVariableName == nil) then
     values[name] = nil
   else
     value.deleted = true
@@ -351,6 +352,7 @@ end
 function Values:restoreValues()
   log:trace("Values:restoreValues()")
   local values = self:getValues()
+  -- With a rename a record holds its slot itself, by its id or its place in the next restart's order
   if C4.SetVariableName == nil and moveLegacyPlaceholders(values) then
     self:_saveValues(values, true)
   end

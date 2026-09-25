@@ -424,6 +424,28 @@ values = H.load("restart")
 values:update("N", "n", "STRING")
 T.eq("so a new name takes the next id", ids(), { J = 1001, N = 1002 })
 
+T.section("a plain value v0.9.28 deleted keeps its place when a list that is not current loads by name")
+-- v0.9.28's restart held J's id with a placeholder; J is then saved and deleted again
+stored({
+  A = { index = 1, varType = "STRING", value = "a", writable = false },
+  J = { index = 2, writable = false, deleted = true },
+  B = { index = 3, varType = "STRING", value = "b", writable = false },
+  C = { index = 4, varType = "STRING", value = "c", writable = false },
+})
+C4:AddVariable("A", "a", "STRING", true, false)
+C4:AddVariable("J", "", "STRING", true, true)
+C4:AddVariable("B", "b", "STRING", true, false)
+C4:AddVariable("C", "c", "STRING", true, false)
+C4.GetDeviceVariables = function()
+  return {}
+end
+values = H.load("update")
+C4.GetDeviceVariables = list
+values:update("J", "{}")
+values:delete("J")
+H.load("restart")
+T.eq("so a restart keeps B and C", H.visible(), { A = 1001, B = 1003, C = 1004 })
+
 T.section("without a rename, restore adds variables by name as older builds did")
 ShimVariableRename(false)
 values = fresh()
