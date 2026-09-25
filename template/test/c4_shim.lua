@@ -542,34 +542,31 @@ local function base64_encode_impl(data)
   )
 end
 
+local base64_values = { ["="] = 0 }
+for i = 1, #base64_chars do
+  base64_values[base64_chars:sub(i, i)] = i - 1
+end
+
+-- As 4.3.0 decodes one line: cut at its first NUL and trimmed, a trailing partial group dropped,
+-- and "" when a whole group holds a character outside the alphabet.
 local function base64_decode_impl(data)
   if type(data) ~= "string" then
     error("Invalid base64 data type")
   end
-  data = string.gsub(data, "[^" .. base64_chars .. "=]", "")
-  return (
-    data
-      :gsub(".", function(x)
-        if x == "=" then
-          return ""
-        end
-        local r, f = "", (base64_chars:find(x) - 1)
-        for i = 6, 1, -1 do
-          r = r .. (f % 2 ^ i - f % 2 ^ (i - 1) > 0 and "1" or "0")
-        end
-        return r
-      end)
-      :gsub("%d%d%d?%d?%d?%d?%d?%d?", function(x)
-        if #x ~= 8 then
-          return ""
-        end
-        local c = 0
-        for i = 1, 8 do
-          c = c + (x:sub(i, i) == "1" and 2 ^ (8 - i) or 0)
-        end
-        return string.char(c)
-      end)
-  )
+  data = data:match("^[^%z]*"):match("^%s*(.-)%s*$")
+  data = data:sub(1, #data - #data % 4)
+  if data:find("[^A-Za-z0-9+/=]") then
+    return ""
+  end
+  local out = {}
+  for i = 1, #data, 4 do
+    local n = 0
+    for j = i, i + 3 do
+      n = n * 64 + base64_values[data:sub(j, j)]
+    end
+    out[#out + 1] = string.char(math.floor(n / 65536), math.floor(n / 256) % 256, n % 256)
+  end
+  return table.concat(out):sub(1, #data / 4 * 3 - math.min(#data:match("=*$"), 2))
 end
 
 -- Handle both C4:Base64Encode() and C4.Base64Encode(C4, ...) calling styles
@@ -1156,8 +1153,19 @@ function C4:PersistGetValue(key, encrypted)
   return persist_store[key]
 end
 
+-- As on 4.3.0: a string is cut at its first NUL and a NaN is stored as Director's text for it.
+-- "" deletes a plain key and leaves an encrypted one as it was.
 function C4:PersistSetValue(key, value, encrypted)
-  persist_store[key] = value
+  if type(value) == "string" then
+    value = value:match("^[^%z]*")
+  elseif value ~= value then
+    value = '{":number:":null}'
+  end
+  if value ~= "" then
+    persist_store[key] = value
+  elseif not encrypted then
+    persist_store[key] = nil
+  end
 end
 
 function C4:PersistDeleteValue(key)

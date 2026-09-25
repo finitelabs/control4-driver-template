@@ -57,6 +57,11 @@ Persist.__index = Persist
 --- @type table
 local EMPTY = {}
 
+--- What Director stores for a NaN: it keeps a number as {":number:":<n>}, and JSON has no NaN.
+--- An older build's stored NaN reads as the default, not as this text.
+--- @type string
+local STORED_NAN = '{":number:":null}'
+
 --- Migration functions loaded from the driver's `migrations.lua` module.
 --- Populated lazily on first get() call. Each entry maps a persist key to a function that
 --- transforms the old value format into the new format.
@@ -132,7 +137,13 @@ function Persist:_get(key, default, encrypted)
   local value = self._persist[key]
 
   if value == nil then
-    value = Deserialize(PersistGetValue(key, encrypted))
+    local stored = PersistGetValue(key, encrypted)
+    value = Deserialize(stored)
+    -- A string is stored raw, and C4:Base64Decode reads one under four characters or with a space or
+    -- punctuation as "", which Deserialize reads as nil.
+    if value == nil and type(stored) == "string" and stored ~= STORED_NAN then
+      value = stored
+    end
     if value == nil then
       value = default
     end
@@ -151,12 +162,13 @@ end
 --- Sets a value in the persistence store. Inside `defer()`, a write-behind key's
 --- value is cached at once and written at its next flush.
 --- @param key string The key to set the value for.
---- @param value any The value to store. If nil, the key will be deleted.
+--- @param value any The value to store. If nil, "" or NaN, the key will be deleted.
 --- @param encrypted? boolean Whether to encrypt the value (optional).
 --- @return void
 function Persist:set(key, value, encrypted)
   log:trace("Persist:set(%s, %s, %s)", key, value, encrypted)
-  if value == nil then
+  -- Director ignores an encrypted "", which would leave the old value, and stores a NaN as STORED_NAN.
+  if value == nil or value == "" or value ~= value then
     self._persist[key] = EMPTY
     self._pending[key] = nil -- a later flush must not bring the key back
     PersistDeleteValue(key)
