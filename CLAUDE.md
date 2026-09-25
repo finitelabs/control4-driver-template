@@ -29,11 +29,18 @@ it — and check that leg is distinct with `diff -r`.
 
 ## Tests that stay out of driver repos
 
-`migration-test/` holds the test of the switch from v0.9.28's `lib/values`, the
-one every released driver runs, to this one. It sits outside `template/`, so no
-driver repo receives it. The `render` job copies it into the render's `test/`,
-with `git show v0.9.28:template/src/lib/values.lua` saved as
-`test/values_v0928.lua`, before `make test`. To run it locally, do the same.
+`migration-test/` tests the switch to the current `lib/values` from the one
+released drivers ship. Every release carries a `lib/values` that stores and
+restores exactly as v0.9.28's does (earlier versions differ only in requires,
+NaN change detection and docs; v0.9.29 changed it but was never released), so
+the test runs against v0.9.28's copy. It sits outside `template/`, so no driver
+repo receives it. The `render` job adds it to each render before `make test`; to
+run it locally, do the same:
+
+```bash
+cp -R migration-test/. <render>/test/
+git show v0.9.28:template/src/lib/values.lua > <render>/test/values_v0928.lua
+```
 
 ## Rendering, and the default that lies
 
