@@ -257,14 +257,6 @@ H.load("update")
 T.eq("the load back records A's id", ids(), { A = 1001, B = 1002, C = 1003 })
 H.load("restart")
 T.eq("which a restart keeps", H.visible(), { A = 1001, B = 1002, C = 1003 })
-local asked = false
-C4.GetDeviceVariables = function(...)
-  asked = true
-  return list(...)
-end
-H.load("update")
-C4.GetDeviceVariables = list
-T.eq("and a later load does not ask Director for its variables", asked, false)
 
 T.section("a variable v0.9.28 rewrote keeps its id when the way back is a Director restart")
 -- v0.9.28 rewrote A and D without their ids, and deleted J, a plain value its restore
@@ -278,6 +270,22 @@ stored({
 })
 H.load("restart")
 holds("each takes the id v0.9.28's restore gives it", { A = 1001, B = 1002, C = 1004, D = 1005 })
+
+T.section("a driver update after a restart on v0.9.28 learns the ids that restart gave")
+-- P was a plain value when B was added, so this build gave B 1002 and P 1003. v0.9.28's
+-- restart adds them in index order, P at 1002 and B at 1003, and rewrites no record.
+stored({
+  A = { index = 1, id = 1001, varType = "STRING", value = "a", writable = false },
+  P = { index = 2, id = 1003, varType = "STRING", value = "p", writable = false },
+  B = { index = 3, id = 1002, varType = "STRING", value = "b", writable = false },
+})
+C4:AddVariable("A", "a", "STRING", true, false)
+C4:AddVariable("P", "p", "STRING", true, false)
+C4:AddVariable("B", "b", "STRING", true, false)
+values = H.load("update")
+values:update("B", "b2", "STRING")
+T.eq("a set of B reaches B's variable", { Variables.B, Variables.P }, { "b2", "p" })
+holds("and each keeps the id Director has", { A = 1001, B = 1003, P = 1002 })
 
 T.section("a name v0.9.28 deleted with no id does not take an id a deleted value keeps")
 -- This build gave X 1003, as F, a variable no record names, had 1002. v0.9.28 then rewrote A,

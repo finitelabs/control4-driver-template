@@ -305,11 +305,11 @@ end
 
 --- Restores all values from persistent storage. Programming binds to a
 --- variable's id, so with C4.SetVariableName (OS 4.0+) each variable is added at
---- the id its record keeps and then named. Without it, variables are added by
---- name in index order, with hidden placeholders for deleted values, as older
---- builds did. The first load after an older build keeps the ids Director gave
---- that build's variables, learned by name; after a Director restart, a record
---- that build wrote without an id takes the id its restore gives it.
+--- the id its record keeps and then named. At a driver update each record first
+--- takes its variable's id from Director, by name; after a Director restart, a
+--- record an older build wrote without an id takes the id that build's restore
+--- gives it. Without C4.SetVariableName, variables are added by name in index
+--- order, with hidden placeholders for deleted values, as older builds did.
 ---
 --- Call this from OnDriverInit: programming attached to variables added
 --- after OnDriverInit may not work after a Director restart.
@@ -441,10 +441,11 @@ function Values:_addVariable(values, name, value, strValue)
   return changed
 end
 
---- Whether variables are added at their ids in this load. An older build's
---- records have no ids, so the first load of this build learns them by name from
---- Director. A Director restart leaves no variable, so there a record with no id
---- takes the id that build's restore gives it, if no record has it.
+--- Whether variables are added at their ids in this load. At a driver update,
+--- Director's list of this device's variables is the truth, and each record takes
+--- its variable's id by name. A Director restart leaves no variable, so a record
+--- with no id, as an older build writes it, takes the id that build's restore
+--- gives it, if no record has it.
 --- @private
 --- @param values table<string, Value> The values table, which takes the ids.
 --- @return boolean byId True if variables are added at their ids.
@@ -453,17 +454,16 @@ function Values:_learnIds(values)
   if C4.SetVariableName == nil then
     return false
   end
-  local restarted, learned, rewritten = next(Variables) == nil, false, false
-  for name, value in pairs(values) do
-    learned = learned or value.id ~= nil
-    -- An older build drops the id of each record it rewrites, so the load back from a downgrade learns again
-    rewritten = rewritten or (value.id == nil and Variables[name] ~= nil)
-  end
-  if learned and not rewritten and not restarted then
-    return true
+
+  -- A deleted record's id is taken though Director has no variable at it
+  local taken = {}
+  for _, value in pairs(values) do
+    if value.id ~= nil then
+      taken[value.id] = true
+    end
   end
 
-  local variables = {}
+  local restarted, variables = next(Variables) == nil, {}
   if not restarted then
     -- The DriverWorks docs advise against this call in OnDriverInit, where restore runs, so its list is checked
     local ok, list = pcall(C4.GetDeviceVariables, C4, C4:GetDeviceID())
@@ -472,11 +472,12 @@ function Values:_learnIds(values)
     for _, variable in pairs(variables) do
       listed[variable.name] = true
     end
-    -- A list that leaves out a variable the driver has is not current
+    -- A list that leaves out a variable the driver has is not current. The recorded ids
+    -- stand, and with none this load adds variables by name, as the older build did.
     for name in pairs(Variables) do
       if not listed[name] then
-        log:warn("Could not read this device's variables from Director; they are added by name in this load")
-        return false
+        log:warn("Could not read this device's variables from Director; no id is learned in this load")
+        return next(taken) ~= nil
       end
     end
   end
@@ -491,14 +492,6 @@ function Values:_learnIds(values)
   table.sort(order, function(a, b)
     return values[a].index < values[b].index
   end)
-
-  -- A deleted record's id is taken though Director has no variable at it
-  local taken = {}
-  for _, value in pairs(values) do
-    if value.id ~= nil then
-      taken[value.id] = true
-    end
-  end
 
   -- Each variable keeps its id, under a deleted record of its name if no record has one
   for id, variable in pairs(variables) do
