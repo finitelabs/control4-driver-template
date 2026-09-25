@@ -55,10 +55,11 @@ T.section("a string that is base64 of JSON reads as that JSON, as it always did"
 p:set("Lookalike", "MTIz")
 T.eq('"MTIz" reads as 123', reload():get("Lookalike"), 123)
 
-T.section("a string that is a JSON object or array reads as a table, as it always did")
+T.section("a string that is a JSON object or array reads as that JSON, as it always did")
 -- Director reads '{"a":1}' back from storage as a table, and '{":number:":5}' as 5. The shim
--- keeps the text, so this stores what Director returns.
-C4:PersistSetValue("JsonText", { a = 1 })
+-- keeps the text, so this puts back what Director returns.
+p:set("JsonText", '{"a":1}')
+C4:PersistSetValue("JsonText", JSON:decode(C4:PersistGetValue("JsonText")))
 T.eq('{"a":1} reads as a table', reload():get("JsonText"), { a = 1 })
 
 T.finish()
