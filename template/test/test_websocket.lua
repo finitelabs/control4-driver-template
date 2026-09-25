@@ -3,7 +3,9 @@
 --   2. Send(s, opcode), additive, default 0x81
 --   3. Host header omits the default port
 --   4. 64-bit extended-length field uses %016X
---   5. delete(onComplete), and that it stops the Ping and PongResponse timers
+--   5. delete(onComplete), with a second delete() chaining its callback
+--
+-- It also checks each place v15 stops the Ping and PongResponse timers.
 --
 -- Run from the driver root:
 --   make test
@@ -251,13 +253,34 @@ do
 end
 
 --------------------------------------------------------------------------------
-T.section("delete() stops the timers a live socket runs")
+T.section("A second delete() runs its callback after the first's")
 --------------------------------------------------------------------------------
 do
   resetBindings()
-  -- Close() cancels the Ping and PongResponse timers by name. Had one site kept the
-  -- v14 name, the real timer would keep firing on the deleted socket.
+  local order = {}
+  local ws = WebSocket:new("wss://chain.example.com/ws")
+  ws:delete(function()
+    table.insert(order, "first")
+  end)
+  ws:delete(function()
+    table.insert(order, "second")
+  end)
+  fireTimers()
+  T.check("both run, in order", table.concat(order, ",") == "first,second", table.concat(order, ","))
+end
+
+--------------------------------------------------------------------------------
+T.section("The Ping and PongResponse timers stop where they should")
+--------------------------------------------------------------------------------
+do
+  resetBindings()
+  -- Every site names these timers from timerPrefix. A site left on the v14 handle
+  -- misses the timer: a PongResponse left running closes a healthy socket.
   local url = "wss://timers.example.com/ws"
+  local ws = WebSocket:new(url)
+  local function running(name)
+    return Timer[ws.timerPrefix .. name] ~= nil
+  end
   local function timersFor()
     local n = 0
     for name in pairs(Timer) do
@@ -268,12 +291,20 @@ do
     return n
   end
 
-  local ws = WebSocket:new(url)
+  ws:ConnectionChanged("ONLINE")
+  ws.running = true
+  ws:Ping()
+  T.check("going ONLINE and pinging starts both", running("Ping") and running("PongResponse"), timersFor())
+  ws:ParsePacket(string.char(0x8A, 0x00))
+  T.check("a PONG stops the PongResponse timer", running("Ping") and not running("PongResponse"))
+  ws:Ping()
+  ws:ConnectionChanged("OFFLINE")
+  T.check("going OFFLINE stops both", timersFor() == 0, timersFor())
+
   ws:ConnectionChanged("ONLINE")
   ws:Ping()
-  T.check("going ONLINE and pinging starts two timers", timersFor() == 2, timersFor())
   ws:delete()
-  T.check("delete() leaves only the close timer", timersFor() == 1, timersFor())
+  T.check("delete() leaves only the close timer", timersFor() == 1 and running("Closing"), timersFor())
   fireTimers()
   T.check("and none once it has run", timersFor() == 0, timersFor())
 end

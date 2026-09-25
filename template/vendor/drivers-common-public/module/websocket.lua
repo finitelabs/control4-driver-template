@@ -28,7 +28,7 @@
 --   9. Metrics are removed, and the module prints only when DEBUG_WEBSOCKET is set.
 --  10. The class is named WebSocket (upstream: wsObject) and carries LuaDoc.
 --
--- test/test_websocket.lua covers 1 to 5, and that delete() stops the v15 timers.
+-- test/test_websocket.lua covers 1 to 5, and each place v15 stops a timer.
 
 COMMON_WEBSOCKET_VER = 15
 
