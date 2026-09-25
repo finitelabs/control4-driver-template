@@ -33,12 +33,12 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **logging.lua** / **utils.lua**: structured logging and general utilities (always included)
 - **github-updater.lua**: GitHub Releases-based self-updater for non-DriverCentral (`oss`) builds
 
-### Vendor Libraries (`vendor/`, selected via `vendor_modules`)
+### Vendor Libraries (`vendor/`, some selected via `vendor_modules`)
 - **JSON.lua**: JSON encoder/decoder
 - **deferred.lua**: promise/deferred implementation for async workflows
 - **version.lua**: semantic version comparison
 - **cloud-client-byte.lua**: DriverCentral cloud client
-- **drivers-common-public/**: Control4's official shared libraries (handlers, lib, timer, url)
+- **drivers-common-public/**: Control4's official shared libraries (handlers, lib, timer, url, websocket), in every repo; each file's header lists our changes to it
 - **xml/**: XML parser (xml2lua)
 - **bitn.lua**: bit manipulation library
 - **crypto.lua**: cryptographic primitives (core build; requires `bitn`)
