@@ -50,9 +50,15 @@ T.eq('an encrypted string set to "" reads as the default', reload():get("Code", 
 p:set("Reading", 0 / 0)
 T.eq("a NaN is not stored", C4:PersistGetValue("Reading"), nil)
 
--- A known limit: telling it from a string would need a new stored form.
+-- Known limits: telling these from a string would need a new stored form.
 T.section("a string that is base64 of JSON reads as that JSON, as it always did")
 p:set("Lookalike", "MTIz")
 T.eq('"MTIz" reads as 123', reload():get("Lookalike"), 123)
+
+T.section("a string that is a JSON object or array reads as a table, as it always did")
+-- Director reads '{"a":1}' back from storage as a table, and '{":number:":5}' as 5. The shim
+-- keeps the text, so this stores what Director returns.
+C4:PersistSetValue("JsonText", { a = 1 })
+T.eq('{"a":1} reads as a table', reload():get("JsonText"), { a = 1 })
 
 T.finish()
