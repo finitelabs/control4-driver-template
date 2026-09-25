@@ -38,6 +38,13 @@ local function isVariable(record)
   return record ~= nil and record.varType ~= nil and not record.deleted
 end
 
+--- What C4:SetVariable and C4:DeleteVariable take for a value's variable: the name
+--- Director knows it by, so a stale id cannot reach another variable, or else its id,
+--- as Director reads a name like "1001" as an id.
+local function variableKey(name, id)
+  return (Variables[name] == nil or tonumber(name) ~= nil) and id or name
+end
+
 local function ovcKey(name)
   -- Convert the name to a valid OVC variable name by replacing spaces with underscores
   return string.gsub(name, "%s+", "_")
@@ -215,18 +222,18 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
   if varType ~= nil then
     if Variables[name] ~= nil and not isVariable(existing) and record.id ~= nil then
       -- An older build's hidden placeholder for the name gives way to it, at the same id
-      C4:DeleteVariable(record.id)
+      C4:DeleteVariable(variableKey(name, record.id))
       Variables[name] = nil
     end
     if Variables[name] == nil then
       idChanged = self:_addVariable(values, name, record, strValue)
     elseif Variables[name] ~= strValue then
-      C4:SetVariable(record.id or name, strValue)
+      C4:SetVariable(variableKey(name, record.id), strValue)
     end
   elseif Variables[name] ~= nil then
     OVC[ovcKey(name)] = nil
     self._callbacks[name] = nil
-    C4:DeleteVariable(record.id or name)
+    C4:DeleteVariable(variableKey(name, record.id))
     Variables[name] = nil
   end
 
@@ -282,7 +289,7 @@ function Values:delete(name)
   OVC[ovcKey(name)] = nil
   self._callbacks[name] = nil
   if Variables[name] ~= nil then
-    C4:DeleteVariable(value.id or name)
+    C4:DeleteVariable(variableKey(name, value.id))
     Variables[name] = nil
   end
 
@@ -552,7 +559,7 @@ function Values:reset()
     -- Delete the variable if it exists
     if value.varType ~= nil and Variables[name] ~= nil then
       OVC[ovcKey(name)] = nil
-      C4:DeleteVariable(value.id or name)
+      C4:DeleteVariable(variableKey(name, value.id))
       Variables[name] = nil
     end
     values[name] = value.id ~= nil and { index = value.index, id = value.id, deleted = true } or nil

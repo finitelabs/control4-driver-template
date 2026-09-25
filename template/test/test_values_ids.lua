@@ -301,6 +301,26 @@ values:update("B", "b2", "STRING")
 T.eq("a set of B reaches B's variable", { Variables.B, Variables.P }, { "b2", "p" })
 holds("and each keeps the id Director has", { A = 1001, B = 1003, P = 1002 })
 
+T.section("a set or delete reaches its own variable when a list that is not current leaves an id stale")
+-- As above, but Director's list leaves out every variable, so the ids this build recorded stand
+stored({
+  A = { index = 1, id = 1001, varType = "STRING", value = "a", writable = false },
+  P = { index = 2, id = 1003, varType = "STRING", value = "p", writable = false },
+  B = { index = 3, id = 1002, varType = "STRING", value = "b", writable = false },
+})
+C4:AddVariable("A", "a", "STRING", true, false)
+C4:AddVariable("P", "p", "STRING", true, false)
+C4:AddVariable("B", "b", "STRING", true, false)
+C4.GetDeviceVariables = function()
+  return {}
+end
+values = H.load("update")
+C4.GetDeviceVariables = list
+values:update("B", "b2", "STRING")
+T.eq("a set of B reaches B's variable", { Variables.B, Variables.P }, { "b2", "p" })
+values:delete("B")
+T.eq("and so does a delete", H.visible(), { A = 1001, P = 1002 })
+
 T.section("a name v0.9.28 deleted with no id does not take an id a deleted value keeps")
 -- This build gave X 1003, as F, a variable no record names, had 1002. v0.9.28 then rewrote A,
 -- deleted X, and rewrote and deleted Y.
