@@ -161,12 +161,13 @@ end
 --- Sets a value in the persistence store. Inside `defer()`, a write-behind key's
 --- value is cached at once and written at its next flush.
 --- @param key string The key to set the value for.
---- @param value any The value to store. If nil, the key will be deleted.
+--- @param value any The value to store. If nil, "" or NaN, the key will be deleted.
 --- @param encrypted? boolean Whether to encrypt the value (optional).
 --- @return void
 function Persist:set(key, value, encrypted)
   log:trace("Persist:set(%s, %s, %s)", key, value, encrypted)
-  if value == nil then
+  -- Director ignores "" set encrypted, which would leave the old value, and keeps a NaN as text.
+  if value == nil or value == "" or value ~= value then
     self._persist[key] = EMPTY
     self._pending[key] = nil -- a later flush must not bring the key back
     PersistDeleteValue(key)

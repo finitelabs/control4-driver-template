@@ -43,6 +43,13 @@ T.section("an older build's NaN reads as the default")
 C4:PersistSetValue("NaN", 0 / 0)
 T.eq("not as Director's text for it", reload():get("NaN", "default"), "default")
 
+T.section('"" or NaN deletes the key')
+p:set("Code", "1234", true)
+p:set("Code", "", true)
+T.eq('an encrypted string set to "" reads as the default', reload():get("Code", "default", true), "default")
+p:set("Reading", 0 / 0)
+T.eq("a NaN is not stored", C4:PersistGetValue("Reading"), nil)
+
 -- A known limit: telling it from a string would need a new stored form.
 T.section("a string that is base64 of JSON reads as that JSON, as it always did")
 p:set("Lookalike", "MTIz")
