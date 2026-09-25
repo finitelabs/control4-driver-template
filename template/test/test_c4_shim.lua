@@ -239,7 +239,9 @@ T.check(
 C4:AddVariable("Temp", "1", "STRING", true, false)
 T.check("the name is reusable after a delete", Variables["Temp"] == "1")
 
--- Ids come from a counter that a delete does not rewind within a driver load.
+-- Ids come from a counter that a delete does not rewind. This is the behaviour
+-- lib/values.lua works around: it restores hidden placeholders for deleted
+-- values so the surviving ones keep their ids across a reset.
 local _, reusedId = variableByName("Temp")
 T.check("a re-added name gets a fresh id", reusedId ~= deletedId, reusedId)
 T.check("ids only ever increase", tonumber(reusedId) > tonumber(deletedId))
@@ -274,110 +276,6 @@ for _ in pairs(Variables) do
   tracked = tracked + 1
 end
 T.check("every variable has a distinct id", reported == tracked, reported .. " reported, " .. tracked .. " added")
-
---------------------------------------------------------------------------------
-T.section("variable ids across driver loads")
---------------------------------------------------------------------------------
-
--- As on OS 4.3.0.
-ShimRestartDirector()
-local function idOf(name)
-  return tonumber((select(2, variableByName(name))))
-end
-
-T.eq("a by-name add returns true and its id", { C4:AddVariable("A", "", "STRING") }, { true, 1001 })
-C4:AddVariable("B", "", "STRING")
-C4:AddVariable("C", "", "STRING")
-C4:DeleteVariable("B")
-T.eq("a freed id is not handed out again in that load", select(2, C4:AddVariable("D", "", "STRING")), 1004)
-T.eq("a numeric add takes exactly that id", { C4:AddVariable(1012, "", "STRING", true, true) }, { true, 1012 })
-T.eq("and is named after it", variableField("1012", "hidden"), "True")
-T.eq("and leaves the counter alone", select(2, C4:AddVariable("E", "", "STRING")), 1005)
-T.eq("a numeric add of a taken id fails", C4:AddVariable(1001, "", "STRING"), false)
-C4:AddVariable("1013", "", "STRING")
-T.eq("so does one whose name is taken", C4:AddVariable(1013, "", "STRING"), false)
-T.eq("an existing name returns false", C4:AddVariable("A", "", "STRING", true, true), false)
-T.eq("and is not hidden by it", variableField("A", "hidden"), "False")
-
-ShimUpdateDriver()
-T.eq("a driver update keeps every variable", idOf("E"), 1005)
-T.eq("and its counter starts again, filling gaps", select(2, C4:AddVariable("F", "", "STRING")), 1002)
-
-ShimRestartDirector()
-T.eq("a Director restart keeps no variable", next(C4:GetDeviceVariables(C4:GetDeviceID())), nil)
-T.eq("and Variables is empty", next(Variables), nil)
-T.eq("its counter starts at 1001", select(2, C4:AddVariable("G", "", "STRING")), 1001)
-
--- Director reads a numeric-looking string as an id, like tonumber truncated.
-for _, case in ipairs({
-  { "2000", 2000, "2000" },
-  { "0042", 42, "42" },
-  { "3.5", 3, "3" },
-  { " 1020", 1020, "1020" },
-  { "1e3", 1000, "1000" },
-  { "0x10", 16, "16" },
-}) do
-  local ok, id = C4:AddVariable(case[1], "v", "STRING")
-  T.check(
-    string.format("AddVariable(%q) takes id %d, named %q", case[1], case[2], case[3]),
-    ok and id == case[2] and idOf(case[3]) == case[2]
-  )
-end
-T.raises("a string read as an id below 1 raises", function()
-  C4:AddVariable("-5", "v", "STRING")
-end, "id must be greater than zero")
-
-T.section("C4:SetVariableName")
-ShimRestartDirector()
-C4:AddVariable(1010, "ten", "STRING")
-T.eq("renames in place", C4:SetVariableName(1010, "Named Ten"), true)
-T.eq("keeping the id", idOf("Named Ten"), 1010)
-T.eq("Variables follows the new name", { Variables["Named Ten"], Variables["1010"] }, { "ten" })
-C4:SetVariable("Named Ten", "x")
-T.eq("a set by the new name works", Variables["Named Ten"], "x")
-C4:AddVariable(1012, "", "STRING")
-T.eq("onto a name another variable has it returns false", C4:SetVariableName(1012, "Named Ten"), false)
-T.eq("and changes nothing", idOf("1012"), 1012)
-T.eq("to its own name it returns false", C4:SetVariableName(1010, "Named Ten"), false)
-C4:SetVariableName(1012, "3.5")
-C4:AddVariable(3, "three", "STRING")
-C4:SetVariable("3.5", "y")
-T.eq("a set by a numeric-looking name reaches the id it spells", { Variables["3.5"], Variables["3"] }, { "", "y" })
-C4:SetVariable(1012, "z")
-T.eq("a set by id reaches the renamed variable", Variables["3.5"], "z")
-C4:DeleteVariable("3.5")
-T.eq("a delete by that name deletes the id it spells", { Variables["3.5"], Variables["3"] }, { "z" })
-C4:DeleteVariable(1012)
-T.eq("a delete by id deletes the renamed variable", Variables["3.5"], nil)
-ShimUpdateDriver()
-T.eq("a driver update keeps a renamed variable under its name", idOf("Named Ten"), 1010)
-local fired
-local realOnVariableChanged = OnVariableChanged
-OnVariableChanged = function(name)
-  fired = name
-end
-ShimWriteVariable(1010, "w")
-T.eq("a write from programming names the variable as renamed", fired, "Named Ten")
-OnVariableChanged = realOnVariableChanged
-ShimRestartDirector()
-C4:AddVariable(1061, "x", "STRING")
-T.eq('a rename to "" returns true', C4:SetVariableName(1061, ""), true)
-T.eq("but Director keeps its number as its name", variableField("1061", "name"), "1061")
-T.eq('though Variables[""] holds its value in that load', { Variables[""], Variables["1061"] }, { "x" })
-T.eq('so a by-name add of "" is refused', C4:AddVariable("", "e", "STRING"), false)
-ShimUpdateDriver()
-T.eq("and after a driver update no key reaches it", { Variables[""], Variables["1061"] }, {})
-T.check("nor after a second one", pcall(ShimUpdateDriver) and Variables[""] == nil)
-T.eq("while it keeps its id", C4:AddVariable(1061, "", "STRING"), false)
-C4:DeleteVariable(1061)
-T.eq('a by-name add of "" is named ""', { C4:AddVariable("", "e", "STRING") }, { true, 1001 })
-ShimUpdateDriver()
-T.eq("and keeps its key across a driver update", Variables[""], "e")
-ShimVariableRename(false)
-T.eq("switched off, as on an OS without it (3.x unmeasured)", C4.SetVariableName, nil)
-ShimVariableRename(true)
-T.eq("and on again", type(C4.SetVariableName), "function")
-ShimRestartDirector()
 
 --------------------------------------------------------------------------------
 T.section("lib/values.lua under the shim")
@@ -440,14 +338,6 @@ require("drivers-common-public.global.timer")
 T.raisesAt("C4:KillTimer blames the caller, not the shim", function()
   C4:KillTimer(C4:SetTimer(5000, function() end, false))
 end)
-
-local oldLoadFired = 0
-C4:SetTimer(5000, function()
-  oldLoadFired = oldLoadFired + 1
-end, false)
-ShimCancelTimers()
-ShimFireTimers()
-T.eq("a new driver load drops the old load's timers", oldLoadFired, 0)
 
 for _, hasSocket in ipairs({ false, true }) do
   local label = hasSocket and "with luasocket" or "without luasocket"
@@ -870,100 +760,6 @@ local zero = C4:ParseXml("<v>&#0;</v>")
 T.eq("&#0; is dropped", zero.Value, "")
 
 T.eq("a malformed reference stays literal", C4:ParseXml("<v>&#;</v>").Value, "&#;")
-
---------------------------------------------------------------------------------
-T.section("C4 file API")
---------------------------------------------------------------------------------
-
--- As on OS 4.3.0, in a driver's sandbox.
-T.eq("nothing is open to start with", C4:FileGetOpenedHandles(), nil)
-T.eq("with nothing open it returns no value at all", select("#", C4:FileGetOpenedHandles()), 0)
-
-local fh = C4:FileOpen("shim_a.bin")
-T.check("FileOpen creates a file and returns a handle", type(fh) == "number" and fh >= 0, tostring(fh))
-T.check("the file exists once opened", C4:FileExists("shim_a.bin"))
--- The documented shape; only the nil above was measured.
-T.eq("the handle is listed as open", C4:FileGetOpenedHandles(), { [fh] = "shim_a.bin" })
-T.eq("FileGetName is the bare name", C4:FileGetName(fh), "shim_a.bin")
-T.eq("FileWrite returns the bytes written", C4:FileWrite(fh, 5, "hello"), 5)
-T.eq("a count below the data's length writes that many", C4:FileWrite(fh, 1, "!?"), 1)
-T.eq("a count of 0 is -1", C4:FileWrite(fh, 0, "zzz"), -1)
-T.eq("FileGetSize follows the writes", C4:FileGetSize(fh), 6)
-T.eq("FileClose returns 0", C4:FileClose(fh), 0)
-
-T.eq("a closed handle's FileClose is -1", C4:FileClose(fh), -1)
-T.eq("its FileWrite is -1", C4:FileWrite(fh, 3, "abc"), -1)
-T.eq("its FileRead is empty", C4:FileRead(fh, 3), "")
-T.eq("its FileGetSize is -1", C4:FileGetSize(fh), -1)
-T.eq("its FileSetPos is false", C4:FileSetPos(fh, 0), false)
-T.eq("its FileGetName is empty", C4:FileGetName(fh), "")
-T.eq("an unknown handle's FileWrite is -1", C4:FileWrite(-1, 3, "abc"), -1)
-
-fh = C4:FileOpen("shim_a.bin")
-T.eq("a reopened file reads nothing from the end", C4:FileRead(fh, 100), "")
-T.eq("FileSetPos returns true", C4:FileSetPos(fh, 0), true)
-T.eq("and the contents read from the start", C4:FileRead(fh, 100), "hello!")
-C4:FileSetPos(fh, 0)
-C4:FileWrite(fh, 2, "XY")
-C4:FileSetPos(fh, 0)
-T.eq("a write lands at the position, over what is there", C4:FileRead(fh, 100), "XYllo!")
-C4:FileClose(fh)
-
-local longName = string.rep("n", 300) .. ".bin"
-T.eq("FileOpen of an empty name is -1", C4:FileOpen(""), -1)
-T.eq("of a name in a missing directory is -1", C4:FileOpen("missing/x.bin"), -1)
-T.eq("of . is -1", C4:FileOpen("."), -1)
-T.eq("of a 300-character name is -1", C4:FileOpen(longName), -1)
-T.eq("and that name does not exist", C4:FileExists(longName), false)
-
-T.eq("FileDelete returns true when it deletes", C4:FileDelete("shim_a.bin"), true)
-T.eq("the file is gone", C4:FileExists("shim_a.bin"), false)
-T.eq("FileDelete of a missing file returns false", C4:FileDelete("shim_a.bin"), false)
-T.eq("nothing is left open", C4:FileGetOpenedHandles(), nil)
-T.eq("and it returns no value at all again", select("#", C4:FileGetOpenedHandles()), 0)
-
-fh = C4:FileOpen("shim_e.bin")
-T.eq("a count past the data returns the count", C4:FileWrite(fh, 4, "ab"), 4)
-T.eq("and writes that many bytes", C4:FileGetSize(fh), 4)
-C4:FileClose(fh)
-C4:FileDelete("shim_e.bin")
-
-local stale = C4:FileOpen("shim_c.bin")
-C4:FileWrite(stale, 3, "old")
-T.eq("FileDelete deletes a file that is open", C4:FileDelete("shim_c.bin"), true)
-T.eq("which is gone by name", C4:FileExists("shim_c.bin"), false)
-T.eq("its handle still writes", C4:FileWrite(stale, 1, "!"), 1)
-T.eq("to its own file", C4:FileGetSize(stale), 4)
-C4:FileSetPos(stale, 0)
-T.eq("which keeps what it held", C4:FileRead(stale, 4), "old!")
-local fresh = C4:FileOpen("shim_c.bin")
-T.eq("a file opened again by that name starts empty", C4:FileGetSize(fresh), 0)
-C4:FileWrite(fresh, 3, "new")
-C4:FileClose(fresh)
-T.eq("a write through the old handle", C4:FileWrite(stale, 1, "?"), 1)
-T.eq("leaves the new file alone", ShimFiles("SANDBOX")["shim_c.bin"], "new")
-T.eq("and the old handle closes", C4:FileClose(stale), 0)
-C4:FileDelete("shim_c.bin")
-
-fh = C4:FileOpen("shim_b.bin")
-C4:FileWrite(fh, 1, "b")
-C4:FileClose(fh)
-C4:FileSetDir("SANDBOX")
-T.check("a driver starts in its sandbox", C4:FileExists("shim_b.bin"))
-C4:FileSetDir("LOGGING")
-T.eq("another directory holds its own files", C4:FileExists("shim_b.bin"), false)
-T.eq("ShimFiles shows what a directory holds", ShimFiles("SANDBOX"), { ["shim_b.bin"] = "b" })
--- The shim's own layout from here on, not a measurement.
-C4:FileSetDir("SANDBOX", "sub")
-T.eq("a subdirectory holds its own files", C4:FileExists("shim_b.bin"), false)
-fh = C4:FileOpen("shim_d.bin")
-C4:FileWrite(fh, 1, "d")
-C4:FileClose(fh)
-T.eq("ShimFiles names a subdirectory under its alias", ShimFiles("SANDBOX/sub"), { ["shim_d.bin"] = "d" })
-C4:FileDelete("shim_d.bin")
-C4:FileSetDir("SANDBOX")
-C4:FileDelete("shim_b.bin")
-T.check("FileDelete(alias, subpath) is not modelled", not pcall(C4.FileDelete, C4, "SANDBOX", "shim_b.bin"))
 
 --------------------------------------------------------------------------------
 

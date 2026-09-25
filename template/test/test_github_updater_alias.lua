@@ -40,8 +40,6 @@ JSON = require("JSON")
 local deferred = require("deferred")
 local semver = require("version")
 
-local F = require("c4_fixtures")
-
 local UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
 local RUNNING_DRIVER = C4:GetDriverFileName()
 local COMPANION_DRIVER = "example_companion.c4z"
@@ -134,7 +132,7 @@ function updater:getLatestRelease()
   })
 end
 function http:get()
-  return deferred.new():resolve({ body = F.c4z("2.0.0", "3.3.0") })
+  return deferred.new():resolve({ body = "driver payload" })
 end
 
 resetDirCalls()

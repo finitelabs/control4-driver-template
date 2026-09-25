@@ -37,13 +37,6 @@
 --- persist:defer(handleFrame, frame) -- sets of "Readings" in here wait
 --- persist:flush() -- e.g. from OnDriverDestroyed
 --- ```
----
---- ## Storage format
----
---- Every value is stored as base64 of its JSON, so a string, number or boolean reads back as
---- itself. An older build's raw string is still read as it is when `Deserialize` reads it as
---- nothing, and takes the new form at its next `set()`. A NaN, or a string that is not UTF-8
---- text, set on its own is logged and its key deleted.
 
 local log = require("lib.logging")
 
@@ -73,88 +66,6 @@ local MIGRATIONS = {}
 --- Whether migrations have been loaded from the driver's migrations module.
 --- @type boolean
 local migrationsLoaded = false
-
---- What Director (4.3.0) returns for a NaN an older build stored raw.
-local STORED_NAN = '{":number:":null}'
-
---- Whether JSON carries a string unchanged.
---- @param text string The string.
---- @return boolean carried
-local function jsonCarries(text)
-  if not text:find("[\128-\255]") then
-    return true
-  end
-  -- JSON:decode rejects bytes that are not UTF-8.
-  local ok, decoded = pcall(JSON.decode, JSON, JSON:encode(text))
-  return ok and decoded == text
-end
-
---- A finite number as JSON in the fewest significant digits, from 14, that read back exactly.
---- @param value number The number.
---- @return string json The JSON text.
-local function numberJson(value)
-  local text
-  for digits = 14, 17 do
-    text = string.format("%." .. digits .. "g", value)
-    if tonumber(text) == value then
-      break
-    end
-  end
-  -- JSON wants a period whatever the locale.
-  return (text:gsub(",", "."))
-end
-
---- Encodes a value for storage as base64 of its JSON.
---- @param value any The value.
---- @return string|nil stored The stored form, or nil for a NaN or a string that is not UTF-8 text.
-local function encode(value)
-  if value ~= value then
-    return nil
-  end
-  local json
-  if type(value) == "number" and value > -math.huge and value < math.huge then
-    -- JSON:encode keeps only 14 significant digits.
-    json = numberJson(value)
-  else
-    json = JSON:encode(value)
-  end
-  if type(value) == "string" and not jsonCarries(value) then
-    return nil
-  end
-  return C4:Base64Encode(json)
-end
-
---- Whether a stored value that `Deserialize` reads as nothing can be an older build's raw string.
---- @param stored any What PersistGetValue returned.
---- @return boolean raw
-local function isRawString(stored)
-  -- Deciphered bytes, from a key stored plain and read encrypted, are rarely text.
-  return type(stored) == "string" and stored ~= STORED_NAN and not stored:find("[%z\1-\31\127]") and jsonCarries(stored)
-end
-
---- Reads a key's value from storage.
---- @param key string The key.
---- @param encrypted boolean? Whether the value is encrypted.
---- @return any value The value, or nil if there is none.
-local function readStored(key, encrypted)
-  local stored = PersistGetValue(key, encrypted)
-  local value = Deserialize(stored)
-  if value ~= nil then
-    return value
-  end
-  if encrypted and stored ~= nil then
-    -- A key stored plain reads encrypted as deciphered bytes, which keep global.lib from reading it plain.
-    local plain = PersistGetValue(key, false)
-    local inPlain = Deserialize(plain)
-    if inPlain ~= nil and inPlain ~= plain then
-      return inPlain
-    end
-  end
-  if isRawString(stored) then
-    return stored
-  end
-  return nil
-end
 
 --- Creates a new instance of the Persist class.
 --- @return Persist persist A new instance of the Persist class.
@@ -221,7 +132,7 @@ function Persist:_get(key, default, encrypted)
   local value = self._persist[key]
 
   if value == nil then
-    value = readStored(key, encrypted)
+    value = Deserialize(PersistGetValue(key, encrypted))
     if value == nil then
       value = default
     end
@@ -261,7 +172,7 @@ function Persist:set(key, value, encrypted)
       self:_armFlush(key)
     else
       self._pending[key] = nil -- the whole value is written, pending changes included
-      self:_write(key, encrypted)
+      PersistSetValue(key, Serialize(self._persist[key]), encrypted)
     end
   end
 end
@@ -305,24 +216,8 @@ function Persist:flush(key)
   for pendingKey, encrypted in pairs(self._pending) do
     if key == nil or pendingKey == key then
       self._pending[pendingKey] = nil
-      self:_write(pendingKey, encrypted)
+      PersistSetValue(pendingKey, Serialize(self._persist[pendingKey]), encrypted)
     end
-  end
-end
-
---- Writes a key's cached value to storage.
---- @private
---- @param key string The key.
---- @param encrypted boolean? Whether to encrypt the value.
---- @return void
-function Persist:_write(key, encrypted)
-  local stored = encode(self._persist[key])
-  if stored == nil then
-    log:error("Persist: %s is a NaN or a string that is not UTF-8 text, and cannot be stored", key)
-    -- Deleted so that a reload reads the default, not the value this set replaced.
-    PersistDeleteValue(key)
-  else
-    PersistSetValue(key, stored, encrypted)
   end
 end
 

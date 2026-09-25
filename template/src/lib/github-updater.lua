@@ -3,7 +3,6 @@
 
 local http = require("lib.http")
 local log = require("lib.logging")
-local zip = require("lib.zip")
 local deferred = require("deferred")
 local version = require("version")
 
@@ -21,101 +20,6 @@ local DEFAULT_HEADERS = {
   ["User-Agent"] = "curl/8.1.2",
   Accept = "*/*",
 }
-
---- What a downloaded .c4z's driver.xml declares, by download URL and upload time, so a
---- release this controller cannot run is not downloaded again on every check.
---- @type table<string, { version: string|nil, minimumOs: string|nil }>
-local assetRequirements = {}
-
---- @param asset table A GitHub release asset.
---- @return string
-local function assetKey(asset)
-  return tostring(asset.browser_download_url) .. "|" .. tostring(asset.updated_at)
-end
-
---- Read the driver version and minimum C4 OS a .c4z declares in its driver.xml.
---- @param asset table A GitHub release asset.
---- @param body string The downloaded .c4z.
---- @return { version: string|nil, minimumOs: string|nil }|nil requirement
---- @return string|nil err
-local function readRequirement(asset, body)
-  local xml, err = zip.read(body, "driver.xml")
-  if xml == nil then
-    return nil, string.format("asset %s is not a readable driver package: %s", asset.name, err)
-  end
-  local ok, parsed = pcall(ParseXml, xml)
-  local devicedata = ok and Select(parsed, "devicedata") or nil
-  if type(devicedata) ~= "table" then
-    return nil, string.format("asset %s has no devicedata in its driver.xml", asset.name)
-  end
-  return {
-    version = type(devicedata.version) == "string" and devicedata.version or nil,
-    minimumOs = type(devicedata.minimum_os_version) == "string" and devicedata.minimum_os_version or nil,
-  }
-end
-
---- Why an asset cannot be installed on this controller's OS, or nil when it can.
---- @param asset table A GitHub release asset.
---- @param requirement { version: string|nil, minimumOs: string|nil }
---- @return string|nil reason
-local function unsupportedReason(asset, requirement)
-  -- VersionCheck is what CheckMinimumVersion disables a driver with, so the two agree.
-  if IsEmpty(requirement.minimumOs) or VersionCheck(requirement.minimumOs) then
-    return nil
-  end
-  return string.format(
-    "%s version %s requires C4 OS %s or later and this controller runs %s; keeping the installed driver(s)",
-    asset.name,
-    requirement.version or "(unknown)",
-    requirement.minimumOs,
-    C4:GetVersionInfo().version
-  )
-end
-
---- C4:FileOpen returns -1 for a file it cannot open or create.
---- @param fh any What C4:FileOpen returned.
---- @return boolean
-local function isHandle(fh)
-  return type(fh) == "number" and fh >= 0
-end
-
---- Read a whole file in the current directory.
---- @param name string
---- @return string|nil contents The contents, or nil when the file cannot be read in full.
-local function readFile(name)
-  local fh = C4:FileOpen(name)
-  if not isHandle(fh) then
-    return nil
-  end
-  local size = C4:FileGetSize(fh)
-  C4:FileSetPos(fh, 0)
-  local contents = type(size) == "number" and size > 0 and C4:FileRead(fh, size) or ""
-  C4:FileClose(fh)
-  if type(contents) ~= "string" or #contents ~= size then
-    return nil
-  end
-  return contents
-end
-
---- Replace a file in the current directory (the vendored FileWrite hides a failed write).
---- @param name string
---- @param contents string
---- @return boolean ok True only when the file reads back as contents.
-local function writeFile(name, contents)
-  -- FileOpen never truncates, so the old file has to go or a shorter body keeps its tail.
-  if C4:FileExists(name) then
-    C4:FileDelete(name)
-  end
-  local fh = C4:FileOpen(name)
-  if not isHandle(fh) then
-    return false
-  end
-  -- FileOpen starts at the end, so an old file the delete left would be appended to.
-  C4:FileSetPos(fh, 0)
-  C4:FileWrite(fh, #contents, contents)
-  C4:FileClose(fh)
-  return readFile(name) == contents
-end
 
 --- Create a new instance of GitHubUpdater.
 --- @return GitHubUpdater updater A new GitHubUpdater instance.
@@ -208,13 +112,12 @@ function GitHubUpdater:getOutdatedDriverAssets(repo, driverFilenames, includePre
 end
 
 --- Download outdated driver assets from GitHub and write them to the specified directory.
---- Writes nothing when any asset requires a newer C4 OS, and puts every file back when one fails.
 --- @param dir string Target directory to save downloaded driver assets.
 --- @param repo string The GitHub repository, in the format "owner/repo".
 --- @param driverFilenames string[] List of driver filenames to update.
 --- @param includePrereleases? boolean If true, includes pre-releases (optional).
 --- @param forceUpdate? boolean Optional. If true, downloads all drivers regardless of version (optional).
---- @return Deferred<string[], string|table<number, string>> outdatedDrivers Deferred resolving to a list of successfully downloaded driver filenames, or rejected with an error message or a table of error messages indexed by number.
+--- @return Deferred<string[], table<number, string>> outdatedDrivers Deferred resolving to a list of successfully downloaded driver filenames, or rejected with a table of error messages indexed by number.
 function GitHubUpdater:downloadOutdatedDrivers(dir, repo, driverFilenames, includePrereleases, forceUpdate)
   log:trace(
     "GitHubUpdater:downloadOutdatedDrivers(%s, %s, %s, %s, %s)",
@@ -225,99 +128,40 @@ function GitHubUpdater:downloadOutdatedDrivers(dir, repo, driverFilenames, inclu
     forceUpdate
   )
   return self:getOutdatedDriverAssets(repo, driverFilenames, includePrereleases, forceUpdate):next(function(assets)
-    for _, asset in ipairs(assets) do
-      local known = assetRequirements[assetKey(asset)]
-      local reason = known and unsupportedReason(asset, known)
-      if reason then
-        log:warn("Skipping driver update: %s", reason)
-        return reject(reason)
-      end
-    end
-
-    --- @type Deferred<table, string>[]
+    --- @type Deferred<string, string>[]
     local downloads = {}
-    for _, asset in ipairs(assets) do
+    for _, asset in pairs(assets) do
       if IsEmpty(asset.browser_download_url) then
         return reject(string.format("repo %s latest release asset %s download is unavailable", repo, asset.name))
       end
 
-      --- @type Deferred<table, string>
+      --- @type Deferred<string, string>
       local download = http:get(asset.browser_download_url, DEFAULT_HEADERS):next(function(response)
-        if string.len(response.body) < 1 then
+        local downloadSize = string.len(response.body)
+        if downloadSize < 1 then
           return reject(string.format("asset %s download is empty", asset.name))
         end
-        local requirement, err = readRequirement(asset, response.body)
-        if requirement == nil then
-          return reject(err)
+        -- GetDriverVersion only unlocks C4Z_ROOT for companion drivers, so a project running
+        -- one driver from this repo reaches the write with the alias still locked.
+        UnlockC4ZRoot()
+        C4:FileSetDir(dir)
+        local currentContents = C4:FileExists(asset.name) and FileRead(asset.name) or nil
+        if FileWrite(asset.name, response.body, true) == -1 then
+          -- Restore the previous contents if the write failed
+          if currentContents ~= nil then
+            FileWrite(asset.name, currentContents, true)
+          end
+          return reject(string.format("failed to download asset %s", asset.name))
         end
-        assetRequirements[assetKey(asset)] = requirement
-        return { asset = asset, body = response.body, requirement = requirement }
+        log:info("Downloaded asset %s (%d bytes)", asset.name, downloadSize)
+        return asset.name
       end, function(response)
         return reject(response.error)
       end)
 
       table.insert(downloads, download)
     end
-
-    return deferred.all(downloads):next(function(downloaded)
-      -- Checked before any write, so a suite is never left on mismatched versions.
-      for _, download in ipairs(downloaded) do
-        local reason = unsupportedReason(download.asset, download.requirement)
-        if reason then
-          log:warn("Skipping driver update: %s", reason)
-          return reject(reason)
-        end
-      end
-
-      -- GetDriverVersion only unlocks C4Z_ROOT for companion drivers, so a project running
-      -- one driver from this repo reaches the write with the alias still locked.
-      UnlockC4ZRoot()
-      C4:FileSetDir(dir)
-
-      -- Every current file is read before any write, so a failed write can put them all back.
-      local previous = {}
-      for i, download in ipairs(downloaded) do
-        local name = download.asset.name
-        if C4:FileExists(name) then
-          previous[i] = readFile(name)
-          if previous[i] == nil then
-            return reject(string.format("cannot read the current %s; no driver was written", name))
-          end
-        end
-      end
-
-      local written = {}
-      for i, download in ipairs(downloaded) do
-        local name = download.asset.name
-        if not writeFile(name, download.body) then
-          local unrestored = {}
-          for j = i, 1, -1 do
-            local priorName = downloaded[j].asset.name
-            local restored
-            if previous[j] ~= nil then
-              restored = writeFile(priorName, previous[j])
-            else
-              if C4:FileExists(priorName) then
-                C4:FileDelete(priorName)
-              end
-              restored = not C4:FileExists(priorName)
-            end
-            if not restored then
-              table.insert(unrestored, priorName)
-            end
-          end
-          if not IsEmpty(unrestored) then
-            return reject(
-              string.format("failed to write %s and could not restore %s", name, table.concat(unrestored, ", "))
-            )
-          end
-          return reject(string.format("failed to write %s; the installed driver files are unchanged", name))
-        end
-        log:info("Downloaded asset %s (%d bytes)", name, string.len(download.body))
-        table.insert(written, name)
-      end
-      return written
-    end)
+    return deferred.all(downloads)
   end)
 end
 
@@ -327,7 +171,7 @@ end
 --- @param driverFilenames string[] List of driver filenames to update.
 --- @param includePrereleases? boolean If true, includes pre-releases (optional).
 --- @param forceUpdate? boolean If true, runs update even if drivers are up to date (optional).
---- @return Deferred<string[], string|table<number, string>> updatedDrivers Deferred resolving to a list of updated driver filenames, or rejected with an error message or a table of error messages indexed by number.
+--- @return Deferred<string[], table<number, string>> updatedDrivers Deferred resolving to a list of updated driver filenames, or rejected with an error table.
 function GitHubUpdater:updateAll(repo, driverFilenames, includePrereleases, forceUpdate)
   log:trace("GitHubUpdater:updateAll(%s, %s, %s, %s)", repo, driverFilenames, includePrereleases, forceUpdate)
   -- Only update drivers that are already installed.
@@ -341,7 +185,7 @@ function GitHubUpdater:updateAll(repo, driverFilenames, includePrereleases, forc
   return self
     :downloadOutdatedDrivers("C4Z_ROOT", repo, installedDriverFilenames, includePrereleases, forceUpdate)
     :next(function(downloadedDriverFilenames)
-      --- @type Deferred<string[], string>
+      --- @type Deferred<string[], table<number, string>>
       local d = deferred.new()
       if IsEmpty(downloadedDriverFilenames) then
         return d:resolve(downloadedDriverFilenames)

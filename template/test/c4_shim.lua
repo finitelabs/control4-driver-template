@@ -164,6 +164,17 @@ end
 function C4:GetDriverFileName()
   return "example.c4z"
 end
+-- Mirrors the controller: C4Z_ROOT errors until unlocked with the key below, and
+-- every other argument is a no-op.
+local FILE_SET_DIR_UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
+local c4zRootUnlocked = false
+function C4:FileSetDir(dir)
+  if dir == FILE_SET_DIR_UNLOCK_KEY then
+    c4zRootUnlocked = true
+  elseif dir == "C4Z_ROOT" and not c4zRootUnlocked then
+    error("Invalid alias: C4Z_ROOT", 2)
+  end
+end
 function C4:SendToDevice() end
 function C4:SendToProxy() end
 
@@ -475,147 +486,23 @@ function C4:UnregisterVariableListener() end
 function C4:UnregisterAllVariableListeners() end
 function C4:RegisterDeviceEvent() end
 function C4:UnregisterDeviceEvent() end
-
----------------------------------------------------------------------------
--- Files
--- One in-memory directory per FileSetDir target; return values and positioning match OS 4.3.0.
----------------------------------------------------------------------------
-
--- Mirrors the controller: C4Z_ROOT errors until unlocked with the key below.
-local FILE_SET_DIR_UNLOCK_KEY = "c29tZXNwZWNpYWxrZXk=++11"
-local c4zRootUnlocked = false
-local files = {}
--- A driver starts in its sandbox.
-local fileDir = "SANDBOX"
-local openFiles = {}
-local lastFileHandle = 0
-
---- The live contents of one directory by file name, so a test can seed or inspect it.
---- @param dir string A FileSetDir target, e.g. "C4Z_ROOT" or "C4Z_ROOT/example".
---- @return table<string, string>
-function ShimFiles(dir)
-  files[dir] = files[dir] or {}
-  return files[dir]
+function C4:FileExists()
+  return false
 end
-
-function C4:FileSetDir(dir, subdir)
-  if dir == FILE_SET_DIR_UNLOCK_KEY then
-    c4zRootUnlocked = true
-    return
-  elseif dir == "C4Z_ROOT" and not c4zRootUnlocked then
-    error("Invalid alias: C4Z_ROOT", 2)
-  end
-  fileDir = subdir and (dir .. "/" .. subdir) or dir
+function C4:FileOpen()
+  return nil
 end
-
-function C4:FileExists(name)
-  return ShimFiles(fileDir)[name] ~= nil
-end
-
--- Creates a missing file and never truncates; the position starts at the end.
--- The store has no subdirectories, so any "/" is the controller's missing-directory -1.
-function C4:FileOpen(name)
-  if type(name) ~= "string" or name == "" or name == "." or name:find("/") or #name > 255 then
-    return -1
-  end
-  local dir = ShimFiles(fileDir)
-  dir[name] = dir[name] or ""
-  lastFileHandle = lastFileHandle + 1
-  openFiles[lastFileHandle] = { dir = fileDir, name = name, pos = #dir[name] }
-  return lastFileHandle
-end
-
--- A handle keeps its file after FileDelete, apart from a new file of that name.
-local function contents(file)
-  return file.detached or ShimFiles(file.dir)[file.name] or ""
-end
-
-local function setContents(file, data)
-  if file.detached then
-    file.detached = data
-  else
-    ShimFiles(file.dir)[file.name] = data
-  end
-end
-
-function C4:FileGetName(fh)
-  local file = openFiles[fh]
-  return file and file.name or ""
-end
-
-function C4:FileGetSize(fh)
-  local file = openFiles[fh]
-  return file and #contents(file) or -1
-end
-
-function C4:FileSetPos(fh, pos)
-  local file = openFiles[fh]
-  if file == nil then
-    return false
-  end
-  file.pos = pos
-  return true
-end
-
-function C4:FileRead(fh, count)
-  local file = openFiles[fh]
-  if file == nil then
-    return ""
-  end
-  local data = contents(file):sub(file.pos + 1, file.pos + count)
-  file.pos = file.pos + #data
-  return data
-end
-
--- Writes at the position, over what is there. A count of 0 is -1 on the controller, and a
--- count past the end of data writes whatever memory follows it, NULs here.
-function C4:FileWrite(fh, count, data)
-  local file = openFiles[fh]
-  if file == nil or count <= 0 then
-    return -1
-  end
-  local chunk = data:sub(1, count) .. string.rep("\0", count - #data)
-  local old = contents(file)
-  local gap = string.rep("\0", file.pos - #old)
-  setContents(file, old:sub(1, file.pos) .. gap .. chunk .. old:sub(file.pos + count + 1))
-  file.pos = file.pos + count
-  return count
-end
-
-function C4:FileClose(fh)
-  if openFiles[fh] == nil then
-    return -1
-  end
-  openFiles[fh] = nil
+function C4:FileGetSize()
   return 0
 end
-
--- Handle to file name; no value at all, not even nil, with nothing open.
-function C4:FileGetOpenedHandles()
-  local handles = {}
-  for fh, file in pairs(openFiles) do
-    handles[fh] = file.name
-  end
-  if next(handles) then
-    return handles
-  end
+function C4:FileSetPos() end
+function C4:FileRead()
+  return ""
 end
-
-function C4:FileDelete(name, subpath)
-  if subpath ~= nil then
-    error("the shim does not model C4:FileDelete(alias, subpath)", 2)
-  end
-  local dir = ShimFiles(fileDir)
-  if dir[name] == nil then
-    return false
-  end
-  for _, file in pairs(openFiles) do
-    if not file.detached and file.dir == fileDir and file.name == name then
-      file.detached = dir[name]
-    end
-  end
-  dir[name] = nil
-  return true
+function C4:FileClose() end
+function C4:FileDelete() end
+function C4:FileWrite()
+  return 0
 end
 
 --- Logging functions for C4 compatibility
@@ -655,199 +542,34 @@ local function base64_encode_impl(data)
   )
 end
 
--- C4:Base64Decode as on 4.3.0: OpenSSL's base64 BIO over the input cut at its first NUL and
--- trimmed, as one line (BIO_FLAGS_BASE64_NO_NL) unless it has a newline.
-local B64_WS, B64_EOLN, B64_CR, B64_EOF, B64_ERROR = 0xE0, 0xF0, 0xF1, 0xF2, 0xFF
-local B64_BLOCK_SIZE = 1024
-
--- OpenSSL's data_ascii2bin: a 6-bit value, or the class of a byte the decoder treats specially.
-local b64_ascii2bin = {}
-for b = 0, 255 do
-  b64_ascii2bin[b] = B64_ERROR
-end
-for n = 1, 64 do
-  b64_ascii2bin[base64_chars:byte(n)] = n - 1
-end
-b64_ascii2bin[string.byte("=")] = 0
-b64_ascii2bin[string.byte("\t")], b64_ascii2bin[string.byte(" ")] = B64_WS, B64_WS
-b64_ascii2bin[string.byte("\n")], b64_ascii2bin[string.byte("\r")] = B64_EOLN, B64_CR
-b64_ascii2bin[string.byte("-")] = B64_EOF
-
-local function b64_not_base64(v)
-  return v == B64_WS or v == B64_EOLN or v == B64_CR or v == B64_EOF
-end
-
--- evp_decodeblock_int: every group or nil. "=" decodes as zero bits; callers drop the padding.
-local function b64_decode_block(s)
-  local i, n = 1, #s
-  while n > 0 and b64_ascii2bin[s:byte(i)] == B64_WS do
-    i, n = i + 1, n - 1
-  end
-  while n > 3 and b64_not_base64(b64_ascii2bin[s:byte(i + n - 1)]) do
-    n = n - 1
-  end
-  if n % 4 ~= 0 then
-    return nil
-  end
-  local out = {}
-  for g = i, i + n - 1, 4 do
-    local a, b = b64_ascii2bin[s:byte(g)], b64_ascii2bin[s:byte(g + 1)]
-    local c, d = b64_ascii2bin[s:byte(g + 2)], b64_ascii2bin[s:byte(g + 3)]
-    if a >= 0x80 or b >= 0x80 or c >= 0x80 or d >= 0x80 then
-      return nil
-    end
-    local l = ((a * 64 + b) * 64 + c) * 64 + d
-    out[#out + 1] = string.char(math.floor(l / 65536), math.floor(l / 256) % 256, l % 256)
-  end
-  return table.concat(out)
-end
-
--- EVP_DecodeUpdate: rv 1 (more), 0 (end seen) or -1 (error), and the bytes this call made.
-local function b64_decode_update(ctx, input)
-  local n, d = ctx.num, ctx.data
-  local eof, seof, out = 0, false, {}
-  if n > 0 and d[n] == 61 then
-    eof = (n > 1 and d[n - 1] == 61) and 2 or 1
-  end
-  if #input == 0 then
-    return 0, ""
-  end
-  local function flush()
-    local block = b64_decode_block(string.char(unpack(d, 1, n)))
-    n = 0
-    if block == nil or eof > #block then
-      return false
-    end
-    out[#out + 1] = block:sub(1, #block - eof)
-    return true
-  end
-  local function finish(rv)
-    ctx.num = n
-    return rv, table.concat(out)
-  end
-  for i = 1, #input do
-    local byte = input:byte(i)
-    local v = b64_ascii2bin[byte]
-    if v == B64_ERROR then
-      return finish(-1)
-    end
-    if byte == 61 then
-      eof = eof + 1
-    elseif eof > 0 and not b64_not_base64(v) then
-      return finish(-1)
-    end
-    if eof > 2 then
-      return finish(-1)
-    end
-    if v == B64_EOF then
-      seof = true
-      break
-    end
-    if not b64_not_base64(v) then
-      if n >= 64 then
-        return finish(-1)
-      end
-      n = n + 1
-      d[n] = byte
-    end
-    if n == 64 and not flush() then
-      return finish(-1)
-    end
-  end
-  if n > 0 then
-    if n % 4 == 0 then
-      if not flush() then
-        return finish(-1)
-      end
-    elseif seof then
-      return finish(-1)
-    end
-  end
-  return finish((seof or (n == 0 and eof > 0)) and 0 or 1)
-end
-
--- b64_read over a memory BIO holding `input`, read to the end.
-local function b64_read(input, noNl)
-  local pos, tmp, start, cont, tmpNl = 1, "", true, 1, false
-  local dec = { num = 0, data = {} }
-  local out = {}
-  while cont > 0 do
-    local chunk = input:sub(pos, pos + (B64_BLOCK_SIZE - #tmp) - 1)
-    pos = pos + #chunk
-    if #chunk == 0 then
-      cont = 0
-      if #tmp == 0 then
-        break
-      end
-    end
-    tmp = tmp .. chunk
-    local i = #tmp
-    local decodeNow = true
-    if start and not noNl then
-      -- Lines are skipped until one decodes; a first line longer than a block is dropped.
-      local p, num, found = 1, 0, false
-      for q = 1, i do
-        if tmp:byte(q) == 10 then
-          if tmpNl then
-            p, tmpNl = q + 1, false
-          else
-            local k, produced = b64_decode_update(dec, tmp:sub(p, q))
-            num = #produced
-            dec = { num = 0, data = {} }
-            if k > 0 or num > 0 then
-              tmp, start, found = tmp:sub(p), false, true
-              i = #tmp
-              break
-            end
-            p = q + 1
-          end
-        end
-      end
-      if not found and num == 0 then
-        if p == 1 then
-          if i == B64_BLOCK_SIZE then
-            tmpNl, tmp = true, ""
-          end
-        elseif p ~= i + 1 then
-          tmp = tmp:sub(p)
-        end
-        decodeNow = false
-      end
-    elseif not start and i < B64_BLOCK_SIZE and cont > 0 then
-      decodeNow = false
-    end
-    if decodeNow then
-      local rv, bytes
-      if noNl then
-        local jj = i - i % 4
-        local block = b64_decode_block(tmp:sub(1, jj))
-        rv = block and #block or -1
-        if jj > 2 and tmp:byte(jj) == 61 then
-          rv = rv - ((tmp:byte(jj - 1) == 61) and 2 or 1)
-        end
-        tmp, bytes = tmp:sub(jj + 1), rv > 0 and block:sub(1, rv) or ""
-      else
-        rv, bytes = b64_decode_update(dec, tmp)
-        tmp = ""
-      end
-      cont = rv -- an end marker or an error ends the read
-      if rv < 0 then
-        break
-      end
-      out[#out + 1] = bytes
-    end
-  end
-  return table.concat(out)
-end
-
 local function base64_decode_impl(data)
-  if type(data) == "number" then
-    data = tostring(data)
-  elseif type(data) ~= "string" then
-    error("strDecode should be a string", 3)
+  if type(data) ~= "string" then
+    error("Invalid base64 data type")
   end
-  data = data:match("^[^%z]*"):match("^%s*(.-)%s*$")
-  return b64_read(data, data:find("\n", 1, true) == nil)
+  data = string.gsub(data, "[^" .. base64_chars .. "=]", "")
+  return (
+    data
+      :gsub(".", function(x)
+        if x == "=" then
+          return ""
+        end
+        local r, f = "", (base64_chars:find(x) - 1)
+        for i = 6, 1, -1 do
+          r = r .. (f % 2 ^ i - f % 2 ^ (i - 1) > 0 and "1" or "0")
+        end
+        return r
+      end)
+      :gsub("%d%d%d?%d?%d?%d?%d?%d?", function(x)
+        if #x ~= 8 then
+          return ""
+        end
+        local c = 0
+        for i = 1, 8 do
+          c = c + (x:sub(i, i) == "1" and 2 ^ (8 - i) or 0)
+        end
+        return string.char(c)
+      end)
+  )
 end
 
 -- Handle both C4:Base64Encode() and C4.Base64Encode(C4, ...) calling styles
@@ -1192,16 +914,15 @@ local var_type_codes = {
   DEVICE = 14,
 }
 
--- A variable added by name takes the first free id at or after a counter that starts at 1001
--- in each driver load and never goes back in it.
+-- Director numbers each device's variables from 1001 and never reuses an id, so
+-- a deleted name returns at the end of the range. lib/values.lua restores hidden
+-- placeholders to keep that range stable, which is what makes ids worth modelling.
 local next_variable_id = 1001
 
---- Each variable by id, and each id by name. The value lives in Variables under `key`, the
---- variable's current name except after a rename to "", so a SetVariable needs no bookkeeping here.
---- @type table<integer, { name: string, key: string?, type: string, readonly: string, hidden: string }>
-local variables_by_id = {}
---- @type table<string, integer>
-local variable_ids = {}
+--- Id and attributes per variable name, behind C4:GetDeviceVariables. The value
+--- is read from Variables at call time so a SetVariable needs no bookkeeping here.
+--- @type table<string, { id: string, type: string, readonly: string, hidden: string }>
+local variable_meta = {}
 
 -- Strings and numbers only; nil means the controller would reject the value.
 local function var_value(value)
@@ -1212,32 +933,10 @@ local function var_value(value)
   end
 end
 
--- A number, or a string Director reads as one ("0042", " 1020", "3.5", "1e3", "0x10"),
--- is an id, truncated toward zero. Anything else is a name.
-local function numeric_identifier(identifier)
-  local n = identifier
-  if type(n) == "string" then
-    n = tonumber(n)
-  end
-  if type(n) ~= "number" or n ~= n or n == math.huge or n == -math.huge then
-    return nil
-  end
-  return n >= 0 and math.floor(n) or math.ceil(n)
-end
-
--- The id and variable a Set/Delete identifier reaches, if any.
-local function resolve_variable(identifier)
-  local id = numeric_identifier(identifier)
-  if id == nil then
-    id = variable_ids[tostring(identifier)]
-  end
-  return id, id ~= nil and variables_by_id[id] or nil
-end
-
 -- Checks run in the controller's order: the value, then that varType is a
 -- string, then the existing-name return, and only then whether varType names a
 -- real type. An existing name returns false without ever validating varType.
-function C4:AddVariable(identifier, value, varType, readOnly, hidden)
+function C4:AddVariable(name, value, varType, readOnly, hidden)
   local strValue = var_value(value)
   if strValue == nil then
     error("strValue should be a string", 2)
@@ -1246,15 +945,10 @@ function C4:AddVariable(identifier, value, varType, readOnly, hidden)
     error("strVarType should be a string", 2)
   end
 
-  -- A numeric identifier takes exactly that id, named after it, and leaves the counter alone.
-  local id = numeric_identifier(identifier)
-  if id ~= nil and id < 1 then
-    error("id must be greater than zero (unsigned)", 2)
-  end
-  local name = id ~= nil and tostring(id) or tostring(identifier)
+  name = tostring(name)
 
   -- Already present: the controller keeps the existing value and type
-  if Variables[name] ~= nil or variable_ids[name] ~= nil or (id ~= nil and variables_by_id[id] ~= nil) then
+  if Variables[name] ~= nil then
     return false
   end
 
@@ -1262,116 +956,38 @@ function C4:AddVariable(identifier, value, varType, readOnly, hidden)
     error("Invalid variable type.  Valid types include: BOOL, LEVEL, NUMBER, STRING.", 2)
   end
 
-  if id == nil then
-    id = next_variable_id
-    while variables_by_id[id] ~= nil do
-      id = id + 1
-    end
-    next_variable_id = id + 1
-  end
-
   Variables[name] = strValue
-  variable_ids[name] = id
-  variables_by_id[id] = {
-    name = name,
-    key = name,
+  variable_meta[name] = {
+    id = tostring(next_variable_id),
     type = tostring(var_type_codes[varType]),
     readonly = readOnly == true and "True" or "False",
     hidden = hidden == true and "True" or "False",
   }
-  return true, id
+  next_variable_id = next_variable_id + 1
+  return true
 end
 
 -- The value is checked before the name is looked up, so a bad value raises even
 -- on a name that was never added.
-function C4:SetVariable(identifier, value)
+function C4:SetVariable(name, value)
   local strValue = var_value(value)
   if strValue == nil then
     error("strValue should be a string", 2)
   end
-  -- A numeric-looking name reaches the id it spells, not a variable renamed to it.
-  local _, meta = resolve_variable(identifier)
+  name = tostring(name)
 
   -- Never added: silently does nothing, and does not create it
-  if meta == nil or meta.key == nil or Variables[meta.key] == nil then
+  if Variables[name] == nil then
     return
   end
 
-  Variables[meta.key] = strValue
+  Variables[name] = strValue
 end
 
-function C4:DeleteVariable(identifier)
-  local id, meta = resolve_variable(identifier)
-  if meta ~= nil then
-    if meta.key ~= nil then
-      Variables[meta.key] = nil
-    end
-    variable_ids[meta.name] = nil
-    variables_by_id[id] = nil
-  end
-end
-
--- Undocumented; first-party drivers call it unguarded from OS 4.0.0. It keeps the id and
--- returns false for a missing id or a name any variable has, its own included.
-local function set_variable_name(_, id, name)
-  id, name = tonumber(id), tostring(name)
-  local meta = variables_by_id[id]
-  if meta == nil or Variables[name] ~= nil or variable_ids[name] ~= nil then
-    return false
-  end
-  local value = meta.key ~= nil and Variables[meta.key] or ""
-  if meta.key ~= nil then
-    Variables[meta.key] = nil
-  end
-  Variables[name], meta.key = value, name
-  if name == "" then
-    -- True, but Director keeps the number as its name, and the key "" lasts only this load.
-    return true
-  end
-  variable_ids[meta.name], variable_ids[name] = nil, id
-  meta.name = name
-  return true
-end
-C4.SetVariableName = set_variable_name
-
---- Harness: whether C4.SetVariableName exists (the default), as it does from OS 4.0.0 at least.
-function ShimVariableRename(enabled)
-  C4.SetVariableName = enabled and set_variable_name or nil
-end
-
---- Harness: a driver update. Director keeps every variable, and a new load's counter
---- starts again at 1001, so it fills the gaps a delete left.
-function ShimUpdateDriver()
-  next_variable_id = 1001
-  for _, meta in pairs(variables_by_id) do
-    if meta.key ~= nil and meta.key ~= meta.name then
-      Variables[meta.key], meta.key = nil, nil -- renamed to "": no Variables key reaches it now
-    end
-  end
-end
-
---- Harness: a Director restart or controller boot. No driver variable survives it.
-function ShimRestartDirector()
-  for _, meta in pairs(variables_by_id) do
-    if meta.key ~= nil then
-      Variables[meta.key] = nil
-    end
-  end
-  variables_by_id, variable_ids = {}, {}
-  next_variable_id = 1001
-end
-
---- Harness: programming or another driver writes a variable by id. Director calls
---- OnVariableChanged with the variable's current name.
-function ShimWriteVariable(id, value)
-  local meta = variables_by_id[id]
-  if meta == nil or meta.key == nil then
-    return
-  end
-  Variables[meta.key] = tostring(value)
-  if type(OnVariableChanged) == "function" then
-    OnVariableChanged(meta.key)
-  end
+function C4:DeleteVariable(name)
+  name = tostring(name)
+  Variables[name] = nil
+  variable_meta[name] = nil
 end
 
 -- Keyed by id as a string, with every field a string: `type` is a numeric code,
@@ -1516,11 +1132,11 @@ function C4:GetDeviceVariables(deviceId)
   -- The running driver's own variables, as created through C4:AddVariable.
   local variables = {}
   if tonumber(deviceId) == tonumber(C4:GetDeviceID()) then
-    for id, meta in pairs(variables_by_id) do
-      variables[tostring(id)] = {
-        name = meta.name,
+    for name, meta in pairs(variable_meta) do
+      variables[meta.id] = {
+        name = name,
         description = "",
-        value = meta.key ~= nil and Variables[meta.key] or nil,
+        value = Variables[name],
         type = meta.type,
         readonly = meta.readonly,
         hidden = meta.hidden,
@@ -1530,57 +1146,18 @@ function C4:GetDeviceVariables(deviceId)
   return variables
 end
 
--- C4:Persist* in memory, as on 4.3.0 except that a nil encrypted flag (rejected there) is false.
--- Not the bare Persist* globals: global/lib.lua redefines those on require, delegating here.
+-- The C4:Persist* SDK methods, backed by an in-memory store. The bare
+-- PersistGetValue/SetValue/DeleteValue globals belong to global/lib.lua, whose
+-- wrappers delegate here when C4.PersistSetValue exists; stubbing the globals
+-- instead would be paved over the moment any module requires global.lib.
 local persist_store = {}
 
--- The controller's cipher XORs a fixed keystream; the shim repeats its first 40 bytes.
-local PERSIST_KEYSTREAM = "402afa804cc62af27f5ebb2ed09026b2d1835e311aef3c3efed28088612f2b8efd3d6f410e019451"
-
-local function persist_cipher(data)
-  local out = {}
-  for i = 1, #data do
-    local k = (i - 1) % (#PERSIST_KEYSTREAM / 2) * 2 + 1
-    local a, b, x, bit = data:byte(i), tonumber(PERSIST_KEYSTREAM:sub(k, k + 1), 16), 0, 1
-    for _ = 1, 8 do
-      if a % 2 ~= b % 2 then
-        x = x + bit
-      end
-      a, b, bit = math.floor(a / 2), math.floor(b / 2), bit * 2
-    end
-    out[i] = string.char(x)
-  end
-  return table.concat(out)
-end
-
--- Under the other flag, an encrypted value reads as base64 of its ciphertext, and a plain one as
--- its base64 deciphered, or nothing if it is not a string or decodes to nothing.
 function C4:PersistGetValue(key, encrypted)
-  local entry = persist_store[key]
-  if entry == nil or entry.encrypted == (encrypted == true) then
-    return entry and entry.value
-  elseif entry.encrypted then
-    return base64_encode_impl(persist_cipher(tostring(entry.value)))
-  end
-  local decoded = type(entry.value) == "string" and base64_decode_impl(entry.value) or ""
-  if decoded ~= "" then
-    return persist_cipher(decoded)
-  end
+  return persist_store[key]
 end
 
 function C4:PersistSetValue(key, value, encrypted)
-  if type(value) == "string" then
-    value = value:match("^[^%z]*")
-  elseif value ~= value then
-    value = '{":number:":null}'
-  elseif type(value) == "number" then
-    value = math.max(math.min(value, 2 ^ 64), -2 ^ 63)
-  end
-  if value ~= "" then
-    persist_store[key] = { value = value, encrypted = encrypted == true }
-  elseif encrypted ~= true then
-    persist_store[key] = nil
-  end
+  persist_store[key] = value
 end
 
 function C4:PersistDeleteValue(key)
@@ -1693,14 +1270,6 @@ function ShimFireTimers()
       end
       timer.callback(timer.handle, 0)
     end
-  end
-end
-
---- Harness: a new driver load. Assumed: its new Lua state gets no timer the old load set.
-function ShimCancelTimers()
-  for id, timer in pairs(timers) do
-    timer.cancelled = true
-    timers[id] = nil
   end
 end
 
