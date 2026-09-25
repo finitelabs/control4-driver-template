@@ -3,6 +3,7 @@
 --   2. Send(s, opcode), additive, default 0x81
 --   3. Host header omits the default port
 --   4. 64-bit extended-length field uses %016X
+--   5. delete(onComplete), and that it stops the Ping and PongResponse timers
 --
 -- Run from the driver root:
 --   make test
@@ -247,6 +248,34 @@ do
   T.check("ws default 80 omits port", hostHeaderOf("ws://b.example.com/ws") == "b.example.com")
   T.check("wss non-default keeps port", hostHeaderOf("wss://c.example.com:8443/ws") == "c.example.com:8443")
   T.check("ws non-default keeps port", hostHeaderOf("ws://d.example.com:8081/ws") == "d.example.com:8081")
+end
+
+--------------------------------------------------------------------------------
+T.section("delete() stops the timers a live socket runs")
+--------------------------------------------------------------------------------
+do
+  resetBindings()
+  -- Close() cancels the Ping and PongResponse timers by name. Had one site kept the
+  -- v14 name, the real timer would keep firing on the deleted socket.
+  local url = "wss://timers.example.com/ws"
+  local function timersFor()
+    local n = 0
+    for name in pairs(Timer) do
+      if type(name) == "string" and name:find(url, 1, true) then
+        n = n + 1
+      end
+    end
+    return n
+  end
+
+  local ws = WebSocket:new(url)
+  ws:ConnectionChanged("ONLINE")
+  ws:Ping()
+  T.check("going ONLINE and pinging starts two timers", timersFor() == 2, timersFor())
+  ws:delete()
+  T.check("delete() leaves only the close timer", timersFor() == 1, timersFor())
+  fireTimers()
+  T.check("and none once it has run", timersFor() == 0, timersFor())
 end
 
 T.finish()
