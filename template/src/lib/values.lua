@@ -462,7 +462,7 @@ function Values:_learnIds(values)
   for name, value in pairs(values) do
     learned = learned or value.id ~= nil
     pending = pending or value.varType ~= nil or value.deleted == true
-    -- An older build drops the id of each record it rewrites, so the load after a downgrade learns again
+    -- An older build drops the id of each record it rewrites, so the load back from a downgrade learns again
     rewritten = rewritten or (value.id == nil and Variables[name] ~= nil)
   end
   if learned and not rewritten then
