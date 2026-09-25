@@ -27,6 +27,14 @@ Every gating defect so far passed a default render and appeared only under a
 non-default one, so when you add an `_exclude` entry, add the leg that exercises
 it — and check that leg is distinct with `diff -r`.
 
+## Tests that stay out of driver repos
+
+`migration-test/` holds the test of the switch from v0.9.28's `lib/values`, the
+one every released driver runs, to this one. It sits outside `template/`, so no
+driver repo receives it. The `render` job copies it into the render's `test/`,
+with `git show v0.9.28:template/src/lib/values.lua` saved as
+`test/values_v0928.lua`, before `make test`. To run it locally, do the same.
+
 ## Rendering, and the default that lies
 
 ```bash
