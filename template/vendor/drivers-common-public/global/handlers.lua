@@ -535,16 +535,16 @@ function UpdateProperty(strProperty, strValue, notifyChange)
     for propertyXML in XMLgCapture(C4:GetDriverConfigInfo("config"), "property") do
       local propertyName = XMLCapture(propertyXML, "name")
       if propertyName and PropertyConfig[propertyName] == nil then
-        local items = {}
-        for listItem in XMLgCapture(propertyXML, "item") do
-          table.insert(items, listItem)
+        local propertyInfo = { type = XMLCapture(propertyXML, "type"), items = {} }
+        if propertyInfo.type == "LIST" then
+          for listItem in XMLgCapture(propertyXML, "item") do
+            table.insert(propertyInfo.items, listItem)
+          end
+        elseif propertyInfo.type == "RANGED_INTEGER" or propertyInfo.type == "RANGED_FLOAT" then
+          propertyInfo.minimum = tonumber(XMLCapture(propertyXML, "minimum"))
+          propertyInfo.maximum = tonumber(XMLCapture(propertyXML, "maximum"))
         end
-        PropertyConfig[propertyName] = {
-          type = XMLCapture(propertyXML, "type"),
-          items = items,
-          minimum = tonumber(XMLCapture(propertyXML, "minimum")),
-          maximum = tonumber(XMLCapture(propertyXML, "maximum")),
-        }
+        PropertyConfig[propertyName] = propertyInfo
       end
     end
   end

@@ -16,6 +16,7 @@ local CONFIG = table.concat({
   "<properties>",
   "<property><name>Mode</name><type>LIST</type><items><item>Auto</item><item>Off</item></items></property>",
   "<property><name>Level</name><type>RANGED_INTEGER</type><minimum>0</minimum><maximum>10</maximum></property>",
+  "<property><name>Offset</name><type>RANGED_FLOAT</type><minimum>-1.5</minimum><maximum>1.5</maximum></property>",
   "<property><name>Target</name><type>DYNAMIC_LIST</type><items></items></property>",
   "<property><name>Status</name><type>STRING</type></property>",
   "</properties>",
@@ -35,7 +36,7 @@ function C4:UpdateProperty(name, value)
   Properties[name] = value
 end
 
-Properties.Mode, Properties.Level, Properties.Target, Properties.Status = "Off", "0", "", ""
+Properties.Mode, Properties.Level, Properties.Offset, Properties.Target, Properties.Status = "Off", "0", "0", "", ""
 
 --- Returns what reached C4:UpdateProperty, what was printed, and whether it threw.
 local function update(name, value)
@@ -54,6 +55,8 @@ T.contains("and says why", output, "Value not in list")
 T.eq("an integer in range is sent", update("Level", 7), "7")
 T.eq("one out of range is not", update("Level", 11), nil)
 T.eq("nor is a fraction", update("Level", 2.5), nil)
+T.eq("a float in range is sent", update("Offset", -0.5), "-0.5")
+T.eq("one out of range is not", update("Offset", 2), nil)
 T.eq("an unchecked type is sent as is", update("Status", "anything"), "anything")
 T.eq("the config was read once", configReads, 1)
 
