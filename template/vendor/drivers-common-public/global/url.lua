@@ -340,7 +340,11 @@ function ProcessResponse(strData, responseCode, tHeaders, strError, info)
   end
 
   if isJSON and strError == nil then
-    data = JSON:decode(strData)
+    -- JSON.lua raises on a body it cannot parse, where upstream's json.lua returned nil.
+    local ok, decoded = pcall(JSON.decode, JSON, strData)
+    if ok then
+      data = decoded
+    end
     if data == nil and len ~= 0 then
       print("dcp_url: Content-Type indicated JSON but content is not valid JSON")
 
