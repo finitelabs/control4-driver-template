@@ -239,9 +239,7 @@ T.check(
 C4:AddVariable("Temp", "1", "STRING", true, false)
 T.check("the name is reusable after a delete", Variables["Temp"] == "1")
 
--- Ids come from a counter that a delete does not rewind. This is the behaviour
--- lib/values.lua works around: it restores hidden placeholders for deleted
--- values so the surviving ones keep their ids across a reset.
+-- Ids come from a counter that a delete does not rewind within a driver load.
 local _, reusedId = variableByName("Temp")
 T.check("a re-added name gets a fresh id", reusedId ~= deletedId, reusedId)
 T.check("ids only ever increase", tonumber(reusedId) > tonumber(deletedId))
@@ -276,6 +274,111 @@ for _ in pairs(Variables) do
   tracked = tracked + 1
 end
 T.check("every variable has a distinct id", reported == tracked, reported .. " reported, " .. tracked .. " added")
+
+--------------------------------------------------------------------------------
+T.section("variable ids across driver loads")
+--------------------------------------------------------------------------------
+
+-- Measured on a 4.3.0 controller (probe driver, 2026-09-23).
+ShimRestartDirector()
+local function idOf(name)
+  return tonumber((select(2, variableByName(name))))
+end
+
+T.eq("a by-name add returns true and its id", { C4:AddVariable("A", "", "STRING") }, { true, 1001 })
+C4:AddVariable("B", "", "STRING")
+C4:AddVariable("C", "", "STRING")
+C4:DeleteVariable("B")
+T.eq("a freed id is not handed out again in that load", select(2, C4:AddVariable("D", "", "STRING")), 1004)
+T.eq("a numeric add takes exactly that id", { C4:AddVariable(1012, "", "STRING", true, true) }, { true, 1012 })
+T.eq("and is named after it", variableField("1012", "hidden"), "True")
+T.eq("and leaves the counter alone", select(2, C4:AddVariable("E", "", "STRING")), 1005)
+T.eq("a numeric add of a taken id fails", C4:AddVariable(1001, "", "STRING"), false)
+C4:AddVariable("1013", "", "STRING")
+T.eq("so does one whose name is taken", C4:AddVariable(1013, "", "STRING"), false)
+T.eq("an existing name returns false", C4:AddVariable("A", "", "STRING", true, true), false)
+T.eq("and is not hidden by it", variableField("A", "hidden"), "False")
+
+ShimUpdateDriver()
+T.eq("a driver update keeps every variable", idOf("E"), 1005)
+T.eq("and its counter starts again, filling gaps", select(2, C4:AddVariable("F", "", "STRING")), 1002)
+
+ShimRestartDirector()
+T.eq("a Director restart keeps no variable", next(C4:GetDeviceVariables(C4:GetDeviceID())), nil)
+T.eq("and Variables is empty", next(Variables), nil)
+T.eq("its counter starts at 1001", select(2, C4:AddVariable("G", "", "STRING")), 1001)
+
+-- Director reads a numeric-looking string as an id, like tonumber truncated.
+for _, case in ipairs({
+  { "2000", 2000, "2000" },
+  { "0042", 42, "42" },
+  { "3.5", 3, "3" },
+  { " 1020", 1020, "1020" },
+  { "1e3", 1000, "1000" },
+  { "0x10", 16, "16" },
+}) do
+  local ok, id = C4:AddVariable(case[1], "v", "STRING")
+  T.check(
+    string.format("AddVariable(%q) takes id %d, named %q", case[1], case[2], case[3]),
+    ok and id == case[2] and idOf(case[3]) == case[2]
+  )
+end
+T.raises("a string read as an id below 1 raises", function()
+  C4:AddVariable("-5", "v", "STRING")
+end, "id must be greater than zero")
+
+T.section("C4:SetVariableName")
+ShimRestartDirector()
+C4:AddVariable(1010, "ten", "STRING")
+T.eq("renames in place", C4:SetVariableName(1010, "Named Ten"), true)
+T.eq("keeping the id", idOf("Named Ten"), 1010)
+T.eq("Variables follows the new name", { Variables["Named Ten"], Variables["1010"] }, { "ten" })
+C4:SetVariable("Named Ten", "x")
+T.eq("a set by the new name works", Variables["Named Ten"], "x")
+C4:AddVariable(1012, "", "STRING")
+T.eq("onto a name another variable has it returns false", C4:SetVariableName(1012, "Named Ten"), false)
+T.eq("and changes nothing", idOf("1012"), 1012)
+T.eq("to its own name it returns false", C4:SetVariableName(1010, "Named Ten"), false)
+C4:SetVariableName(1012, "3.5")
+C4:AddVariable(3, "three", "STRING")
+C4:SetVariable("3.5", "y")
+T.eq("a set by a numeric-looking name reaches the id it spells", { Variables["3.5"], Variables["3"] }, { "", "y" })
+C4:SetVariable(1012, "z")
+T.eq("a set by id reaches the renamed variable", Variables["3.5"], "z")
+C4:DeleteVariable("3.5")
+T.eq("a delete by that name deletes the id it spells", { Variables["3.5"], Variables["3"] }, { "z" })
+C4:DeleteVariable(1012)
+T.eq("a delete by id deletes the renamed variable", Variables["3.5"], nil)
+ShimUpdateDriver()
+T.eq("a driver update keeps a renamed variable under its name", idOf("Named Ten"), 1010)
+local fired
+local realOnVariableChanged = OnVariableChanged
+OnVariableChanged = function(name)
+  fired = name
+end
+ShimWriteVariable(1010, "w")
+T.eq("a write from programming names the variable as renamed", fired, "Named Ten")
+OnVariableChanged = realOnVariableChanged
+ShimRestartDirector()
+-- Measured on 4.3.0 (2026-09-24): a rename to "" does not take.
+C4:AddVariable(1061, "x", "STRING")
+T.eq('a rename to "" returns true', C4:SetVariableName(1061, ""), true)
+T.eq("but Director keeps its number as its name", variableField("1061", "name"), "1061")
+T.eq('though Variables[""] holds its value in that load', { Variables[""], Variables["1061"] }, { "x" })
+T.eq('so a by-name add of "" is refused', C4:AddVariable("", "e", "STRING"), false)
+ShimUpdateDriver()
+T.eq("and after a driver update no key reaches it", { Variables[""], Variables["1061"] }, {})
+T.check("nor after a second one", pcall(ShimUpdateDriver) and Variables[""] == nil)
+T.eq("while it keeps its id", C4:AddVariable(1061, "", "STRING"), false)
+C4:DeleteVariable(1061)
+T.eq('a by-name add of "" is named ""', { C4:AddVariable("", "e", "STRING") }, { true, 1001 })
+ShimUpdateDriver()
+T.eq("and keeps its key across a driver update", Variables[""], "e")
+ShimVariableRename(false)
+T.eq("switched off, as on an OS without it (3.x unmeasured)", C4.SetVariableName, nil)
+ShimVariableRename(true)
+T.eq("and on again", type(C4.SetVariableName), "function")
+ShimRestartDirector()
 
 --------------------------------------------------------------------------------
 T.section("lib/values.lua under the shim")
@@ -338,6 +441,14 @@ require("drivers-common-public.global.timer")
 T.raisesAt("C4:KillTimer blames the caller, not the shim", function()
   C4:KillTimer(C4:SetTimer(5000, function() end, false))
 end)
+
+local oldLoadFired = 0
+C4:SetTimer(5000, function()
+  oldLoadFired = oldLoadFired + 1
+end, false)
+ShimCancelTimers()
+ShimFireTimers()
+T.eq("a new driver load drops the old load's timers", oldLoadFired, 0)
 
 for _, hasSocket in ipairs({ false, true }) do
   local label = hasSocket and "with luasocket" or "without luasocket"

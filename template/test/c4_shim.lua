@@ -1194,15 +1194,16 @@ local var_type_codes = {
   DEVICE = 14,
 }
 
--- Director numbers each device's variables from 1001 and never reuses an id, so
--- a deleted name returns at the end of the range. lib/values.lua restores hidden
--- placeholders to keep that range stable, which is what makes ids worth modelling.
+-- Measured on a 4.3.0 controller. A variable added by name takes the first free id at
+-- or after a counter that starts at 1001 in each driver load and never goes back in it.
 local next_variable_id = 1001
 
---- Id and attributes per variable name, behind C4:GetDeviceVariables. The value
---- is read from Variables at call time so a SetVariable needs no bookkeeping here.
---- @type table<string, { id: string, type: string, readonly: string, hidden: string }>
-local variable_meta = {}
+--- Each variable by id, and each id by name. The value lives in Variables under `key`, the
+--- variable's current name except after a rename to "", so a SetVariable needs no bookkeeping here.
+--- @type table<integer, { name: string, key: string?, type: string, readonly: string, hidden: string }>
+local variables_by_id = {}
+--- @type table<string, integer>
+local variable_ids = {}
 
 -- Strings and numbers only; nil means the controller would reject the value.
 local function var_value(value)
@@ -1213,10 +1214,32 @@ local function var_value(value)
   end
 end
 
+-- A number, or a string Director reads as one ("0042", " 1020", "3.5", "1e3", "0x10"),
+-- is an id, truncated toward zero. Anything else is a name.
+local function numeric_identifier(identifier)
+  local n = identifier
+  if type(n) == "string" then
+    n = tonumber(n)
+  end
+  if type(n) ~= "number" or n ~= n or n == math.huge or n == -math.huge then
+    return nil
+  end
+  return n >= 0 and math.floor(n) or math.ceil(n)
+end
+
+-- The id and variable a Set/Delete identifier reaches, if any.
+local function resolve_variable(identifier)
+  local id = numeric_identifier(identifier)
+  if id == nil then
+    id = variable_ids[tostring(identifier)]
+  end
+  return id, id ~= nil and variables_by_id[id] or nil
+end
+
 -- Checks run in the controller's order: the value, then that varType is a
 -- string, then the existing-name return, and only then whether varType names a
 -- real type. An existing name returns false without ever validating varType.
-function C4:AddVariable(name, value, varType, readOnly, hidden)
+function C4:AddVariable(identifier, value, varType, readOnly, hidden)
   local strValue = var_value(value)
   if strValue == nil then
     error("strValue should be a string", 2)
@@ -1225,10 +1248,15 @@ function C4:AddVariable(name, value, varType, readOnly, hidden)
     error("strVarType should be a string", 2)
   end
 
-  name = tostring(name)
+  -- A numeric identifier takes exactly that id, named after it, and leaves the counter alone.
+  local id = numeric_identifier(identifier)
+  if id ~= nil and id < 1 then
+    error("id must be greater than zero (unsigned)", 2)
+  end
+  local name = id ~= nil and tostring(id) or tostring(identifier)
 
   -- Already present: the controller keeps the existing value and type
-  if Variables[name] ~= nil then
+  if Variables[name] ~= nil or variable_ids[name] ~= nil or (id ~= nil and variables_by_id[id] ~= nil) then
     return false
   end
 
@@ -1236,38 +1264,116 @@ function C4:AddVariable(name, value, varType, readOnly, hidden)
     error("Invalid variable type.  Valid types include: BOOL, LEVEL, NUMBER, STRING.", 2)
   end
 
+  if id == nil then
+    id = next_variable_id
+    while variables_by_id[id] ~= nil do
+      id = id + 1
+    end
+    next_variable_id = id + 1
+  end
+
   Variables[name] = strValue
-  variable_meta[name] = {
-    id = tostring(next_variable_id),
+  variable_ids[name] = id
+  variables_by_id[id] = {
+    name = name,
+    key = name,
     type = tostring(var_type_codes[varType]),
     readonly = readOnly == true and "True" or "False",
     hidden = hidden == true and "True" or "False",
   }
-  next_variable_id = next_variable_id + 1
-  return true
+  return true, id
 end
 
 -- The value is checked before the name is looked up, so a bad value raises even
 -- on a name that was never added.
-function C4:SetVariable(name, value)
+function C4:SetVariable(identifier, value)
   local strValue = var_value(value)
   if strValue == nil then
     error("strValue should be a string", 2)
   end
-  name = tostring(name)
+  -- A numeric-looking name reaches the id it spells, not a variable renamed to it.
+  local _, meta = resolve_variable(identifier)
 
   -- Never added: silently does nothing, and does not create it
-  if Variables[name] == nil then
+  if meta == nil or meta.key == nil or Variables[meta.key] == nil then
     return
   end
 
-  Variables[name] = strValue
+  Variables[meta.key] = strValue
 end
 
-function C4:DeleteVariable(name)
-  name = tostring(name)
-  Variables[name] = nil
-  variable_meta[name] = nil
+function C4:DeleteVariable(identifier)
+  local id, meta = resolve_variable(identifier)
+  if meta ~= nil then
+    if meta.key ~= nil then
+      Variables[meta.key] = nil
+    end
+    variable_ids[meta.name] = nil
+    variables_by_id[id] = nil
+  end
+end
+
+-- Undocumented; first-party drivers call it unguarded from OS 4.0.0. It keeps the id and
+-- returns false for a missing id or a name any variable has, its own included.
+local function set_variable_name(_, id, name)
+  id, name = tonumber(id), tostring(name)
+  local meta = variables_by_id[id]
+  if meta == nil or Variables[name] ~= nil or variable_ids[name] ~= nil then
+    return false
+  end
+  local value = meta.key ~= nil and Variables[meta.key] or ""
+  if meta.key ~= nil then
+    Variables[meta.key] = nil
+  end
+  Variables[name], meta.key = value, name
+  if name == "" then
+    -- Measured: true, but Director keeps the number as its name, and the key "" lasts only this load.
+    return true
+  end
+  variable_ids[meta.name], variable_ids[name] = nil, id
+  meta.name = name
+  return true
+end
+C4.SetVariableName = set_variable_name
+
+--- Harness: whether C4.SetVariableName exists (the default), as it does from OS 4.0.0 at least.
+function ShimVariableRename(enabled)
+  C4.SetVariableName = enabled and set_variable_name or nil
+end
+
+--- Harness: a driver update. Director keeps every variable, and a new load's counter
+--- starts again at 1001, so it fills the gaps a delete left.
+function ShimUpdateDriver()
+  next_variable_id = 1001
+  for _, meta in pairs(variables_by_id) do
+    if meta.key ~= nil and meta.key ~= meta.name then
+      Variables[meta.key], meta.key = nil, nil -- renamed to "": no Variables key reaches it now
+    end
+  end
+end
+
+--- Harness: a Director restart or controller boot. No driver variable survives it.
+function ShimRestartDirector()
+  for _, meta in pairs(variables_by_id) do
+    if meta.key ~= nil then
+      Variables[meta.key] = nil
+    end
+  end
+  variables_by_id, variable_ids = {}, {}
+  next_variable_id = 1001
+end
+
+--- Harness: programming or another driver writes a variable by id. Director calls
+--- OnVariableChanged with the variable's current name.
+function ShimWriteVariable(id, value)
+  local meta = variables_by_id[id]
+  if meta == nil or meta.key == nil then
+    return
+  end
+  Variables[meta.key] = tostring(value)
+  if type(OnVariableChanged) == "function" then
+    OnVariableChanged(meta.key)
+  end
 end
 
 -- Keyed by id as a string, with every field a string: `type` is a numeric code,
@@ -1412,11 +1518,11 @@ function C4:GetDeviceVariables(deviceId)
   -- The running driver's own variables, as created through C4:AddVariable.
   local variables = {}
   if tonumber(deviceId) == tonumber(C4:GetDeviceID()) then
-    for name, meta in pairs(variable_meta) do
-      variables[meta.id] = {
-        name = name,
+    for id, meta in pairs(variables_by_id) do
+      variables[tostring(id)] = {
+        name = meta.name,
         description = "",
-        value = Variables[name],
+        value = meta.key ~= nil and Variables[meta.key] or nil,
         type = meta.type,
         readonly = meta.readonly,
         hidden = meta.hidden,
@@ -1595,6 +1701,15 @@ function ShimFireTimers()
       end
       timer.callback(timer.handle, 0)
     end
+  end
+end
+
+--- Harness, not a controller API: a new driver load. Assumed, not measured: a load starts a new
+--- Lua state, so no timer the old load set fires into it.
+function ShimCancelTimers()
+  for id, timer in pairs(timers) do
+    timer.cancelled = true
+    timers[id] = nil
   end
 end
 
