@@ -32,8 +32,6 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **values.lua**: value parsing, coercion, and formatting utilities
 - **logging.lua** / **utils.lua**: structured logging and general utilities (always included)
 - **github-updater.lua**: GitHub Releases-based self-updater for non-DriverCentral (`oss`) builds
-- **zip.lua**: reads a file out of an in-memory zip archive; the updater reads each release `.c4z`'s
-  `driver.xml` with it
 
 ### Vendor Libraries (`vendor/`, selected via `vendor_modules`)
 - **JSON.lua**: JSON encoder/decoder

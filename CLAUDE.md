@@ -78,8 +78,8 @@ renders unconditionally, and `gen-squishy` bundles only what a driver actually
 requires, so a rendered-but-unused module is zero bytes in the `.c4z`. A new
 `src/lib` file needs no `_exclude` entry.
 
-`github-updater.lua` and its tests are gated on `oss`, the distribution whose
-update mechanism they are.
+`github-updater.lua` and its alias test are gated on `oss`, the distribution
+whose update mechanism they are.
 
 `_skip_if_exists` holds `CHANGELOG.md` and `src/constants.lua`, so existing repos
 never receive changes to them — only newly created ones do. This is why the
