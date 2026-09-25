@@ -243,6 +243,20 @@ H.load("restart")
 local want = { A = 1001, B = 1005, C = 1004, E = 1002, N = 1006 }
 T.eq("the next load learns each id, which a restart keeps", H.visible(), want)
 
+T.section("a list that is not current at a later load keeps each recorded id")
+values = fresh()
+values:update("A", "a", "STRING")
+values:update("B", "b", "STRING")
+values:delete("A")
+C4.GetDeviceVariables = function()
+  return {}
+end
+values = H.load("update")
+C4.GetDeviceVariables = list
+values:update("A", "a", "STRING")
+values:update("N", "n", "STRING")
+T.eq("so a deleted name comes back at its id, a new name at the next", H.visible(), { A = 1001, B = 1002, N = 1003 })
+
 T.section("a variable v0.9.28 rewrote keeps its id through a downgrade and back")
 -- This build gave A, B and C their ids; v0.9.28 rewrote A's record without its id
 stored({
@@ -328,6 +342,25 @@ values = H.load("restart")
 values:update("C", "c", "STRING")
 values:update("D", "d", "STRING")
 T.eq("so D comes back there, and C at a new id", H.visible(), { A = 1001, B = 1002, C = 1005, D = 1004, E = 1003 })
+
+T.section("a name v0.9.28 deleted takes the id its restart gave it, though a variable Director moved had it")
+-- X was a plain value when B and Y were added, so this build gave them 1002 and 1003 and X 1004.
+-- v0.9.28's restart put X at 1002, B at 1003 and Y at 1004, then it rewrote and deleted Y, whose
+-- record P, after it, keeps from v0.9.28's trim.
+stored({
+  A = { index = 1, id = 1001, varType = "STRING", value = "a", writable = false },
+  X = { index = 2, id = 1004, varType = "STRING", value = "x", writable = false },
+  B = { index = 3, id = 1002, varType = "STRING", value = "b", writable = false },
+  Y = { index = 4, varType = "STRING", writable = false, deleted = true },
+  P = { index = 5, value = "{}", writable = false },
+})
+C4:AddVariable("A", "a", "STRING", true, false)
+C4:AddVariable("X", "x", "STRING", true, false)
+C4:AddVariable("B", "b", "STRING", true, false)
+values = H.load("update")
+values:update("N", "n", "STRING")
+values:update("Y", "y", "STRING")
+T.eq("so Y comes back there, N at the next id", H.visible(), { A = 1001, B = 1003, N = 1005, X = 1002, Y = 1004 })
 
 T.section("a deleted name v0.9.28 added back is shown at its id")
 -- v0.9.28 deleted B and saved it again with no value, which left its record deleted but added its variable

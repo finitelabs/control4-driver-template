@@ -469,11 +469,9 @@ function Values:_addVariable(values, name, value, strValue)
   return changed
 end
 
---- Whether variables are added at their ids in this load. At a driver update,
---- Director's list of this device's variables is the truth, and each record takes
---- its variable's id by name. A Director restart leaves no variable, so a record
---- with no id, as an older build writes it, takes the id that build's restore
---- gives it, if no record has it.
+--- Whether variables are added at their ids in this load. Each record takes its
+--- variable's id from Director's list by name, or with no variable and no id, the
+--- id an older build's restore gives it.
 --- @private
 --- @param values table<string, Value> The values table, which takes the ids.
 --- @return boolean byId True if variables are added at their ids.
@@ -481,14 +479,6 @@ function Values:_learnIds(values)
   log:trace("Values:_learnIds()")
   if C4.SetVariableName == nil then
     return false
-  end
-
-  -- A deleted record's id is taken though Director has no variable at it
-  local taken = {}
-  for _, value in pairs(values) do
-    if value.id ~= nil then
-      taken[value.id] = true
-    end
   end
 
   local restarted, variables = next(Variables) == nil, {}
@@ -505,7 +495,7 @@ function Values:_learnIds(values)
     for name in pairs(Variables) do
       if not listed[name] then
         log:warn("Could not read this device's variables from Director; no id is learned in this load")
-        return next(taken) ~= nil
+        return self:_getNextVariableId(values) > FIRST_VARIABLE_ID
       end
     end
   end
@@ -529,14 +519,21 @@ function Values:_learnIds(values)
     end
     value.id = tonumber(id)
     values[variable.name] = value
-    taken[value.id] = true
   end
 
-  -- A name deleted in the older build's last load has no variable to learn from, nor has any after a restart.
+  -- A deleted record's id is taken though Director has no variable at it
+  local taken = {}
+  for _, value in pairs(values) do
+    if value.id ~= nil then
+      taken[value.id] = true
+    end
+  end
+
+  -- A name deleted in the older build's last load has no variable to learn from, and after a restart no name has.
   -- One with no id takes the id that build's restore gives it, counting from the first id, if free.
   for rank, name in ipairs(order) do
     local value, id = values[name], FIRST_VARIABLE_ID + rank - 1
-    if value.id == nil and (value.deleted or restarted) and not taken[id] then
+    if value.id == nil and not taken[id] then
       value.id = id
       taken[id] = true
     end
