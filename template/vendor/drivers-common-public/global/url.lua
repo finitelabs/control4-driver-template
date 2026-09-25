@@ -1,4 +1,17 @@
 -- Copyright 2025 Snap One, LLC. All rights reserved.
+--
+-- LOCAL FORK of Snap One's drivers-common-public url module, upstream URL 28.
+-- Re-vendoring from upstream silently drops everything listed here, in every repo the
+-- template renders. Keep this list current.
+--
+-- Deltas against upstream URL 28:
+--   1. JSON is vendor/JSON.lua rather than upstream's module/json.lua, which is not
+--      vendored.
+--   2. Metrics are removed, with SEND_SUCCESS_METRICS.
+--   3. ProcessResponse pcall-wraps JSON:decode. JSON.lua raises on a body it cannot
+--      parse, where upstream's json returned nil, so the callback never ran.
+--
+-- test/test_url_json.lua covers 3.
 
 COMMON_URL_VER = 28
 

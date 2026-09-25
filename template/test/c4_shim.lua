@@ -155,6 +155,7 @@ function C4:GetDeviceData(deviceId, key)
 end
 function C4:AllowExecute() end
 function C4:UpdateProperty() end
+function C4:UpdatePropertyList() end
 function C4:SetPropertyAttribs() end
 -- url.lua parses .version at load time; a non-numeric stub selects the pre-OS-3.0 path.
 function C4:GetVersionInfo()
@@ -418,6 +419,11 @@ end
 --- @param section string A driver.xml section. Only "connections" is modelled.
 --- @return string|nil xml The section as XML.
 function C4:GetDriverConfigInfo(section)
+  -- Empty, not nil, so UpdateProperty validates nothing rather than printing an XMLCapture
+  -- error. Every repo shares this shim, so a canned config would be the wrong driver.xml.
+  if section == "config" then
+    return ""
+  end
   if section ~= "connections" then
     return nil
   end
