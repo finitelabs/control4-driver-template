@@ -458,14 +458,16 @@ function Values:_learnIds(values)
   if C4.SetVariableName == nil then
     return false
   end
-  local pending = false
-  for _, value in pairs(values) do
-    if value.id ~= nil then
-      return true
-    end
+  local learned, pending, rewritten = false, false, false
+  for name, value in pairs(values) do
+    learned = learned or value.id ~= nil
     pending = pending or value.varType ~= nil or value.deleted == true
+    -- An older build drops the id of each record it rewrites, so the load after a downgrade learns again
+    rewritten = rewritten or (value.id == nil and Variables[name] ~= nil)
   end
-  if next(Variables) == nil then
+  if learned and not rewritten then
+    return true
+  elseif next(Variables) == nil then
     return not pending
   end
 

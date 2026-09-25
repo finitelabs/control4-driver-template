@@ -323,4 +323,17 @@ values = H.load("restart")
 values:update("D", "4", "STRING")
 T.eq("nor once it is gone", H.visible(), { A = 1001, C = 1003, D = 1004 })
 
+T.section("a downgrade to v0.9.28 and back keeps every id")
+H.wipe()
+values = H.load("restart")
+values:update("A", "1", "STRING")
+values:update("B", "2", "STRING")
+values:update("C", "3", "STRING")
+old = H.load("update", OLDER)
+old:update("A", "1b", "STRING") -- v0.9.28 rewrites A's record without its id
+H.load("update")
+T.eq("the load back records A's id", H.blob().A.id, 1001)
+H.load("restart")
+T.eq("which a restart keeps", H.visible(), { A = 1001, B = 1002, C = 1003 })
+
 T.finish()
