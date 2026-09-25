@@ -8,13 +8,15 @@
 --   1. JSON is vendor/JSON.lua rather than upstream's module/json.lua, which is not
 --      vendored.
 --   2. Deserialize pcall-wraps its Base64 and JSON decodes. JSON.lua raises on input
---      it cannot parse, where upstream's json returned nil.
+--      it cannot parse, where upstream's json returned nil. It returns what the JSON
+--      decodes to, false or nil included, where upstream returned the input.
 --   3. The room variable keys CURRENT_MEDIA_INFO and AUDIO_LATENCY_PROFILE use "_"
 --      where upstream has spaces.
 --   4. ConstructJWT drops an unused local.
 --   5. GetDeviceDisplayNameOrId is added, for delta 5 in handlers.lua.
 --
--- test/test_persist_undecodable.lua covers 2; test/test_watched_variable.lua covers 5.
+-- test/test_persist_undecodable.lua and test/test_persist_reload.lua cover 2;
+-- test/test_watched_variable.lua covers 5.
 
 COMMON_LIB_VER = 58
 
