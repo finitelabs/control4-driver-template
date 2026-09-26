@@ -12,6 +12,7 @@ require("lib.utils")
 --- @field _callbacks table<string, function?> In-memory registry of OVC callbacks keyed by variable name.
 --- @field _byId boolean Whether variables are added at their ids in this load.
 --- @field _rejected table<string, boolean> Names Director would not give a variable in this load.
+--- @field _placeholders table<integer, string> The name of each hidden variable Director listed in this load, by id.
 --- A class representing a collection of named values with optional variable/property support.
 local Values = {}
 Values.__index = Values
@@ -28,9 +29,21 @@ local FIRST_VARIABLE_ID = 1001
 --- @type integer
 local MAX_ID_TRIES = 100
 
+--- Reserved name prefix, followed by the record's index, under which an older
+--- build's placeholder for a plain value keeps its id slot.
+--- @type string
+local LEGACY_PLACEHOLDER_PREFIX = "__deleted__"
+
 --- Whether restore adds a visible variable for this record.
 local function isVariable(record)
   return record ~= nil and record.varType ~= nil and not record.deleted
+end
+
+--- What C4:SetVariable and C4:DeleteVariable take for a value's variable: the name
+--- Director knows it by, so a stale id cannot reach another variable, or else its id,
+--- as Director reads a name like "1001" as an id.
+local function variableKey(name, id)
+  return (Variables[name] == nil or tonumber(name) ~= nil) and id or name
 end
 
 local function ovcKey(name)
@@ -54,6 +67,26 @@ end
 --- @field writable boolean? Whether the variable accepts writes from programming. Persisted so restore can recreate the C4 variable with the correct readOnly flag.
 --- @field deleted boolean? If true, the value has no variable now; its record keeps its id, if it has one
 
+--- Deleting a plain value in an older build left a deleted record, which restore
+--- by name adds as a hidden placeholder. Each such slot moves to a name built from
+--- its index, which no other record has, so a later value of the old name cannot take it.
+--- @param values table<string, Value> The values table, changed in place.
+--- @return boolean moved True if any record moved.
+local function moveLegacyPlaceholders(values)
+  local legacy = {}
+  for name, value in pairs(values) do
+    if value.deleted and value.varType == nil then
+      table.insert(legacy, name)
+    end
+  end
+  for _, name in ipairs(legacy) do
+    values[name].varType = "STRING"
+    values[string.format("%s%d", LEGACY_PLACEHOLDER_PREFIX, values[name].index)] = values[name]
+    values[name] = nil
+  end
+  return #legacy > 0
+end
+
 --- Creates a new Values instance.
 --- @return Values values A new Values instance.
 function Values:new()
@@ -62,6 +95,7 @@ function Values:new()
   instance._callbacks = {}
   instance._byId = false
   instance._rejected = {}
+  instance._placeholders = {}
   return instance
 end
 
@@ -189,19 +223,19 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
   local idChanged = false
   if varType ~= nil then
     if Variables[name] ~= nil and not isVariable(existing) and record.id ~= nil then
-      -- An older build's hidden placeholder for the name gives way to it, at the same id
-      C4:DeleteVariable(record.id)
+      -- An older build's hidden placeholder for the name gives way to it
+      C4:DeleteVariable(variableKey(name, record.id))
       Variables[name] = nil
     end
     if Variables[name] == nil then
       idChanged = self:_addVariable(values, name, record, strValue)
     elseif Variables[name] ~= strValue then
-      C4:SetVariable(record.id or name, strValue)
+      C4:SetVariable(variableKey(name, record.id), strValue)
     end
   elseif Variables[name] ~= nil then
     OVC[ovcKey(name)] = nil
     self._callbacks[name] = nil
-    C4:DeleteVariable(record.id or name)
+    C4:DeleteVariable(variableKey(name, record.id))
     Variables[name] = nil
   end
 
@@ -245,7 +279,8 @@ function Values:delete(name)
   log:debug("Deleting value %s at index %d", name, value.index)
 
   local wasVariable = isVariable(value)
-  if value.varType == nil and value.id == nil then
+  -- A plain value with no id goes, unless a load by name on OS 4.0+ keeps it for the next restart's order
+  if value.varType == nil and value.id == nil and (self._byId or C4.SetVariableName == nil) then
     values[name] = nil
   else
     value.deleted = true
@@ -257,7 +292,7 @@ function Values:delete(name)
   OVC[ovcKey(name)] = nil
   self._callbacks[name] = nil
   if Variables[name] ~= nil then
-    C4:DeleteVariable(value.id or name)
+    C4:DeleteVariable(variableKey(name, value.id))
     Variables[name] = nil
   end
 
@@ -305,11 +340,11 @@ end
 
 --- Restores all values from persistent storage. Programming binds to a
 --- variable's id, so with C4.SetVariableName (OS 4.0+) each variable is added at
---- the id its record keeps and then named. Without it, variables are added by
---- name in index order, with hidden placeholders for deleted values, as older
---- builds did. The first load after an older build keeps the ids Director gave
---- that build's variables, learned by name; after a Director restart it first
---- restores as that build did.
+--- the id its record keeps and then named. At a driver update each record first
+--- takes its variable's id from Director, by name; after a Director restart, a
+--- record an older build wrote without an id takes the id that build's restore
+--- gives it. Without C4.SetVariableName, variables are added by name in index
+--- order, with hidden placeholders for deleted values, as older builds did.
 ---
 --- Call this from OnDriverInit: programming attached to variables added
 --- after OnDriverInit may not work after a Director restart.
@@ -317,7 +352,10 @@ end
 function Values:restoreValues()
   log:trace("Values:restoreValues()")
   local values = self:getValues()
-  local restarted = next(Variables) == nil
+  -- With a rename a record holds its slot itself, by its id or its place in the next restart's order
+  if C4.SetVariableName == nil and moveLegacyPlaceholders(values) then
+    self:_saveValues(values, true)
+  end
   self._byId = self:_learnIds(values)
 
   -- Build sorted array with names (table.sort doesn't work on string-keyed tables)
@@ -346,11 +384,6 @@ function Values:restoreValues()
     if not ok then
       log:error("Failed to restore value %s: %s", entry.name, err)
     end
-  end
-
-  if restarted and not self._byId then
-    -- Restore added an older build's variables as that build did, so Director has their ids now
-    self._byId = self:_learnIds(self:getValues())
   end
 end
 
@@ -419,6 +452,12 @@ function Values:_addVariable(values, name, value, strValue)
   end
 
   local id = value.id
+  local placeholder = self._placeholders[id]
+  if placeholder ~= nil and Variables[placeholder] ~= nil and not isVariable(values[placeholder]) then
+    -- An older build put another deleted name's hidden placeholder at this id; it holds no programming
+    C4:DeleteVariable(variableKey(placeholder, id))
+    Variables[placeholder] = nil
+  end
   if id ~= nil and not C4:AddVariable(id, strValue, value.varType, readOnly, false) then
     log:warn("Variable id %d of %s is taken; it gets a new one", id, name)
     id = nil
@@ -447,9 +486,9 @@ function Values:_addVariable(values, name, value, strValue)
   return changed
 end
 
---- Whether variables are added at their ids in this load. An older build's
---- records have no ids, so the first load of this build learns them by name from
---- Director, which a restart leaves empty until restore has added them again.
+--- Whether variables are added at their ids in this load. A record takes the id of
+--- its visible variable in Director's list; with no id, that of its hidden one, and
+--- with no variable either, the id an older build's restore gives it.
 --- @private
 --- @param values table<string, Value> The values table, which takes the ids.
 --- @return boolean byId True if variables are added at their ids.
@@ -458,30 +497,23 @@ function Values:_learnIds(values)
   if C4.SetVariableName == nil then
     return false
   end
-  local learned, pending, rewritten = false, false, false
-  for name, value in pairs(values) do
-    learned = learned or value.id ~= nil
-    pending = pending or value.varType ~= nil or value.deleted == true
-    -- An older build drops the id of each record it rewrites, so the load back from a downgrade learns again
-    rewritten = rewritten or (value.id == nil and Variables[name] ~= nil)
-  end
-  if learned and not rewritten then
-    return true
-  elseif next(Variables) == nil then
-    return not pending
-  end
 
-  -- The DriverWorks docs advise against this call in OnDriverInit, where restore runs, so its list is checked
-  local ok, variables = pcall(C4.GetDeviceVariables, C4, C4:GetDeviceID())
-  local listed = {}
-  for _, variable in pairs(ok and type(variables) == "table" and variables or {}) do
-    listed[variable.name] = true
-  end
-  -- A list that leaves out a variable the driver has is not current
-  for name in pairs(Variables) do
-    if not listed[name] then
-      log:warn("Could not read this device's variables from Director; they are added by name in this load")
-      return false
+  local restarted, variables = next(Variables) == nil, {}
+  if not restarted then
+    -- The DriverWorks docs advise against this call in OnDriverInit, where restore runs, so its list is checked
+    local ok, list = pcall(C4.GetDeviceVariables, C4, C4:GetDeviceID())
+    variables = ok and type(list) == "table" and list or {}
+    local listed = {}
+    for _, variable in pairs(variables) do
+      listed[variable.name] = true
+    end
+    -- A list that leaves out a variable the driver has is not current. The recorded ids
+    -- stand, and with none this load adds variables by name, as the older build did.
+    for name in pairs(Variables) do
+      if not listed[name] then
+        log:warn("Could not read this device's variables from Director; no id is learned in this load")
+        return self:_getNextVariableId(values) > FIRST_VARIABLE_ID
+      end
     end
   end
 
@@ -496,6 +528,26 @@ function Values:_learnIds(values)
     return values[a].index < values[b].index
   end)
 
+  -- Each variable keeps its id, under a deleted record of its name if no record has one
+  local changed = false
+  for id, variable in pairs(variables) do
+    local value = values[variable.name] or { index = tonumber(id), deleted = true }
+    local recorded = value.id
+    if value.deleted and value.varType ~= nil and variable.hidden == "False" then
+      value.deleted = nil -- the older build deleted it, then added it again
+      changed = true
+    end
+    if variable.hidden == "True" then
+      -- An older build's placeholder holds no programming, so a record's own id stands over it
+      self._placeholders[tonumber(id)] = variable.name
+      value.id = value.id or tonumber(id)
+    else
+      value.id = tonumber(id)
+    end
+    changed = changed or value.id ~= recorded
+    values[variable.name] = value
+  end
+
   -- A deleted record's id is taken though Director has no variable at it
   local taken = {}
   for _, value in pairs(values) do
@@ -504,27 +556,19 @@ function Values:_learnIds(values)
     end
   end
 
-  -- Each variable keeps its id, under a deleted record of its name if no record has one
-  for id, variable in pairs(variables) do
-    local value = values[variable.name] or { index = tonumber(id), deleted = true }
-    if value.deleted and value.varType ~= nil and variable.hidden == "False" then
-      value.deleted = nil -- the older build deleted it, then added it again
-    end
-    value.id = tonumber(id)
-    values[variable.name] = value
-    taken[value.id] = true
-  end
-
-  -- A name deleted in the older build's last load has no variable left. It takes the id
-  -- that build's restore gave it, counting from the first id, if no variable has it.
+  -- A name deleted in the older build's last load has no variable to learn from, and after a restart no name has.
+  -- One with no id takes the id that build's restore gives it, counting from the first id, if free.
   for rank, name in ipairs(order) do
     local value, id = values[name], FIRST_VARIABLE_ID + rank - 1
-    if value.id == nil and value.deleted and not taken[id] then
+    if value.id == nil and not taken[id] then
       value.id = id
       taken[id] = true
+      changed = true
     end
   end
-  self:_saveValues(values, true)
+  if changed then
+    self:_saveValues(values, true)
+  end
   return true
 end
 
@@ -538,7 +582,7 @@ function Values:reset()
     -- Delete the variable if it exists
     if value.varType ~= nil and Variables[name] ~= nil then
       OVC[ovcKey(name)] = nil
-      C4:DeleteVariable(value.id or name)
+      C4:DeleteVariable(variableKey(name, value.id))
       Variables[name] = nil
     end
     values[name] = value.id ~= nil and { index = value.index, id = value.id, deleted = true } or nil
