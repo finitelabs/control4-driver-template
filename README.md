@@ -90,6 +90,7 @@ the script works against whatever organization or personal account the
 project was scaffolded for. It is idempotent and can be re-run on existing
 repositories to check for or fix drift. The standard is:
 
+- Description is `project_description` from the copier answers
 - Projects and wiki disabled
 - Squash merges only, auto-merge allowed, head branches deleted on merge
 - Default branch `main` (an existing `master` gets renamed)
