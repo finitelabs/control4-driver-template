@@ -867,5 +867,12 @@ T.eq("FileDelete returns true when it deletes", C4:FileDelete("shim.bin"), true)
 T.eq("the file is gone", C4:FileExists("shim.bin"), false)
 
 --------------------------------------------------------------------------------
+T.section("Lua 5.1 library")
+--------------------------------------------------------------------------------
+
+-- Measured on 4.3.0: a test that calls table.unpack must fail here as it would there.
+T.eq("table.unpack is absent", table.unpack, nil)
+
+--------------------------------------------------------------------------------
 
 T.finish()
