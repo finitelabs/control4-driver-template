@@ -976,8 +976,12 @@ local time_units = {
 
 --- The time since the epoch: milliseconds, or the units named in any case, whole unless
 --- `fractional`. Read off the wall clock where luasocket has one, else os.time, which a test may pin.
---- As on Director, an argument passed as nil raises, and an unknown unit is milliseconds.
+--- As on Director, a call without the C4 receiver or with a nil argument raises, and an unknown
+--- unit is milliseconds.
 function C4:GetTime(...)
+  if self ~= C4 then
+    error("An unknown error occurred", 2)
+  end
   local argc, units, fractional = select("#", ...), ...
   if argc > 0 and type(units) ~= "string" and type(units) ~= "number" then
     error("units should be a string", 2)
