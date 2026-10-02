@@ -383,6 +383,31 @@ if loaded then
 end
 
 --------------------------------------------------------------------------------
+T.section("C4:GetTime")
+--------------------------------------------------------------------------------
+
+do
+  -- DriverWorks: milliseconds since the epoch, or the units asked for, whole unless fractional.
+  local ms = C4:GetTime()
+  T.check("milliseconds since the epoch", math.abs(ms / 1000 - os.time()) < 5, ms)
+  T.check("whole by default", ms == math.floor(ms), ms)
+  T.check("seconds where asked", math.abs(C4:GetTime("s") - ms / 1000) <= 1, C4:GetTime("s"))
+  local minutes = C4:GetTime("min", true)
+  T.check("a fraction where asked", math.abs(minutes - ms / 60000) < 0.1, minutes)
+
+  -- Measured on a controller: units in any case, and a year of 365.2425 days.
+  T.check("units in any case", math.abs(C4:GetTime("MIN") - ms / 60000) <= 1, C4:GetTime("MIN"))
+  local years = C4:GetTime("y", true)
+  T.check("a year is 365.2425 days", math.abs(years - ms / 31556952000) < 1e-6, years)
+  T.raises("a nil unit raises as on Director", function()
+    C4:GetTime(nil)
+  end, "units should be a string")
+  T.raises("a nil fractional raises as on Director", function()
+    C4:GetTime("s", nil)
+  end, "fractional should be a boolean")
+end
+
+--------------------------------------------------------------------------------
 T.section("C4:SetTimer handles")
 --------------------------------------------------------------------------------
 
