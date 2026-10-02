@@ -17,6 +17,7 @@
 # for release.
 #
 # Standard settings:
+#   - Description: project_description from .copier-answers.yml
 #   - Projects and wiki disabled
 #   - Squash merges only, auto-merge allowed, head branches deleted on merge
 #   - Default branch "main" (renames "master" if found)
@@ -38,7 +39,7 @@ while [ $# -gt 0 ]; do
     --apply) APPLY=true ;;
     --public) VISIBILITY=public ;;
     -h|--help)
-      sed -n '2,28p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,/^$/s/^# \{0,1\}//p' "$0"
       exit 0
       ;;
     *) echo "error: unknown argument: $1 (see --help)" >&2; exit 1 ;;
@@ -49,7 +50,20 @@ done
 command -v gh >/dev/null || { echo "error: gh is not installed" >&2; exit 1; }
 [ -f "$ANSWERS" ] || { echo "error: $ANSWERS not found; run from the project root" >&2; exit 1; }
 
-answer() { sed -n "s/^$1: *//p" "$ANSWERS" | tr -d '"'; }
+# A long answer wraps onto indented continuation lines, which YAML folds into one
+# line with single spaces. A quoted answer loses its quotes ('' is a quote).
+answer() {
+  awk -v key="$1" '
+    index($0, key ":") == 1 { value = substr($0, length(key) + 2); sub(/^ +/, "", value); found = 1; next }
+    found && /^[ \t]/ { line = $0; sub(/^[ \t]+/, "", line); value = value " " line; next }
+    found { exit }
+    END {
+      if (value ~ /^\047.*\047$/) { value = substr(value, 2, length(value) - 2); gsub(/\047\047/, "\047", value) }
+      else if (value ~ /^".*"$/) { value = substr(value, 2, length(value) - 2) }
+      print value
+    }
+  ' "$ANSWERS"
+}
 ORG=$(answer github_org)
 NAME=$(answer project_name)
 DESCRIPTION=$(answer project_description)
@@ -177,6 +191,14 @@ if [ -n "$SETTINGS_DRIFT" ]; then
     -F delete_branch_on_merge=true >/dev/null
 else
   note "repository settings match the standard"
+fi
+
+C_DESC=$(gh api "repos/$REPO" --jq '.description // ""')
+if [ "$C_DESC" = "$DESCRIPTION" ]; then
+  note "description matches project_description"
+else
+  change "set description from project_description"
+  $APPLY && gh api -X PATCH "repos/$REPO" -f description="$DESCRIPTION" >/dev/null
 fi
 
 # Branch ruleset.
