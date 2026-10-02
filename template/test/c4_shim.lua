@@ -12,6 +12,16 @@ if not loadstring then
   loadstring = load
 end
 
+-- The controller's LuaJIT is built without Lua 5.2 compat, so hide what a compat build adds.
+if _VERSION == "Lua 5.1" then
+  table.unpack = nil
+  table.pack = nil
+  rawlen = nil
+  package.searchers = nil
+  debug.getuservalue = nil
+  debug.setuservalue = nil
+end
+
 -- Minimal lpack-compatible string.pack/string.unpack for the format codes the ZCL
 -- codec uses (all little-endian); the '<' endian marker is accepted and ignored.
 -- Signature AND code semantics match Control4's lpack, verified on a controller
