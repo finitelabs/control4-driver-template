@@ -184,7 +184,7 @@ docs-readme: preprocess $(VENV_STAMP)
 {% else %}
 docs-readme: preprocess $(VENV_STAMP)
 	rm -rf ./images
-	@if [ -d drivers/$(README_DRIVER)/www/documentation/images ]; then cp -r drivers/$(README_DRIVER)/www/documentation/images .; fi
+	@if [ -d build/$(README_BUILD)/drivers/$(README_DRIVER)/www/documentation/images ]; then cp -r build/$(README_BUILD)/drivers/$(README_DRIVER)/www/documentation/images .; fi
 	$(VENV_PY) tools/docs.py readme \
 		build/$(README_BUILD)/drivers/$(README_DRIVER)/www/documentation/index.md README.md
 {% endif %}

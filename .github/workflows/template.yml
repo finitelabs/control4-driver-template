@@ -145,9 +145,20 @@ jobs:
           - name: default
             distributions: drivercentral oss
             vendor_modules: ""
+            readme_driver_slug: example
+            variants: ""
           - name: crypto-bundles
             distributions: drivercentral oss
             vendor_modules: bitn crypto noiseprotocol protobuf bthome
+            readme_driver_slug: example
+            variants: ""
+          # The README driver is a generated variant: build/ has
+          # drivers/example_variant, and drivers/ has no such folder.
+          - name: variant-readme
+            distributions: drivercentral oss
+            vendor_modules: ""
+            readme_driver_slug: example_variant
+            variants: '{"variants": [{"suffix": "variant"}]}'
 
     steps:
       - uses: actions/checkout@v4
@@ -183,19 +194,26 @@ jobs:
         env:
           DISTRIBUTIONS: ${{ matrix.distributions }}
           VENDOR_MODULES: ${{ matrix.vendor_modules }}
+          README_DRIVER_SLUG: ${{ matrix.readme_driver_slug }}
         run: |
           copier copy --trust --defaults --vcs-ref HEAD \
             --data project_name=ci-render \
             --data project_description="Template CI render" \
             --data github_org=finitelabs \
-            --data readme_driver_slug=example \
+            --data readme_driver_slug="$README_DRIVER_SLUG" \
             --data distributions="$DISTRIBUTIONS" \
             --data readme_build=oss \
             --data vendor_modules="$VENDOR_MODULES" \
             . "$RUNNER_TEMP/render"
 
       - name: Add example driver
-        run: cp -r example-driver/drivers "$RUNNER_TEMP/render/drivers"
+        env:
+          VARIANTS: ${{ matrix.variants }}
+        run: |
+          cp -r example-driver/drivers "$RUNNER_TEMP/render/drivers"
+          if [ -n "$VARIANTS" ]; then
+            printf '%s\n' "$VARIANTS" > "$RUNNER_TEMP/render/drivers/example/variants.json"
+          fi
 
       - name: Initialize project (make init)
         working-directory: ${{ runner.temp }}/render
@@ -231,3 +249,22 @@ jobs:
             echo "$UNTRACKED"
             exit 1
           fi
+
+      # A README image that docs-readme failed to copy breaks nothing else in
+      # the build, so check every link resolves.
+      - name: README images resolve
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          refs=$(grep -oE '\./images/[^")[:space:]]+' README.md | sort -u)
+          if [ -z "$refs" ]; then
+            echo "::error::README.md links no images, so this check tests nothing"
+            exit 1
+          fi
+          missing=0
+          for ref in $refs; do
+            if [ ! -f "$ref" ]; then
+              echo "::error::README.md links $ref, which does not exist"
+              missing=1
+            fi
+          done
+          exit "$missing"
