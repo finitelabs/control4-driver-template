@@ -960,6 +960,40 @@ function C4:ParseXml(xml)
   return nodes and nodes[1] or nil
 end
 
+-- Milliseconds in each unit C4:GetTime takes (DriverWorks 34_timer/GetTime; OS 4.0.0 added units).
+-- A year is the Gregorian average of 365.2425 days, as measured on a controller.
+local time_units = {
+  us = 0.001,
+  ns = 0.000001,
+  s = 1000,
+  min = 60000,
+  h = 3600000,
+  d = 86400000,
+  w = 604800000,
+  y = 31556952000,
+  dec = 315569520000,
+}
+
+--- The time since the epoch: milliseconds, or the units named in any case, whole unless
+--- `fractional`. Read off the wall clock where luasocket has one, else os.time, which a test may pin.
+--- As on Director, a call without the C4 receiver or with a nil argument raises, and an unknown
+--- unit is milliseconds.
+function C4:GetTime(...)
+  if self ~= C4 then
+    error("An unknown error occurred", 2)
+  end
+  local argc, units, fractional = select("#", ...), ...
+  if argc > 0 and type(units) ~= "string" and type(units) ~= "number" then
+    error("units should be a string", 2)
+  end
+  if argc > 1 and type(fractional) ~= "boolean" then
+    error("fractional should be a boolean", 2)
+  end
+  local ms = has_socket and socket.gettime() * 1000 or os.time() * 1000
+  local v = ms / (time_units[argc > 0 and tostring(units):lower()] or 1)
+  return fractional and v or math.floor(v)
+end
+
 --- Generate a UUID (simplified version)
 local uuid_counter = 0
 function C4:UUID(prefix)
