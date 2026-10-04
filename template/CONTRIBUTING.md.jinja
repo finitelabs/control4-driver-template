@@ -130,7 +130,9 @@ each one.
 ## Build System
 
 This project uses `make` for build orchestration. All tooling is Python (in a
-local `.venv`) plus a few standalone binaries, with no Node/npm.
+local `.venv`) plus a few standalone binaries, with no Node/npm. A repo that
+adds Node tooling of its own pins the version in `.node-version`, which nodenv
+reads locally and the Build workflow sets up in CI.
 
 ### Prerequisites
 
