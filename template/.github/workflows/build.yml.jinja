@@ -10,8 +10,7 @@ on:
 permissions:
   contents: read
 
-# A PR's new push cancels its older run. Anything else gets a group of its own:
-# even without cancel-in-progress, a shared group cancels a run still pending.
+# Main and tags group by run_id: a shared group would cancel their pending runs.
 concurrency:
   group: {% raw %}${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}{% endraw %}
   cancel-in-progress: true
@@ -49,8 +48,6 @@ jobs:
         with:
           python-version: '3.x'
 
-      # A repo with Node tooling pins it in .node-version (the file nodenv reads),
-      # so its tests run on that Node, not whichever one the runner image ships.
       - name: Setup Node
         if: hashFiles('.node-version') != ''
         uses: actions/setup-node@v6
