@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+# Main and tags group by run_id: a shared group would cancel their pending runs.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   render:
     name: render (${{ matrix.name }})
