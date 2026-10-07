@@ -44,11 +44,11 @@ end
 --- @return Event|nil event The event object or nil if the event could not be created.
 function Events:getOrAddEvent(namespace, key, name, description)
   log:trace("Events:getOrAddEvent(%s, %s, %s, %s)", namespace, key, name, description)
-  local events = self:getEvents()
+  local events = self:_peekEvents()
   --- @type Event|nil
   local event = Select(events, namespace, key)
   if event == nil then
-    local eventId = self:_getNextEventId()
+    local eventId = self:_getNextEventId(events)
     event = {
       eventId = eventId,
       name = name,
@@ -60,7 +60,7 @@ function Events:getOrAddEvent(namespace, key, name, description)
     self:_saveEvents(events)
     C4:AddEvent(eventId, name, description)
   end
-  return event
+  return TableDeepCopy(event)
 end
 
 --- Fires an event by namespace and key.
@@ -69,7 +69,7 @@ end
 function Events:fire(namespace, key)
   log:trace("Events:fire(%s, %s)", namespace, key)
   --- @type number|nil
-  local eventId = Select(self:getEvents(), namespace, key, "eventId")
+  local eventId = Select(self:_peekEvents(), namespace, key, "eventId")
   if IsEmpty(eventId) then
     return
   end
@@ -82,7 +82,7 @@ end
 --- @param key string The key of the event.
 function Events:deleteEvent(namespace, key)
   log:trace("Events:deleteEvent(%s, %s)", namespace, key)
-  local events = self:getEvents()
+  local events = self:_peekEvents()
   --- @type number|nil
   local eventId = Select(events, namespace, key, "eventId")
   if IsEmpty(eventId) then
@@ -110,7 +110,7 @@ function Events:restoreEvents()
   log:trace("Events:restoreEvents()")
   --- @type table<number, boolean>
   local usedEventIds = {}
-  for _, keys in pairs(self:getEvents()) do
+  for _, keys in pairs(self:_peekEvents()) do
     for _, event in pairs(keys) do
       usedEventIds[event.eventId] = true
       C4:AddEvent(event.eventId, event.name, event.description)
@@ -126,12 +126,13 @@ end
 
 --- Retrieves the next available event ID. Ensures that the ID is unique and within the allowed range.
 --- @private
+--- @param events table<string, table<string, Event>>? The events table, if the caller has it.
 --- @return number eventId The next available event ID.
-function Events:_getNextEventId()
+function Events:_getNextEventId(events)
   log:trace("Events:_getNextEventId()")
   --- @type table<number, boolean>
   local currentEvents = {}
-  for _, keys in pairs(self:getEvents()) do
+  for _, keys in pairs(events or self:_peekEvents()) do
     for _, event in pairs(keys) do
       currentEvents[event.eventId] = true
     end
@@ -151,19 +152,44 @@ function Events:getEvents()
   return persist:get(EVENTS_PERSIST_KEY, {}) or {}
 end
 
---- Saves the events to persistent storage.
+--- The stored events table itself, not a copy (see persist:peek).
+--- @private
+--- @return table<string, table<string, Event>> events The events table.
+function Events:_peekEvents()
+  local events = persist:peek(EVENTS_PERSIST_KEY, {})
+  return type(events) == "table" and events or {}
+end
+
+--- Saves the events to persistent storage. The table is stored as it is, so it
+--- must not be changed afterwards except to save it again.
 --- @private
 --- @param events table<string, table<string, Event>>? The events table to save.
 --- @diagnostic disable-next-line: unused
 function Events:_saveEvents(events)
   log:trace("Events:_saveEvents(%s)", events)
-  persist:set(EVENTS_PERSIST_KEY, not IsEmpty(events) and events or nil)
+  persist:commit(EVENTS_PERSIST_KEY, not IsEmpty(events) and events or nil)
+end
+
+--- Opts the events in to write-behind (see lib.persist): a change made inside
+--- `persist:defer()` reaches storage at most once per `ms`.
+--- @param ms number The flush interval in milliseconds.
+--- @return void
+function Events:setWriteBehind(ms)
+  log:trace("Events:setWriteBehind(%s)", ms)
+  persist:setWriteBehind(EVENTS_PERSIST_KEY, ms)
+end
+
+--- Writes any change still waiting under write-behind to storage now.
+--- @return void
+function Events:flush()
+  log:trace("Events:flush()")
+  persist:flush(EVENTS_PERSIST_KEY)
 end
 
 --- Resets all dynamic events, removing them from the system and clearing persisted storage.
 function Events:reset()
   log:trace("Events:reset()")
-  for _, nsEvents in pairs(self:getEvents()) do
+  for _, nsEvents in pairs(self:_peekEvents()) do
     for _, event in pairs(nsEvents) do
       log:debug("Removing event '%s' (id=%s)", event.name, event.eventId)
       C4:DeleteEvent(event.eventId)
