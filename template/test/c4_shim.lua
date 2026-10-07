@@ -1777,7 +1777,7 @@ local function to_hex(s)
   end))
 end
 
---- C4:Hash(algorithm, data, options) — raw ("NONE") or, with no return_encoding,
+--- C4:Hash(algorithm, data, options): raw ("NONE") or, with no return_encoding,
 --- hex. Any other value is refused rather than answered in hex, since the shim
 --- has never been measured against one and a wrong-encoding digest still looks
 --- like a digest. Checked ahead of the backend, so the refusal also holds on a
@@ -1804,7 +1804,7 @@ local function aes_options_ok(cipher, key, iv)
   return string.upper(cipher or "") == "AES-128-CBC" and type(key) == "string" and #key == 16 and type(iv) == "string"
 end
 
---- C4:Encrypt(cipher, key, iv, data, options) — AES-128-CBC/PKCS7, raw in/out.
+--- C4:Encrypt(cipher, key, iv, data, options): AES-128-CBC/PKCS7, raw in/out.
 function C4:Encrypt(cipher, key, iv, data, options)
   if not crypto_backend then
     return nil, "C4 shim: no crypto backend"
@@ -1815,7 +1815,7 @@ function C4:Encrypt(cipher, key, iv, data, options)
   return crypto_backend.aes128cbc(true, key, iv, data or "")
 end
 
---- C4:Decrypt(cipher, key, iv, data, options) — AES-128-CBC/PKCS7, raw in/out.
+--- C4:Decrypt(cipher, key, iv, data, options): AES-128-CBC/PKCS7, raw in/out.
 function C4:Decrypt(cipher, key, iv, data, options)
   if not crypto_backend then
     return nil, "C4 shim: no crypto backend"
