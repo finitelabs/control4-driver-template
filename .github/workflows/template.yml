@@ -138,6 +138,50 @@ jobs:
           pipx run black --check tools
           pipx run --spec 'mdformat' --spec 'mdformat-gfm' mdformat --check --wrap 80 *.md
 
+  # Copier writes .copier-answers.yml with PyYAML, which wraps a value past 80
+  # columns onto indented lines and single-quotes one containing ": ". The
+  # one-line description the other jobs render exercises neither.
+  github-setup:
+    name: github-setup reads answers whole
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install copier
+        run: pipx install copier
+
+      - name: answer() returns a wrapped or quoted project_description whole
+        run: |
+          check() {
+            local dest="$RUNNER_TEMP/render-$1" want="$2" got
+            copier copy --trust --defaults --vcs-ref HEAD --quiet \
+              --data project_name=ci-render \
+              --data project_description="$want" \
+              --data github_org=finitelabs \
+              --data readme_driver_slug=ci \
+              . "$dest"
+            if grep -qxF "project_description: $want" "$dest/.copier-answers.yml"; then
+              echo "::error::$1: stored on one plain line, so this case tests nothing"
+              return 1
+            fi
+            got=$(
+              cd "$dest"
+              eval "$(sed -n '/^answer() {$/,/^}$/p' tools/github-setup)"
+              declare -F answer >/dev/null || { echo "::error::no answer() in tools/github-setup" >&2; exit 1; }
+              ANSWERS=.copier-answers.yml answer project_description
+            )
+            if [ "$got" != "$want" ]; then
+              echo "::error::$1: answer() returned [$got], want [$want]"
+              return 1
+            fi
+            echo "$1: ok"
+          }
+          check long "Template CI render with a description long enough to run past the 80 columns the answers file wraps at"
+          check colon "Template CI render: a description with a colon"
+          check long-colon "Template CI render: a description long enough to wrap, with a colon, an apostrophe's escape and \"double quotes\""
+
   # A render has no driver, so `make build` would build nothing. example-driver/
   # (repo root, outside template/, so copier never renders it) supplies one.
   build:
