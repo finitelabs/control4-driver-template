@@ -121,7 +121,7 @@ function Values:setCallback(name, callback)
       end
     or nil
 
-  local values = self:getValues()
+  local values = self:_peekValues()
   local existing = values[name]
   if existing == nil then
     return
@@ -183,7 +183,7 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
     value = tostring(value)
   end
 
-  local values = self:getValues()
+  local values = self:_peekValues()
   local existing = values[name]
 
   -- Writable iff a callback is currently registered, or the persisted record
@@ -200,7 +200,7 @@ function Values:update(name, value, varType, callbackOrWritable, propertySuffix)
     or existing.writable ~= writable
   if changed then
     values[name] = {
-      index = Select(values, name, "index") or self:_getNextValueId(),
+      index = Select(values, name, "index") or self:_getNextValueId(values),
       id = Select(values, name, "id"),
       varType = varType,
       value = value,
@@ -269,7 +269,7 @@ end
 --- @return void
 function Values:delete(name)
   log:trace("Values:delete(%s)", name)
-  local values = self:getValues()
+  local values = self:_peekValues()
   local value = values[name]
   if value == nil then
     log:debug("Value %s does not exist; ignoring delete", name)
@@ -304,8 +304,8 @@ function Values:delete(name)
 end
 
 --- Opts the values in to write-behind (see lib.persist): an update made inside
---- `persist:defer()` reaches storage at most once per `ms`, unless it adds or
---- removes a variable.
+--- `persist:defer()` reaches storage at most once per `ms`. One that adds or
+--- removes a variable reaches it before the outermost `persist:defer()` returns.
 --- @param ms number The flush interval in milliseconds.
 --- @return void
 function Values:setWriteBehind(ms)
@@ -330,12 +330,22 @@ function Values:getValues()
   return type(values) == "table" and values or {}
 end
 
+--- The stored values table itself, not a copy (see persist:peek).
+--- @private
+--- @return table<string, Value> values The values table.
+function Values:_peekValues()
+  local values = persist:peek(VALUES_PERSIST_KEY, {})
+  -- Stored values that do not read back as a table start over rather than fail every load
+  return type(values) == "table" and values or {}
+end
+
 --- Retrieves a value by name.
 --- @param name string The name of the value to retrieve.
 --- @return Value|nil value The value associated with the name, or nil if it does not exist.
 function Values:getValue(name)
   log:trace("Values:getValue(%s)", name)
-  return Select(self:getValues(), name)
+  local value = Select(self:_peekValues(), name)
+  return value and TableDeepCopy(value)
 end
 
 --- Restores all values from persistent storage. Programming binds to a
@@ -351,7 +361,7 @@ end
 --- @return void
 function Values:restoreValues()
   log:trace("Values:restoreValues()")
-  local values = self:getValues()
+  local values = self:_peekValues()
   -- With a rename a record holds its slot itself, by its id or its place in the next restart's order
   if C4.SetVariableName == nil and moveLegacyPlaceholders(values) then
     self:_saveValues(values, true)
@@ -387,26 +397,29 @@ function Values:restoreValues()
   end
 end
 
---- Saves the values to persistent storage.
+--- Saves the values to persistent storage. The table is stored as it is, so it
+--- must not be changed afterwards except to save it again.
 --- @private
 --- @param values table<string, Value>? The values table to save, nil clears storage.
---- @param durable boolean? Write to storage now even under write-behind.
+--- @param durable boolean? Write to storage even under write-behind: now, or inside
+--- `persist:defer()` when the outermost scope returns.
 --- @diagnostic disable-next-line: unused
 function Values:_saveValues(values, durable)
   log:trace("Values:_saveValues(%s, %s)", values, durable)
-  persist:set(VALUES_PERSIST_KEY, not IsEmpty(values) and values or nil)
+  persist:commit(VALUES_PERSIST_KEY, not IsEmpty(values) and values or nil)
   if durable then
-    persist:flush(VALUES_PERSIST_KEY)
+    persist:durable(VALUES_PERSIST_KEY)
   end
 end
 
 --- Retrieves the next available value ID. Always returns max(existing indices) + 1
 --- to avoid reusing indices from deleted values (which would break ID ordering).
 --- @private
+--- @param values table<string, Value>? The values table, if the caller has it.
 --- @return number valueId The next available value ID starting from 1.
-function Values:_getNextValueId()
+function Values:_getNextValueId(values)
   log:trace("Values:_getNextValueId()")
-  local values = self:getValues()
+  values = values or self:_peekValues()
   local maxIndex = 0
   for _, value in pairs(values) do
     if value.index > maxIndex then
@@ -576,7 +589,7 @@ end
 --- keeps a deleted record with its id for when it comes back.
 function Values:reset()
   log:trace("Values:reset()")
-  local values = self:getValues()
+  local values = self:_peekValues()
   for name, value in pairs(values) do
     log:debug("Removing value '%s'", name)
     -- Delete the variable if it exists

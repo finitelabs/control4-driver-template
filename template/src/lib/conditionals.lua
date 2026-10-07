@@ -28,6 +28,27 @@ local CONDITIONAL_ID_START = 10
 --- @field conditionalId number
 --- @field name string
 
+--- Whether two stored records hold the same data.
+--- @param a any
+--- @param b any
+--- @return boolean same True if equal, field by field.
+local function sameRecord(a, b)
+  if type(a) ~= "table" or type(b) ~= "table" then
+    return a == b
+  end
+  for k, v in pairs(a) do
+    if not sameRecord(v, b[k]) then
+      return false
+    end
+  end
+  for k in pairs(b) do
+    if a[k] == nil then
+      return false
+    end
+  end
+  return true
+end
+
 --- Creates a new instance of the `Conditionals` class.
 --- @return Conditionals conditionals A new instance of the `Conditionals` class.
 function Conditionals:new()
@@ -36,7 +57,8 @@ function Conditionals:new()
   return instance
 end
 
---- Upserts a conditional into the conditionals table.
+--- Upserts a conditional into the conditionals table. Storage is written only
+--- when the conditional is new or has changed; the test function is always set.
 --- @param namespace string The namespace for the conditional.
 --- @param key string The key for the conditional.
 --- @param conditional ConditionalConfig The conditional object to upsert.
@@ -44,9 +66,10 @@ end
 --- @return Conditional conditional The upserted conditional.
 function Conditionals:upsertConditional(namespace, key, conditional, testFunction)
   log:trace("Conditionals:upsertConditional(%s, %s, %s, <testFunction>)", namespace, key, conditional)
-  local conditionals = self:getConditionals()
+  local conditionals = self:_peekConditionals()
+  local existing = Select(conditionals, namespace, key)
   --- @type number
-  local conditionalId = Select(conditionals, namespace, key, "conditionalId") or self:_getNextConditionalId()
+  local conditionalId = Select(existing, "conditionalId") or self:_getNextConditionalId(conditionals)
 
   --- @type Conditional
   conditional = TableDeepCopy(conditional)
@@ -54,13 +77,14 @@ function Conditionals:upsertConditional(namespace, key, conditional, testFunctio
   conditional.conditionalId = conditionalId
   conditional.name = "CONDITIONAL_" .. conditionalId
 
-  conditionals[namespace] = conditionals[namespace] or {}
-  conditionals[namespace][key] = conditional
-
   TC[conditional.name] = testFunction
 
-  self:_saveConditionals(conditionals)
-  return conditional
+  if not sameRecord(existing, conditional) then
+    conditionals[namespace] = conditionals[namespace] or {}
+    conditionals[namespace][key] = conditional
+    self:_saveConditionals(conditionals)
+  end
+  return TableDeepCopy(conditional)
 end
 
 --- Deletes a conditional from the conditionals table.
@@ -68,7 +92,7 @@ end
 --- @param key string The key of the conditional.
 function Conditionals:deleteConditional(namespace, key)
   log:trace("Conditionals:deleteConditional(%s, %s)", namespace, key)
-  local conditionals = self:getConditionals()
+  local conditionals = self:_peekConditionals()
   --- @type Conditional|nil
   local conditional = Select(conditionals, namespace, key)
   if IsEmpty(conditional) then
@@ -92,11 +116,12 @@ end
 
 --- Gets the next available conditional ID.
 --- @private
+--- @param conditionals table<string, table<string, Conditional>>? The conditionals table, if the caller has it.
 --- @return number conditionalId The next available conditional ID.
-function Conditionals:_getNextConditionalId()
+function Conditionals:_getNextConditionalId(conditionals)
   log:trace("Conditionals:_getNextConditionalId()")
   local currentConditionals = {}
-  for _, keys in pairs(self:getConditionals()) do
+  for _, keys in pairs(conditionals or self:_peekConditionals()) do
     for _, conditional in pairs(keys) do
       currentConditionals[conditional.conditionalId] = true
     end
@@ -116,19 +141,44 @@ function Conditionals:getConditionals()
   return persist:get(CONDITIONALS_PERSIST_KEY, {}) or {}
 end
 
---- Saves the conditionals to persistent storage.
+--- The stored conditionals table itself, not a copy (see persist:peek).
+--- @private
+--- @return table<string, table<string, Conditional>> conditionals The conditionals table.
+function Conditionals:_peekConditionals()
+  local conditionals = persist:peek(CONDITIONALS_PERSIST_KEY, {})
+  return type(conditionals) == "table" and conditionals or {}
+end
+
+--- Saves the conditionals to persistent storage. The table is stored as it is,
+--- so it must not be changed afterwards except to save it again.
 --- @private
 --- @param conditionals table<string, table<string, Conditional>>? The conditionals table to save.
 --- @diagnostic disable-next-line: unused
 function Conditionals:_saveConditionals(conditionals)
   log:trace("Conditionals:_saveConditionals(%s)", conditionals)
-  persist:set(CONDITIONALS_PERSIST_KEY, not IsEmpty(conditionals) and conditionals or nil)
+  persist:commit(CONDITIONALS_PERSIST_KEY, not IsEmpty(conditionals) and conditionals or nil)
+end
+
+--- Opts the conditionals in to write-behind (see lib.persist): a change made
+--- inside `persist:defer()` reaches storage at most once per `ms`.
+--- @param ms number The flush interval in milliseconds.
+--- @return void
+function Conditionals:setWriteBehind(ms)
+  log:trace("Conditionals:setWriteBehind(%s)", ms)
+  persist:setWriteBehind(CONDITIONALS_PERSIST_KEY, ms)
+end
+
+--- Writes any change still waiting under write-behind to storage now.
+--- @return void
+function Conditionals:flush()
+  log:trace("Conditionals:flush()")
+  persist:flush(CONDITIONALS_PERSIST_KEY)
 end
 
 --- Resets all conditionals, removing them from the system and clearing persisted storage.
 function Conditionals:reset()
   log:trace("Conditionals:reset()")
-  for _, nsConditionals in pairs(self:getConditionals()) do
+  for _, nsConditionals in pairs(self:_peekConditionals()) do
     for _, conditional in pairs(nsConditionals) do
       log:debug("Removing conditional '%s' (id=%s)", conditional.name, conditional.conditionalId)
       TC[conditional.name] = nil
@@ -144,9 +194,9 @@ local conditionals = Conditionals:new()
 function GetConditionals()
   log:trace("GetConditionals()")
   local progConditionals = {}
-  for _, keys in pairs(conditionals:getConditionals()) do
+  for _, keys in pairs(conditionals:_peekConditionals()) do
     for _, conditional in pairs(keys) do
-      progConditionals[tostring(conditional.conditionalId)] = conditional
+      progConditionals[tostring(conditional.conditionalId)] = TableDeepCopy(conditional)
     end
   end
   return progConditionals

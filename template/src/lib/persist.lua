@@ -30,13 +30,23 @@
 --- once and reach storage at most once per interval. Writes outside `defer()`, and
 --- deletes, still go out at once; `flush()` writes whatever is pending. The scope
 --- covers everything `defer()` runs synchronously, including promise callbacks it
---- resolves, so a write there that must be durable needs a `flush()`.
+--- resolves, so a write there that must be durable needs a `flush()`, or a
+--- `durable()`, which writes it when the outermost scope closes instead, so a batch
+--- of such writes still reaches storage once.
 ---
 --- ```lua
 --- persist:setWriteBehind("Readings", 60000)
 --- persist:defer(handleFrame, frame) -- sets of "Readings" in here wait
 --- persist:flush() -- e.g. from OnDriverDestroyed
 --- ```
+---
+--- ## Reading without a copy
+---
+--- `get()` returns a copy of a stored table, so callers can change it freely. Code
+--- that keeps a large table here and reads it often can use `peek()`, which returns
+--- the stored table itself, and `commit()`, which stores a table without copying
+--- it. A table from `peek()` must only be changed when it is handed straight back
+--- to `commit()`.
 
 local log = require("lib.logging")
 
@@ -50,6 +60,7 @@ require("lib.utils")
 --- @field _pending table<string, boolean> The encrypted flag per key with a write waiting for a flush.
 --- @field _armed table<string, boolean> Keys whose flush timer is running.
 --- @field _deferDepth integer How many `defer()` calls are running.
+--- @field _durable table<string, boolean> Keys to flush when the outermost `defer()` closes.
 local Persist = {}
 Persist.__index = Persist
 
@@ -82,6 +93,7 @@ function Persist:new()
   instance._pending = {}
   instance._armed = {}
   instance._deferDepth = 0
+  instance._durable = {}
   return instance
 end
 
@@ -114,6 +126,9 @@ function Persist:get(key, default, encrypted)
   log:trace("Persist:get(%s, %s, %s)", key, default, encrypted)
   loadMigrations()
   local value = self:_get(key, default, encrypted)
+  if type(value) == "table" and value == self._persist[key] then
+    value = TableDeepCopy(value)
+  end
 
   if type(MIGRATIONS[key]) == "function" then
     value = MIGRATIONS[key](value)
@@ -122,6 +137,21 @@ function Persist:get(key, default, encrypted)
   end
 
   return value
+end
+
+--- Like `get()`, but a stored table comes back as the table itself, not a copy.
+--- Change it only to hand it straight back to `commit()`.
+--- @param key string The key to retrieve the value for.
+--- @param default? any The value to return if the key doesn't exist (optional).
+--- @param encrypted? boolean Whether the value is encrypted (optional).
+--- @return any value The stored value, or the default if the key doesn't exist.
+function Persist:peek(key, default, encrypted)
+  log:trace("Persist:peek(%s, %s, %s)", key, default, encrypted)
+  loadMigrations()
+  if type(MIGRATIONS[key]) == "function" then
+    self:get(key, default, encrypted) -- runs the migration once
+  end
+  return self:_get(key, default, encrypted)
 end
 
 --- JSON text with each byte that is not part of a UTF-8 character written as \u00XX, which
@@ -157,7 +187,8 @@ local function salvage(key, stored)
   return nil
 end
 
---- Internal get implementation with caching.
+--- Internal get implementation with caching. A stored table comes back as the
+--- cached table itself.
 --- @private
 --- @param key string The key to retrieve.
 --- @param default any The default value if key is not found.
@@ -189,11 +220,8 @@ function Persist:_get(key, default, encrypted)
 
   if value == EMPTY or value == nil then
     return default
-  elseif type(value) == "table" then
-    return TableDeepCopy(value)
-  else
-    return value
   end
+  return value
 end
 
 --- Sets a value in the persistence store. Inside `defer()`, a write-behind key's
@@ -204,13 +232,36 @@ end
 --- @return void
 function Persist:set(key, value, encrypted)
   log:trace("Persist:set(%s, %s, %s)", key, value, encrypted)
+  self:_store(key, value, encrypted, true)
+end
+
+--- Like `set()`, but stores a table itself instead of a copy, so the caller must
+--- not change it afterwards except to commit it again. For a table read with
+--- `peek()` and changed in place.
+--- @param key string The key to set the value for.
+--- @param value any The value to store. If nil, "" or NaN, the key will be deleted.
+--- @param encrypted? boolean Whether to encrypt the value (optional).
+--- @return void
+function Persist:commit(key, value, encrypted)
+  log:trace("Persist:commit(%s, %s, %s)", key, value, encrypted)
+  self:_store(key, value, encrypted, false)
+end
+
+--- Caches and writes a value.
+--- @private
+--- @param key string The key.
+--- @param value any The value; nil, "" or NaN deletes the key.
+--- @param encrypted? boolean Whether to encrypt the value.
+--- @param copy boolean Whether a table is cached as a copy.
+--- @return void
+function Persist:_store(key, value, encrypted, copy)
   -- Director ignores an encrypted "", which would leave the old value, and stores a NaN as STORED_NAN.
   if value == nil or value == "" or value ~= value then
     self._persist[key] = EMPTY
     self._pending[key] = nil -- a later flush must not bring the key back
     PersistDeleteValue(key)
   else
-    if type(value) == "table" then
+    if type(value) == "table" and copy then
       self._persist[key] = TableDeepCopy(value)
     else
       self._persist[key] = value
@@ -236,10 +287,18 @@ function Persist:setWriteBehind(key, ms)
   self._writeBehind[key] = ms
 end
 
---- Closes a `defer()` scope, then returns or rethrows what pcall gave it.
+--- Closes a `defer()` scope, then returns or rethrows what pcall gave it. Closing
+--- the outermost scope writes the keys `durable()` asked for, error or not.
 --- @private
 local function leaveDefer(self, ok, ...)
   self._deferDepth = self._deferDepth - 1
+  if self._deferDepth == 0 and next(self._durable) ~= nil then
+    local keys = self._durable
+    self._durable = {}
+    for key in pairs(keys) do
+      self:flush(key)
+    end
+  end
   if not ok then
     error((...), 0)
   end
@@ -267,6 +326,20 @@ function Persist:flush(key)
       self._pending[pendingKey] = nil
       PersistSetValue(pendingKey, Serialize(self._persist[pendingKey]), encrypted)
     end
+  end
+end
+
+--- Makes sure a key's pending write reaches storage before the outermost `defer()`
+--- scope closes, or at once outside one. For a write that must survive a restart,
+--- made in a batch that should still reach storage once.
+--- @param key string The key.
+--- @return void
+function Persist:durable(key)
+  log:trace("Persist:durable(%s)", key)
+  if self._deferDepth > 0 then
+    self._durable[key] = true
+  else
+    self:flush(key)
   end
 end
 

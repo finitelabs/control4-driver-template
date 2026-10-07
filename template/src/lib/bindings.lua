@@ -135,11 +135,11 @@ function Bindings:getOrAddDynamicBinding(namespace, key, type, provider, display
     displayName,
     class
   )
-  local bindings = self:getBindings()
+  local bindings = self:_peekBindings()
   --- @type Binding|nil
   local binding = Select(bindings, namespace, key)
   if binding == nil then
-    local bindingId = self:_getNextBindingId(type)
+    local bindingId = self:_getNextBindingId(type, bindings)
     if bindingId == nil then
       return nil
     end
@@ -176,7 +176,7 @@ function Bindings:getOrAddDynamicBinding(namespace, key, type, provider, display
       log:warn("Binding '%s' changed shape; %d connection(s) dropped, re-wire in Composer", displayName, #conns)
     end
   end
-  return binding
+  return TableDeepCopy(binding)
 end
 
 --- Retrieves a dynamic binding by namespace and key.
@@ -184,10 +184,10 @@ end
 --- @param key string The key of the binding.
 --- @return Binding|nil binding The binding object or nil if not found.
 function Bindings:getDynamicBinding(namespace, key)
-  log:trace("Binding:getOrAddDynamicBinding(%s, %s)", namespace, key)
-  local bindings = self:getBindings()
+  log:trace("Binding:getDynamicBinding(%s, %s)", namespace, key)
   --- @type Binding|nil
-  return Select(bindings, namespace, key)
+  local binding = Select(self:_peekBindings(), namespace, key)
+  return binding and TableDeepCopy(binding)
 end
 
 --- Retrieves all dynamic bindings for a given namespace.
@@ -195,9 +195,9 @@ end
 --- @return table<string, Binding> bindings A table of bindings for the namespace.
 function Bindings:getDynamicBindings(namespace)
   log:trace("Binding:getDynamicBindings(%s)", namespace)
-  local bindings = self:getBindings()
   --- @type table<string, Binding>
-  return Select(bindings, namespace) or {}
+  local nsBindings = Select(self:_peekBindings(), namespace)
+  return nsBindings and TableDeepCopy(nsBindings) or {}
 end
 
 --- Deletes a dynamic binding by namespace and key.
@@ -206,7 +206,7 @@ end
 --- @param key string The key of the binding.
 function Bindings:deleteBinding(namespace, key)
   log:trace("Binding:deleteBinding(%s, %s)", namespace, key)
-  local bindings = self:getBindings()
+  local bindings = self:_peekBindings()
   --- @type integer|nil
   local bindingId = Select(bindings, namespace, key, "bindingId")
   if IsEmpty(bindingId) then
@@ -234,7 +234,7 @@ end
 --- @param namespace string The namespace to delete all bindings from.
 function Bindings:deleteAllBindings(namespace)
   log:trace("Binding:deleteAllBindings(%s)", namespace)
-  local bindings = self:getBindings()
+  local bindings = self:_peekBindings()
   local nsBindings = bindings[namespace]
 
   if IsEmpty(nsBindings) then
@@ -289,7 +289,7 @@ end
 function Bindings:restoreBindings()
   log:trace("Binding:restoreBindings()")
   local deviceBindings = GetDeviceBindings(tointeger(C4:GetDeviceID()))
-  for _, keys in pairs(self:getBindings()) do
+  for _, keys in pairs(self:_peekBindings()) do
     for _, binding in pairs(keys) do
       deviceBindings[binding.bindingId] = nil
       -- AddDynamicBinding raises on a nil name, which an older driver build could save; the
@@ -323,12 +323,13 @@ end
 --- ID is unique and within the allowed range.
 --- @private
 --- @param type string The type of the binding (e.g., "CONTROL" or "PROXY").
+--- @param bindings table<string, table<string, Binding>>? The bindings table, if the caller has it.
 --- @return integer|nil bindingId The next available binding ID or nil if the maximum is exceeded.
-function Bindings:_getNextBindingId(type)
+function Bindings:_getNextBindingId(type, bindings)
   log:trace("Binding:_getNextBindingId(%s)", type)
   --- @type table<integer, boolean>
   local currentBindings = {}
-  for _, keys in pairs(self:getBindings()) do
+  for _, keys in pairs(bindings or self:_peekBindings()) do
     for _, binding in pairs(keys) do
       currentBindings[binding.bindingId] = true
     end
@@ -355,20 +356,45 @@ function Bindings:getBindings()
   return persist:get(CONNECTION_BINDINGS_PERSIST_KEY, {}) or {}
 end
 
---- Saves the bindings to persistent storage.
+--- The stored bindings table itself, not a copy (see persist:peek).
+--- @private
+--- @return table<string, table<string, Binding>> bindings The bindings table.
+function Bindings:_peekBindings()
+  local bindings = persist:peek(CONNECTION_BINDINGS_PERSIST_KEY, {})
+  return type(bindings) == "table" and bindings or {}
+end
+
+--- Saves the bindings to persistent storage. The table is stored as it is, so it
+--- must not be changed afterwards except to save it again.
 --- @private
 --- @param bindings table<string, table<string, Binding>>? The bindings table to save.
 --- @diagnostic disable-next-line: unused
 function Bindings:_saveBindings(bindings)
   log:trace("Binding:_saveBindings(%s)", bindings)
-  persist:set(CONNECTION_BINDINGS_PERSIST_KEY, not IsEmpty(bindings) and bindings or nil)
+  persist:commit(CONNECTION_BINDINGS_PERSIST_KEY, not IsEmpty(bindings) and bindings or nil)
+end
+
+--- Opts the bindings in to write-behind (see lib.persist): a change made inside
+--- `persist:defer()` reaches storage at most once per `ms`.
+--- @param ms number The flush interval in milliseconds.
+--- @return void
+function Bindings:setWriteBehind(ms)
+  log:trace("Bindings:setWriteBehind(%s)", ms)
+  persist:setWriteBehind(CONNECTION_BINDINGS_PERSIST_KEY, ms)
+end
+
+--- Writes any change still waiting under write-behind to storage now.
+--- @return void
+function Bindings:flush()
+  log:trace("Bindings:flush()")
+  persist:flush(CONNECTION_BINDINGS_PERSIST_KEY)
 end
 
 --- Resets all dynamic bindings, removing them from the system and clearing persisted storage.
 --- This does not affect static bindings defined in driver.xml.
 function Bindings:reset()
   log:trace("Bindings:reset()")
-  for _, nsBindings in pairs(self:getBindings()) do
+  for _, nsBindings in pairs(self:_peekBindings()) do
     for _, binding in pairs(nsBindings) do
       log:debug("Removing binding '%s' (id=%s)", binding.displayName, binding.bindingId)
       C4:RemoveDynamicBinding(binding.bindingId)
