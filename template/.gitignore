@@ -2,6 +2,7 @@
 /build
 /.venv
 /.lua
+/.env
 **/http-client.private.env.json
 
 # Python bytecode
