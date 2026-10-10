@@ -127,11 +127,13 @@ jobs:
           fi
 {% for dist in distributions.split() %}
 
-      - name: Upload {{ dist }} artifacts
-        if: always()
+{% if dist == 'oss' %}      # release.yml downloads this artifact from the tag's run.
+{% endif %}      - name: Upload {{ dist }} artifacts
+        if: always() && github.event_name == 'push'
         uses: actions/upload-artifact@v7
         with:
           name: {{ dist }}
           path: dist/{{ dist }}/*
           if-no-files-found: error
+          retention-days: 3
 {% endfor %}
