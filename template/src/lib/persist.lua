@@ -296,19 +296,32 @@ function Persist:setWriteBehind(key, ms)
 end
 
 --- Closes a `defer()` scope, then returns or rethrows what pcall gave it. Closing
---- the outermost scope writes the keys `durable()` asked for, error or not.
+--- the outermost scope writes the keys `durable()` asked for, error or not. A
+--- write that raises does not stop the others. The first such error is raised
+--- if the scope has none of its own, and any other is logged.
 --- @private
 local function leaveDefer(self, ok, ...)
   self._deferDepth = self._deferDepth - 1
+  local flushed, flushErr = true, nil
   if self._deferDepth == 0 and next(self._durable) ~= nil then
     local keys = self._durable
     self._durable = {}
     for key in pairs(keys) do
-      self:flush(key)
+      local written, err = pcall(self.flush, self, key)
+      if not written then
+        if ok and flushed then
+          flushed, flushErr = false, err
+        else
+          log:warn("Could not write %s as the scope closed: %s", key, err)
+        end
+      end
     end
   end
   if not ok then
     error((...), 0)
+  end
+  if not flushed then
+    error(flushErr, 0)
   end
   return ...
 end
@@ -324,16 +337,30 @@ function Persist:defer(fn, ...)
   return leaveDefer(self, pcall(fn, ...))
 end
 
---- Writes pending write-behind values to storage now.
+--- Writes pending write-behind values to storage now. A write that raises keeps
+--- its key pending and does not stop the others: the first such error is raised
+--- once every key has been tried, and any other is logged.
 --- @param key string? The key to flush, or nil for every key.
 --- @return void
 function Persist:flush(key)
   log:trace("Persist:flush(%s)", key)
+  local failed, firstErr = false, nil
   for pendingKey, encrypted in pairs(self._pending) do
     if key == nil or pendingKey == key then
-      self._pending[pendingKey] = nil
-      PersistSetValue(pendingKey, Serialize(self._persist[pendingKey]), encrypted)
+      local written, err = pcall(function()
+        PersistSetValue(pendingKey, Serialize(self._persist[pendingKey]), encrypted)
+      end)
+      if written then
+        self._pending[pendingKey] = nil -- only once written, so a write that raises is tried again
+      elseif not failed then
+        failed, firstErr = true, err
+      else
+        log:warn("Could not write %s: %s", pendingKey, err)
+      end
     end
+  end
+  if failed then
+    error(firstErr, 0)
   end
 end
 

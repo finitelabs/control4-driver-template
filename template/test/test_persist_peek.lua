@@ -6,6 +6,10 @@
 --   * commit() stores a table without copying it, set() still copies;
 --   * durable() inside defer() writes once, when the outermost scope closes, even
 --     when the scope ends in an error; outside defer() it writes at once;
+--   * a durable write that raises at the close stays pending, stops no other
+--     key's write, and is logged where the scope's own error is the one raised;
+--   * flush() tries every pending key when a write raises, then raises the
+--     first error and logs any other;
 --   * a migration still runs exactly once, whether get() or peek() reads first.
 --
 -- Run from the driver root:
@@ -25,10 +29,15 @@ function C4:PersistSetValue(key, value, encrypted)
   return realSet(self, key, value, encrypted)
 end
 
+local warnings = {}
+require("lib.logging").warn = function(_, text, ...)
+  table.insert(warnings, string.format(text, ...))
+end
+
 --- A fresh Persist instance, so no cache, registration, or timer carries over.
 local function newPersist()
   ShimFireTimers()
-  writes = {}
+  writes, warnings = {}, {}
   return getmetatable(require("lib.persist")):new()
 end
 
@@ -113,6 +122,85 @@ do
   end)
   T.falsy("the error is rethrown", ok)
   T.eq("and the durable write went out", writes["Batch"], 1)
+end
+
+T.section("a durable write that raises as the scope closes")
+do
+  local p = newPersist()
+  p:setWriteBehind("A", 60000)
+  p:setWriteBehind("B", 60000)
+  -- The first key the close writes is refused, whichever of the two pairs() reaches first
+  local refused, refusing = nil, true
+  local counted = C4.PersistSetValue
+  function C4:PersistSetValue(key, value, encrypted)
+    refused = refused or key
+    if refusing and key == refused then
+      error("store refused " .. key, 0)
+    end
+    return counted(self, key, value, encrypted)
+  end
+  local _, err = pcall(p.defer, p, function()
+    p:set("A", { n = 1 })
+    p:durable("A")
+    p:set("B", { n = 1 })
+    p:durable("B")
+    error("the scope's own error")
+  end)
+  T.contains("the scope's own error is the one rethrown", err, "the scope's own error")
+  T.eq("and the write's is logged with its key", warnings, {
+    "Could not write " .. refused .. " as the scope closed: store refused " .. refused,
+  })
+  T.eq("the other key is still written", writes[refused == "A" and "B" or "A"], 1)
+  refusing = false
+  ShimFireTimers()
+  T.eq("and the refused key's write-behind flush writes it", writes[refused], 1)
+  refusing = true
+  T.raises("a scope with no error of its own raises the write's", function()
+    p:defer(function()
+      p:set(refused, { n = 2 })
+      p:durable(refused)
+    end)
+  end, "store refused")
+  C4.PersistSetValue = counted
+end
+
+T.section("flush() tries every key when a write raises")
+do
+  local p = newPersist()
+  local keys = { "A", "B", "C" }
+  for _, key in ipairs(keys) do
+    p:setWriteBehind(key, 60000)
+  end
+  p:defer(function()
+    for _, key in ipairs(keys) do
+      p:set(key, { n = 1 })
+    end
+  end)
+  -- The first key flush() writes is refused, whichever of the three pairs() reaches first
+  local refused, other
+  local counted = C4.PersistSetValue
+  function C4:PersistSetValue(key, value, encrypted)
+    refused = refused or key
+    if key == refused or key == other then
+      error("store refused " .. key, 0)
+    end
+    return counted(self, key, value, encrypted)
+  end
+  T.raises("flush() raises the write's error", function()
+    p:flush()
+  end, "store refused")
+  T.eq("once the other two keys are written", (writes.A or 0) + (writes.B or 0) + (writes.C or 0), 2)
+  -- With a second key refused, one error is raised and the other must not vanish
+  other = refused == "A" and "B" or "A"
+  p:defer(function()
+    p:set(other, { n = 2 })
+  end)
+  local _, raised = pcall(p.flush, p)
+  local logged = raised == "store refused " .. refused and other or refused
+  T.eq("a second write's error is logged with its key", warnings, {
+    "Could not write " .. logged .. ": store refused " .. logged,
+  })
+  C4.PersistSetValue = counted
 end
 
 T.section("durable() outside defer() writes at once")
