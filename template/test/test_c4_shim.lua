@@ -542,6 +542,26 @@ do
   T.check("f 0.99999999 -> 1", select(2, string.unpack(string.pack("f", 0.99999999), "f", 1)) == 1.0)
   T.check("f -0.99999999 -> -1", select(2, string.unpack(string.pack("f", -0.99999999), "f", 1)) == -1.0)
   T.check("f 1e39 saturates to +inf", select(2, string.unpack(string.pack("f", 1e39), "f", 1)) == math.huge)
+  -- Non-finite and out-of-range values, as string.pack("f", v) wrote them on a controller
+  -- (OS 4.3.0). A NaN of either sign is the one it wrote for 0/0, so the bytes hold on any host.
+  local nan = 0 / 0
+  T.check("f encodes a NaN as 0000c07f", fhex(nan) == "0000c07f", fhex(nan))
+  T.check("f encodes a negated NaN as 0000c07f", fhex(-nan) == "0000c07f", fhex(-nan))
+  local wireNan = select(2, string.unpack("\0\0\192\255", "f", 1))
+  T.check("f encodes a NaN off the wire as 0000c07f", fhex(wireNan) == "0000c07f", fhex(wireNan))
+  T.check("f encodes +inf as 0000807f", fhex(math.huge) == "0000807f", fhex(math.huge))
+  T.check("f encodes -inf as 000080ff", fhex(-math.huge) == "000080ff", fhex(-math.huge))
+  T.check("f encodes 3.5e38 as 0000807f", fhex(3.5e38) == "0000807f", fhex(3.5e38))
+  T.check("f encodes 1e-46 as 00000000", fhex(1e-46) == "00000000", fhex(1e-46))
+  T.check("f encodes 0.5 as 0000003f", fhex(0.5) == "0000003f", fhex(0.5))
+  local function roundTrip(x)
+    return select(2, string.unpack(string.pack("f", x), "f", 1))
+  end
+  local rtNan, rtNegNan = roundTrip(nan), roundTrip(-nan)
+  T.check("f NaN round-trips to a NaN", rtNan ~= rtNan, rtNan)
+  T.check("f negated NaN round-trips to a NaN", rtNegNan ~= rtNegNan, rtNegNan)
+  T.check("f +inf round-trips", roundTrip(math.huge) == math.huge, roundTrip(math.huge))
+  T.check("f -inf round-trips", roundTrip(-math.huge) == -math.huge, roundTrip(-math.huge))
 end
 
 --------------------------------------------------------------------------------

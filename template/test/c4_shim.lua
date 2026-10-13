@@ -52,7 +52,12 @@ if not string.pack then
     end
     return pos + size, v
   end
+  -- Non-finite values encode as the controller's lpack does (measured on OS 4.3.0). Every NaN is
+  -- the one it writes for 0/0: a NaN's sign is the host FPU's, so keeping it would differ by host.
   local function packFloat(x)
+    if x ~= x then
+      return string.char(0, 0, 0xC0, 0x7F)
+    end
     if x == 0 then
       return string.char(0, 0, 0, 0)
     end
@@ -60,6 +65,9 @@ if not string.pack then
     if x < 0 then
       sign = 0x80
       x = -x
+    end
+    if x == math.huge then
+      return string.char(0, 0, 0x80, sign + 0x7F)
     end
     local mant, expo = math.frexp(x) -- x = mant * 2^expo, 0.5 <= mant < 1
     expo = expo + 126 -- IEEE754 biased exponent (mant in [0.5,1) => 1.f = 2*mant)
