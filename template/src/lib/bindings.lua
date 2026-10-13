@@ -355,7 +355,9 @@ end
 --- @diagnostic disable-next-line: unused
 function Bindings:getBindings()
   log:trace("Binding:getBindings()")
-  return persist:get(CONNECTION_BINDINGS_PERSIST_KEY, {}) or {}
+  local bindings = persist:get(CONNECTION_BINDINGS_PERSIST_KEY, {})
+  -- A table always: the library starts over from stored bindings that are not one (see _peekBindings)
+  return type(bindings) == "table" and bindings or {}
 end
 
 --- The stored bindings table itself, not a copy (see persist:peek).

@@ -151,7 +151,9 @@ end
 --- @diagnostic disable-next-line: unused
 function Events:getEvents()
   log:trace("Events:getEvents()")
-  return persist:get(EVENTS_PERSIST_KEY, {}) or {}
+  local events = persist:get(EVENTS_PERSIST_KEY, {})
+  -- A table always: the library starts over from stored events that are not one (see _peekEvents)
+  return type(events) == "table" and events or {}
 end
 
 --- The stored events table itself, not a copy (see persist:peek).

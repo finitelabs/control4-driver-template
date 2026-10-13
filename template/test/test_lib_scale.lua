@@ -188,6 +188,11 @@ do
     libs.conditionals:_peekConditionals(),
     libs.bindings:_peekBindings(),
   }, { {}, {}, {}, {} })
+  T.eq("getEvents(), getConditionals() and getBindings() are empty tables too", {
+    libs.events:getEvents(),
+    libs.conditionals:getConditionals(),
+    libs.bindings:getBindings(),
+  }, { {}, {}, {} })
   T.eq("each names its key in the log, once", warnings, {
     "Stored Values does not read back as a table; starting over",
     "Stored Events does not read back as a table; starting over",

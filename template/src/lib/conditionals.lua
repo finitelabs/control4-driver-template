@@ -140,7 +140,9 @@ end
 --- @diagnostic disable-next-line: unused
 function Conditionals:getConditionals()
   log:trace("Conditionals:getConditionals()")
-  return persist:get(CONDITIONALS_PERSIST_KEY, {}) or {}
+  local conditionals = persist:get(CONDITIONALS_PERSIST_KEY, {})
+  -- A table always: the library starts over from stored conditionals that are not one (see _peekConditionals)
+  return type(conditionals) == "table" and conditionals or {}
 end
 
 --- The stored conditionals table itself, not a copy (see persist:peek).
