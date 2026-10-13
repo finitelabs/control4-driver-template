@@ -81,6 +81,23 @@ jobs:
             --data vendor_modules="$VENDOR_MODULES" \
             . "$RUNNER_TEMP/render"
 
+      - name: Rendered uploads expire
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          f=.github/workflows/build.yml
+          uploads=$(grep -c 'uses: actions/upload-artifact' "$f" || true)
+          expiring=$(grep -c 'retention-days:' "$f" || true)
+          tag=$(grep 'retention-days:' "$f" | grep -cF "github.ref_type == 'tag' && 14" || true)
+          pr=$(grep 'retention-days:' "$f" | grep -cF "github.event_name == 'pull_request' && 1" || true)
+          other=$(grep 'retention-days:' "$f" | grep -cF '|| 3 }}' || true)
+          echo "upload steps: $uploads, retention-days: $expiring, naming tag: $tag, pull request: $pr, otherwise: $other"
+          for n in "$expiring" "$tag" "$pr" "$other"; do
+            if [ "$uploads" -eq 0 ] || [ "$n" -ne "$uploads" ]; then
+              echo "::error::every actions/upload-artifact step in build.yml needs retention-days naming the tag, pull request and otherwise cases"
+              exit 1
+            fi
+          done
+
       # make test only loads modules that call a drivers-common-public global.
       - name: Every rendered src/lib module loads
         working-directory: ${{ runner.temp }}/render
