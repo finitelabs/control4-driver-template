@@ -78,6 +78,11 @@ renders unconditionally, and `gen-squishy` bundles only what a driver actually
 requires, so a rendered-but-unused module is zero bytes in the `.c4z`. A new
 `src/lib` file needs no `_exclude` entry.
 
+That is also why `make scan-secrets` looks only at what ships in `dist/<dist>`:
+`diagnostics.lua` renders into every repo with its `%%SECRET:NAME%%`
+placeholders, and a scan of `build/` would demand credentials from every repo
+whose drivers never require it.
+
 `github-updater.lua` and its tests are gated on `oss`, the distribution whose
 update mechanism they are.
 

@@ -30,6 +30,8 @@ then pull the change in with `copier update`.
 
 - `bindings.lua`: binding management
 - `conditionals.lua`: conditional/programming UI management
+- `diagnostics.lua`: memory census and error capture, shipped to InfluxDB. Only
+  in DriverCentral builds; other builds get an inert stub with the same surface
 - `events.lua`: event firing and management
 - `http.lua`: HTTP client wrapper
 - `logging.lua`: structured logging with configurable levels
@@ -161,7 +163,7 @@ stale.
 make help          # List every pipeline step, plus init/build/fmt/clean
 make init          # Install all dependencies (safe to re-run)
 make check-deps    # Install if needed, then verify .venv matches requirements.txt
-make build         # Full build, from clean through zip (see Build Pipeline)
+make build         # Full build, from clean through the secrets scan (see Build Pipeline)
 make build-nodocs  # Build without generating docs
 make test          # Run the Lua test suite (test/test_*.lua)
 make fmt           # Format all code (Lua, Python, Markdown)
@@ -189,6 +191,8 @@ on a clean tree until something has populated `build/`.
 1. **Generate docs**: Markdown -> HTML -> PDF, plus README
 1. **Package**: run driverpackager to create .c4z files
 1. **Zip**: bundle the c4z, docs and source folders per distribution
+1. **Scan secrets**: fail if a `%%SECRET:NAME%%` placeholder ships in
+   `dist/<distribution>` (see Build Secrets)
 
 The driver.xml step stamps today's date as the version unless `DRIVER_VERSION`
 is set. On a tag build CI sets it to the tag's date, so the tag must be
@@ -216,6 +220,59 @@ preprocessor recognizes three distributions: `drivercentral` and
 `drivercentral-dev` (which both define `DRIVERCENTRAL`, the latter also
 `DRIVERCENTRAL_DEV`) and `oss` (which defines `OSS`). Any other token in the
 answers file fails the build.
+
+### Build Secrets
+
+Credentials are kept out of the source tree as `%%SECRET:NAME%%` placeholders,
+substituted during the preprocess step from the environment variable of the same
+name.
+{%- if build_secrets %} This build needs:
+{% for secret in build_secrets.split() %}
+- `{{ secret }}`
+{%- endfor %}
+{%- endif %}
+
+Only a DriverCentral distribution takes a secret, and only in Lua source, so
+guard each placeholder with `#ifdef DRIVERCENTRAL`. The oss build substitutes
+nothing: a placeholder that reaches it, or one in a file that is not Lua, fails
+the build whatever the environment holds.
+
+A value may not contain a backslash, a quote or a newline, since it is spliced
+into a Lua string literal; the build fails naming the variable. An empty value
+counts as unset.
+
+After packaging, `make scan-secrets` fails the build if a placeholder survives
+into `dist/<dist>`, naming the file and the variable, or if one is malformed,
+such as `%%SECRET:BAD-NAME%%`. It scans only what ships, so a placeholder in a
+module no driver requires, or in a branch the distribution strips, needs no
+value. The preprocess step prints which names it substituted and whether each
+came from the environment or `.env`, and the scan says when a distribution
+carries a value and so is not marked clean.
+
+For local builds, put them in a `.env` at the repo root (gitignored). The file
+is UTF-8, plain `NAME=value` lines, each name at most once; a line starting with
+`#` is a comment, but a `#` after a value is part of the value. A value may be
+wrapped in one pair of quotes, and a leading `export ` is ignored:
+
+```
+{% for secret in (build_secrets or "NAME").split() %}{{ secret }}=value-here
+{% endfor %}```
+
+An environment variable that is set and not empty takes precedence over `.env`.
+
+CI passes a value to the build only for a name in the `build_secrets` copier
+answer, from the repository Actions secret of the same name.
+{%- if build_secrets %} Set each with
+`gh secret set` or the repository settings.
+
+On a pull request from a fork or from Dependabot, which get no secrets, a
+distribution that needs one is built but not uploaded, and Build still passes.
+{%- endif %}
+
+In a public repository, where any signed-in user can download Actions artifacts,
+a distribution whose output carries a secret value is never uploaded; only a
+private repository uploads it. Those artifacts keep the value for up to 14 days,
+so delete them, or wait, before making the repository public.
 
 ## Writing Tests
 

@@ -1,12 +1,25 @@
 #!/usr/bin/env python3
 
+# PEP 604 annotations (`str | None`) raise TypeError at import on the documented 3.9 floor.
+from __future__ import annotations
+
 import argparse
 import itertools
 import json
 import os
 import shutil
 import re
+import sys
+import zipfile
 from pathlib import Path
+
+# Cannot collide with the %%VAR%% variant substitution, whose \w+ names have no colon.
+SECRET_PATTERN = re.compile(r"%%SECRET:([A-Za-z_][A-Za-z0-9_]*)%%")
+SECRET_PATTERN_BYTES = re.compile(SECRET_PATTERN.pattern.encode())
+SECRET_PREFIX_BYTES = re.compile(rb"%%SECRET:")
+MALFORMED_EXCERPT_BYTES = re.compile(rb"%%SECRET:[^\s\"']*")
+SECRET_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+SUBSTITUTED_RECORD = "secrets-substituted"
 
 
 def process_file(
@@ -253,6 +266,252 @@ def replace_template_variables(file_path: Path, variables: dict) -> None:
         f.write(content)
 
 
+def load_dotenv(repo_root: Path) -> set[str]:
+    """
+    Seed the environment from a repo-root .env, without overriding a variable that is
+    already set to a non-empty value. Each line is NAME=value, optionally prefixed with
+    `export `; a line starting with # is a comment, and one pair of matching surrounding
+    quotes is stripped from a value.
+
+    Args:
+        repo_root: Repository root to look for .env in
+
+    Returns:
+        The names whose value now comes from .env
+
+    Raises:
+        SystemExit: The file is not UTF-8, a line is not a comment, blank, or
+            NAME=value, or a name is repeated
+    """
+    dotenv_path = repo_root / ".env"
+    if not dotenv_path.is_file():
+        return set()
+
+    try:
+        lines = dotenv_path.read_text(encoding="utf-8-sig").splitlines()
+    except UnicodeDecodeError as e:
+        raise SystemExit(f"Error: .env is not UTF-8 ({e.reason} at byte {e.start}).")
+
+    seen = {}
+    from_dotenv = set()
+    for number, line in enumerate(lines, 1):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        name, separator, value = line.partition("=")
+        name = name.strip()
+        if not separator or not SECRET_NAME.fullmatch(name):
+            raise SystemExit(f"Error: .env line {number} is not NAME=value.")
+        if name in seen:
+            raise SystemExit(
+                f"Error: .env sets {name} on line {seen[name]} and again on line {number}."
+            )
+        seen[name] = number
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        if not os.environ.get(name):
+            os.environ[name] = value
+            from_dotenv.add(name)
+    return from_dotenv
+
+
+def secret_value(name: str) -> str | None:
+    """
+    The value to substitute for a secret, or None when it is unset or empty. GitHub
+    gives an unset repository secret as an empty string.
+
+    Raises:
+        SystemExit: The value cannot be spliced into a Lua string literal as-is
+    """
+    value = os.environ.get(name)
+    if not value:
+        return None
+    if any(c in value for c in "\\\"'\n\r"):
+        raise SystemExit(
+            f"Error: build secret {name} contains a backslash, quote or newline, "
+            "which a Lua string literal would not carry unchanged."
+        )
+    return value
+
+
+def substitute_secrets(build_dir: Path, from_dotenv: set[str]) -> None:
+    """
+    Replace %%SECRET:NAME%% placeholders in the Lua files of the build output with the
+    environment variable of the same name. An unset or empty one is left in place, as is
+    a placeholder in any other file, and the scan of the packaged output reports it if
+    it ships.
+
+    Writes the names it substituted to build_dir/secrets-substituted, one per line, so
+    the scan looks for the values of exactly those, including a placeholder that only
+    variant expansion produced.
+
+    Args:
+        build_dir: Build directory to walk
+        from_dotenv: Names whose value came from .env, for the report
+    """
+    substituted_names = set()
+
+    def replace(match: re.Match) -> str:
+        value = secret_value(match.group(1))
+        if value is None:
+            return match.group(0)
+        substituted_names.add(match.group(1))
+        return value
+
+    for file_path in sorted(build_dir.rglob("*.lua")):
+        if not file_path.is_file():
+            continue
+        content = file_path.read_text(encoding="utf-8")
+        substituted = SECRET_PATTERN.sub(replace, content)
+        if substituted != content:
+            file_path.write_text(substituted, encoding="utf-8")
+
+    write_substituted_record(build_dir, substituted_names)
+    if substituted_names:
+        print(
+            f"Build secrets substituted in {build_dir.name}: "
+            + ", ".join(
+                f"{name} (from {'.env' if name in from_dotenv else 'the environment'})"
+                for name in sorted(substituted_names)
+            )
+        )
+
+
+def write_substituted_record(build_dir: Path, names: set[str]) -> None:
+    (build_dir / SUBSTITUTED_RECORD).write_text(
+        "".join(f"{name}\n" for name in sorted(names)), encoding="utf-8"
+    )
+
+
+def shipped_files(dist_dir: Path):
+    """
+    Yield (label, bytes) for every file under dist_dir, and for every member of a .c4z
+    or .zip in it.
+    """
+    for path in sorted(p for p in dist_dir.rglob("*") if p.is_file()):
+        label = str(path)
+        data = path.read_bytes()
+        yield label, data
+        if path.suffix in (".c4z", ".zip") and zipfile.is_zipfile(path):
+            with zipfile.ZipFile(path) as archive:
+                for member in archive.namelist():
+                    if not member.endswith("/"):
+                        yield f"{label}:{member}", archive.read(member)
+
+
+def scan_shipped_secrets(
+    repo_root: Path, distribution: str, takes_secrets: bool, unresolved_secrets: str
+) -> None:
+    """
+    Scan what a distribution ships (dist/<distribution>) for placeholders that were not
+    substituted. A placeholder in a module no driver requires never reaches dist/, so it
+    needs no value.
+
+    Writes build/<distribution>/secrets-scan-clean when the output carries neither a
+    placeholder nor the value of a secret the preprocess step substituted, which
+    build.yml requires to upload from a public repository, and secrets-scan-unresolved
+    when a placeholder survives, in either mode.
+
+    Args:
+        repo_root: Repository root
+        distribution: Distribution name
+        takes_secrets: Whether the preprocess step substitutes into this distribution
+        unresolved_secrets: "fail" to exit 1 on a placeholder no value was set for,
+            "skip" to report it and mark the distribution as not to be uploaded
+    """
+    dist_dir = repo_root / "dist" / distribution
+    marker_dir = repo_root / "build" / distribution
+    clean_marker = marker_dir / "secrets-scan-clean"
+    unresolved_marker = marker_dir / "secrets-scan-unresolved"
+    clean_marker.unlink(missing_ok=True)
+    unresolved_marker.unlink(missing_ok=True)
+
+    if not dist_dir.is_dir():
+        raise SystemExit(f"Error: {dist_dir} does not exist; package it first.")
+
+    record = marker_dir / SUBSTITUTED_RECORD
+    if not record.is_file():
+        raise SystemExit(f"Error: {record} does not exist; preprocess it first.")
+    names = record.read_text(encoding="utf-8").split()
+    values = [os.environ.get(name) for name in names]
+
+    # Setting a variable fixes only a missing value, so skip mode tolerates nothing else.
+    unset, unguarded, not_lua, malformed = [], [], [], []
+    carries_secret = False
+    for label, data in shipped_files(dist_dir):
+        label = os.path.relpath(label, repo_root)
+        for position in (m.start() for m in SECRET_PREFIX_BYTES.finditer(data)):
+            match = SECRET_PATTERN_BYTES.match(data, position)
+            if not match:
+                text = MALFORMED_EXCERPT_BYTES.match(data, position).group(0)[:60]
+                malformed.append(f"{label}: {text.decode(errors='replace')}")
+                continue
+            entry = f"{label}: {match.group(1).decode()}"
+            if not label.endswith(".lua"):
+                not_lua.append(entry)
+            elif not takes_secrets:
+                unguarded.append(entry)
+            else:
+                unset.append(entry)
+        carries_secret = carries_secret or any(
+            v is None or v.encode() in data for v in values
+        )
+
+    marker_dir.mkdir(parents=True, exist_ok=True)
+    errors = [
+        (
+            f"Build secret placeholders in dist/{distribution}, which never takes a "
+            "secret:",
+            unguarded,
+            "Guard each placeholder with #ifdef DRIVERCENTRAL.",
+        ),
+        (
+            f"Build secret placeholders in files of dist/{distribution} that are not "
+            "Lua:",
+            not_lua,
+            "Only Lua source takes a secret; move the placeholder into a .lua file.",
+        ),
+        (
+            f"Malformed build secret placeholders in dist/{distribution}:",
+            malformed,
+            "Write each one as %%SECRET:NAME%%, NAME being letters, digits and "
+            "underscores.",
+        ),
+        (
+            f"Unresolved build secrets in dist/{distribution}:",
+            unset,
+            "Set each name in the environment or a repo-root .env, then rebuild. "
+            "For CI, list it in the build_secrets copier answer and add a "
+            "repository Actions secret of the same name.",
+        ),
+    ]
+    failing = [e for e in errors if e[1]]
+    for heading, entries, remedy in failing:
+        print(heading)
+        for entry in sorted(set(entries)):
+            print(f"  {entry}")
+        print(remedy)
+    if failing:
+        unresolved_marker.touch()
+        if unresolved_secrets != "skip" or unguarded or not_lua or malformed:
+            sys.exit(1)
+        print(f"Skipping {distribution}: it is built but marked not to be uploaded.")
+        return
+
+    if carries_secret:
+        print(
+            f"Build secrets scan of dist/{distribution}: OK, but it carries "
+            f"{', '.join(names)}, so it is not marked clean and a public repository "
+            "does not upload it."
+        )
+        return
+    clean_marker.touch()
+    print(f"Build secrets scan of dist/{distribution}: OK, marked clean")
+
+
 def compute_cross_product(dimensions: list[list[dict]]) -> list[dict]:
     """
     Compute the cross-product of multiple variant dimensions.
@@ -427,6 +686,17 @@ def main():
         help="Enable DRIVERCENTRAL + DRIVERCENTRAL_DEV build",
     )
     group.add_argument("--oss", action="store_true", help="Enable OSS build")
+    parser.add_argument(
+        "--scan",
+        action="store_true",
+        help="Scan the packaged dist/<distribution> for unresolved build secrets",
+    )
+    parser.add_argument(
+        "--unresolved-secrets",
+        choices=("fail", "skip"),
+        default="fail",
+        help="With --scan: fail on an unresolved secret, or mark it not to upload",
+    )
     args = parser.parse_args()
 
     if args.drivercentral:
@@ -442,7 +712,6 @@ def main():
         distribution = None
         conditions = set()
     assert distribution, "No distribution specified"
-    print(f"Building distribution: {distribution} (conditions: {conditions})")
 
     # Define source and build directories
     repo_root = Path(__file__).parent.parent
@@ -452,6 +721,15 @@ def main():
     documentation_dir = repo_root / "documentation"
     build_dir = repo_root / "build" / distribution
 
+    takes_secrets = "DRIVERCENTRAL" in conditions
+    if args.scan:
+        load_dotenv(repo_root)
+        scan_shipped_secrets(
+            repo_root, distribution, takes_secrets, args.unresolved_secrets
+        )
+        return
+
+    print(f"Building distribution: {distribution} (conditions: {conditions})")
     os.makedirs(build_dir, exist_ok=True)
 
     # Clean previous builds
@@ -473,6 +751,12 @@ def main():
 
     # Copy and process src directory
     process_directory(build_dir, conditions, variant_map)
+
+    # After the conditionals, so a placeholder in a stripped branch needs no value.
+    if takes_secrets:
+        substitute_secrets(build_dir, load_dotenv(repo_root))
+    else:
+        write_substituted_record(build_dir, set())
 
     print(f"Build completed successfully. Output in {build_dir}")
 

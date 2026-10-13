@@ -25,24 +25,34 @@ jobs:
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: ""
+            build_secrets: ""
           - name: oss-only
             distributions: oss
             readme_build: oss
             vendor_modules: ""
+            build_secrets: ""
           # No github-updater, version, or release workflow; has cloud-client-byte.
           - name: drivercentral-only
             distributions: drivercentral
             readme_build: drivercentral
             vendor_modules: ""
+            build_secrets: ""
           # version.lua ships on a non-oss build only when named.
           - name: version-token
             distributions: drivercentral
             readme_build: drivercentral
             vendor_modules: version
+            build_secrets: ""
           - name: crypto-bundles
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: bitn crypto noiseprotocol protobuf bthome
+            build_secrets: ""
+          - name: build-secrets
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: ""
+            build_secrets: INFLUXDB_URL INFLUXDB_TOKEN
 
     steps:
       - uses: actions/checkout@v4
@@ -70,6 +80,7 @@ jobs:
           DISTRIBUTIONS: ${{ matrix.distributions }}
           README_BUILD: ${{ matrix.readme_build }}
           VENDOR_MODULES: ${{ matrix.vendor_modules }}
+          BUILD_SECRETS: ${{ matrix.build_secrets }}
         run: |
           copier copy --trust --defaults --vcs-ref HEAD \
             --data project_name=ci-render \
@@ -79,6 +90,7 @@ jobs:
             --data distributions="$DISTRIBUTIONS" \
             --data readme_build="$README_BUILD" \
             --data vendor_modules="$VENDOR_MODULES" \
+            --data build_secrets="$BUILD_SECRETS" \
             . "$RUNNER_TEMP/render"
 
       - name: Rendered uploads expire
@@ -145,6 +157,92 @@ jobs:
         working-directory: ${{ runner.temp }}/render
         run: make test
 
+      - name: The oss stub of lib.diagnostics answers every public method
+        if: contains(matrix.distributions, 'oss')
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          # preprocess.py copytrees drivers/ unconditionally; a bare render has none.
+          mkdir -p drivers
+          ./tools/preprocess.py --oss
+          LUA_PATH="$PWD/test/?.lua;$PWD/build/oss/src/?.lua;$PWD/build/oss/vendor/?.lua;;" \
+          luajit -e '
+            require("c4_shim")
+            local diagnostics = require("lib.diagnostics")
+            assert(rawget(diagnostics, "_censusInterval") == nil, "loaded the real module, not the stub")
+            diagnostics:setEnabled(true)
+            assert(diagnostics:isEnabled() == false, "the stub reports enabled")
+            diagnostics:setCensusInterval(60000)
+            diagnostics:dumpSnapshot()
+            diagnostics:captureError("message", "traceback", "source")
+            assert(diagnostics:wrap(function(x) return x + 1 end, "ok")(1) == 2, "wrap changed a return value")
+            local n, a, _, c = diagnostics:wrap(function(...) return select("#", ...), ... end, "args")(1, nil, 3)
+            assert(n == 3 and a == 1 and c == 3, "wrap lost an argument after a nil, or a result")
+            assert(diagnostics:wrap(function() error({}) end, "table")() == nil, "wrap did not swallow a table error")
+            assert(diagnostics:wrap(function() error("boom") end, "err")() == nil, "wrap did not swallow the error")
+
+            -- new is the constructor of the real module; both modules return an instance.
+            local function publicNames(module)
+              local names = {}
+              for _, t in ipairs({ getmetatable(module).__index, module }) do
+                for name, value in pairs(t) do
+                  if type(value) == "function" and not name:find("^_") and name ~= "new" then
+                    table.insert(names, name)
+                  end
+                end
+              end
+              table.sort(names)
+              return table.concat(names, " ")
+            end
+            local real = assert(loadfile("src/lib/diagnostics.lua"))()
+            assert(rawget(real, "_censusInterval") ~= nil, "raw source did not load the real module")
+            assert(publicNames(real) == publicNames(diagnostics),
+              "public methods differ: real " .. publicNames(real) .. "; stub " .. publicNames(diagnostics))
+            print("oss stub answers every public method: " .. publicNames(diagnostics))
+          '
+
+      - name: Every upload is gated on the scan
+        working-directory: ${{ runner.temp }}/render
+        env:
+          DISTRIBUTIONS: ${{ matrix.distributions }}
+        run: |
+          f=.github/workflows/build.yml
+          for dist in $DISTRIBUTIONS; do
+            grep -qF "if: always() && (hashFiles('build/$dist/secrets-scan-clean') != '' || (github.event.repository.private && hashFiles('build/$dist/secrets-scan-unresolved') == ''))" "$f" || {
+              echo "::error::the $dist upload is not gated on a private repository or a clean scan"
+              exit 1
+            }
+          done
+          uploads=$(grep -cE '^ +uses: actions/upload-artifact@' "$f")
+          gates=$(grep -cF "hashFiles('build/" "$f")
+          if [ "$uploads" -ne "$gates" ]; then
+            echo "::error::$uploads upload steps but $gates gates"
+            exit 1
+          fi
+
+      - name: build.yml takes the named secrets
+        if: matrix.build_secrets != ''
+        working-directory: ${{ runner.temp }}/render
+        env:
+          BUILD_SECRETS: ${{ matrix.build_secrets }}
+        run: |
+          f=.github/workflows/build.yml
+          for name in $BUILD_SECRETS; do
+            grep -qE '^ +'"$name"': [$][{][{] secrets\.'"$name"' [}][}]$' "$f" || { echo "::error::no env entry for $name"; exit 1; }
+          done
+          grep -qF "head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') && 'skip' || 'fail'" "$f" || {
+            echo "::error::Build does not skip unresolved secrets on fork and Dependabot PRs"
+            exit 1
+          }
+
+      - name: Without build_secrets, build.yml passes no secrets to the build
+        if: matrix.build_secrets == ''
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          if grep -qE 'secrets\.INFLUXDB|UNRESOLVED_SECRETS' .github/workflows/build.yml; then
+            echo "::error::build.yml passes secrets with no build_secrets"
+            exit 1
+          fi
+
       - name: Formatted
         working-directory: ${{ runner.temp }}/render
         run: |
@@ -169,11 +267,13 @@ jobs:
             vendor_modules: ""
             readme_driver_slug: example
             variants: ""
+            build_secrets: ""
           - name: crypto-bundles
             distributions: drivercentral oss
             vendor_modules: bitn crypto noiseprotocol protobuf bthome
             readme_driver_slug: example
             variants: ""
+            build_secrets: ""
           # The README driver is a generated variant: build/ has
           # drivers/example_variant, and drivers/ has no such folder.
           - name: variant-readme
@@ -181,6 +281,14 @@ jobs:
             vendor_modules: ""
             readme_driver_slug: example_variant
             variants: '{"variants": [{"suffix": "variant"}]}'
+            build_secrets: ""
+          # Every other leg renders diagnostics.lua unrequired, and builds with no secrets.
+          - name: diagnostics
+            distributions: drivercentral oss
+            vendor_modules: ""
+            readme_driver_slug: example
+            variants: ""
+            build_secrets: INFLUXDB_URL INFLUXDB_TOKEN
 
     steps:
       - uses: actions/checkout@v4
@@ -191,9 +299,12 @@ jobs:
         with:
           luaVersion: "luajit-2.1"
 
+      # 3.9 is the floor README and CONTRIBUTING document; the last entry is the default.
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.x"
+          python-version: |
+            3.9
+            3.x
 
       - uses: JohnnyMorganz/stylua-action@v4
         with:
@@ -217,6 +328,7 @@ jobs:
           DISTRIBUTIONS: ${{ matrix.distributions }}
           VENDOR_MODULES: ${{ matrix.vendor_modules }}
           README_DRIVER_SLUG: ${{ matrix.readme_driver_slug }}
+          BUILD_SECRETS: ${{ matrix.build_secrets }}
         run: |
           copier copy --trust --defaults --vcs-ref HEAD \
             --data project_name=ci-render \
@@ -226,15 +338,21 @@ jobs:
             --data distributions="$DISTRIBUTIONS" \
             --data readme_build=oss \
             --data vendor_modules="$VENDOR_MODULES" \
+            --data build_secrets="$BUILD_SECRETS" \
             . "$RUNNER_TEMP/render"
 
       - name: Add example driver
         env:
           VARIANTS: ${{ matrix.variants }}
+          LEG: ${{ matrix.name }}
         run: |
           cp -r example-driver/drivers "$RUNNER_TEMP/render/drivers"
           if [ -n "$VARIANTS" ]; then
             printf '%s\n' "$VARIANTS" > "$RUNNER_TEMP/render/drivers/example/variants.json"
+          fi
+          if [ "$LEG" = diagnostics ]; then
+            printf '\nlocal diagnostics = require("lib.diagnostics")\ndiagnostics:setEnabled(false)\n' \
+              >> "$RUNNER_TEMP/render/drivers/example/driver.lua"
           fi
 
       - name: Initialize project (make init)
@@ -249,10 +367,83 @@ jobs:
         working-directory: ${{ runner.temp }}/render
         run: make test
 
+      - name: preprocess.py loads on Python 3.9
+        if: matrix.name == 'diagnostics'
+        working-directory: ${{ runner.temp }}/render
+        run: python3.9 tools/preprocess.py --help
+
+      - name: An unset or empty secret that ships fails the build, or is skipped
+        if: matrix.name == 'diagnostics'
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          marker() { test -e "build/$1/secrets-scan-$2"; }
+          if output=$(make build-nodocs 2>&1); then
+            echo "::error::built with no secrets set"; exit 1
+          fi
+          echo "$output" | grep -qF 'dist/drivercentral/source/example.lua: INFLUXDB_TOKEN' || {
+            echo "::error::the failure did not name the shipped file and variable"; echo "$output"; exit 1
+          }
+          marker drivercentral unresolved || {
+            echo "::error::a failed scan did not mark drivercentral unresolved, so a private repository uploads it"; exit 1
+          }
+          if INFLUXDB_URL= INFLUXDB_TOKEN= make build-nodocs; then
+            echo "::error::built with empty secrets"; exit 1
+          fi
+          # A backslash still yields valid Lua, so only the check itself stops it.
+          if output=$(INFLUXDB_URL='https://a\b' INFLUXDB_TOKEN=x make build-nodocs 2>&1); then
+            echo "::error::spliced a backslash into a Lua string"; exit 1
+          fi
+          echo "$output" | grep -qF 'build secret INFLUXDB_URL contains a backslash, quote or newline' || {
+            echo "::error::the failure was not the value check"; echo "$output"; exit 1
+          }
+          UNRESOLVED_SECRETS=skip make build-nodocs
+          marker drivercentral unresolved && ! marker drivercentral clean && marker oss clean || {
+            echo "::error::skip mode did not mark drivercentral unresolved and oss clean"; exit 1
+          }
+
+      - name: A placeholder the build cannot take fails it, with secrets set
+        if: matrix.name == 'diagnostics'
+        working-directory: ${{ runner.temp }}/render
+        env:
+          INFLUXDB_URL: https://example.invalid
+          INFLUXDB_TOKEN: ci-dummy-token
+        run: |
+          expect_failure() {
+            file=$1 line=$2 message=$3
+            cp "$file" "$RUNNER_TEMP/saved"
+            printf '\n%s\n' "$line" >> "$file"
+            for mode in fail skip; do
+              if output=$(UNRESOLVED_SECRETS=$mode make build 2>&1); then
+                echo "::error::built with $line in $file ($mode)"; exit 1
+              fi
+              echo "$output" | grep -qF "$message" || {
+                echo "::error::the failure did not say: $message"; echo "$output"; exit 1
+              }
+            done
+            if grep -RqF ci-dummy-token dist/oss README.md; then
+              echo "::error::the secret reached oss or README.md"; exit 1
+            fi
+            cp "$RUNNER_TEMP/saved" "$file"
+          }
+          expect_failure drivers/example/driver.lua \
+            'local REPORT_KEY = "%%SECRET:INFLUXDB_TOKEN%%"' \
+            'Guard each placeholder with #ifdef DRIVERCENTRAL.'
+          expect_failure drivers/example/www/documentation/index.md \
+            'Reports go to %%SECRET:INFLUXDB_URL%% with %%SECRET:INFLUXDB_TOKEN%%.' \
+            'dist/drivercentral/c4z/example.c4z:www/documentation/index.md: INFLUXDB_TOKEN'
+          expect_failure drivers/example/driver.lua \
+            '-- #ifdef DRIVERCENTRAL
+          local REPORT_KEY = "%%SECRET:INFLUXDB-TOKEN%%"
+          -- #endif' \
+            'Malformed build secret placeholders'
+
       # Build, commit, build again: a dirty tree on the second build means
       # `make build` is not idempotent.
       - name: Build is idempotent (make build)
         working-directory: ${{ runner.temp }}/render
+        env:
+          INFLUXDB_URL: ${{ matrix.name == 'diagnostics' && 'https://example.invalid' || '' }}
+          INFLUXDB_TOKEN: ${{ matrix.name == 'diagnostics' && 'ci-dummy-token' || '' }}
         run: |
           git init -q
           git config user.email ci@example.com
@@ -270,6 +461,20 @@ jobs:
             echo "::error::Untracked files after rebuild:"
             echo "$UNTRACKED"
             exit 1
+          fi
+
+      - name: The secret ships only in drivercentral, which is not marked clean
+        if: matrix.name == 'diagnostics'
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          grep -qF ci-dummy-token dist/drivercentral/source/example.lua
+          if grep -qF ci-dummy-token dist/oss/source/example.lua; then
+            echo "::error::the secret ships in oss"; exit 1
+          fi
+          test ! -e build/drivercentral/secrets-scan-clean
+          test -e build/oss/secrets-scan-clean
+          if grep -RE '%%SECRET:[A-Za-z_][A-Za-z0-9_]*%%' dist/drivercentral dist/oss; then
+            echo "::error::a placeholder survived into dist/"; exit 1
           fi
 
       # A README image that docs-readme failed to copy breaks nothing else in

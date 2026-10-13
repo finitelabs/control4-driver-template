@@ -61,3 +61,8 @@ vendor_modules:
   type: str
   help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf version). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless."
   default: ""
+
+build_secrets:
+  type: str
+  help: "Space-separated environment variable names substituted into %%SECRET:NAME%% placeholders at build time. Each must exist as a repository Actions secret of the same name, and locally in the environment or a repo-root .env. A driver that requires lib.diagnostics needs 'INFLUXDB_URL INFLUXDB_TOKEN'. In a public repository, Build uploads no artifact for a distribution that carries a secret value."
+  default: ""

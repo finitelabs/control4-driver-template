@@ -88,6 +88,14 @@ jobs:
         run: make test
 
       - name: Build
+{%- if build_secrets %}
+        env:
+{%- for secret in build_secrets.split() %}
+          {{ secret }}: {{ '${{' }} secrets.{{ secret }} {{ '}}' }}
+{%- endfor %}
+          # Fork and Dependabot PRs get every secret as an empty string.
+          UNRESOLVED_SECRETS: {% raw %}${{ github.event_name == 'pull_request' && (github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]') && 'skip' || 'fail' }}{% endraw %}
+{%- endif %}
         run: make build
 
       - name: Verify PDFs were generated
@@ -129,7 +137,8 @@ jobs:
 
       # Tag builds are released and uploaded to Driver Central, so 14 days; main builds are for a quick look, 3; PR builds are for side-loading, 1.
       - name: Upload {{ dist }} artifacts
-        if: always()
+        # Artifacts of a public repository are readable by any signed-in user.
+        if: always() && (hashFiles('build/{{ dist }}/secrets-scan-clean') != '' || (github.event.repository.private && hashFiles('build/{{ dist }}/secrets-scan-unresolved') == ''))
         uses: actions/upload-artifact@v7
         with:
           name: {{ dist }}

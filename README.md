@@ -25,6 +25,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 ### Common Libraries (`src/lib/`)
 - **bindings.lua**: binding management (add/remove/query Control4 driver bindings)
 - **conditionals.lua**: conditional/programming UI management
+- **diagnostics.lua**: memory census and error capture shipped to InfluxDB, in DriverCentral builds only (needs `build_secrets`; an inert stub elsewhere)
 - **events.lua**: event firing and management
 - **http.lua**: HTTP client wrapper around C4:urlGet/urlPost/urlPut/urlDelete
 - **lru.lua**: LRU cache utility
@@ -127,3 +128,4 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
 | `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version) | (empty) |
+| `build_secrets` | Space-separated names substituted into `%%SECRET:NAME%%` placeholders at build time, from the environment, a repo-root `.env`, or repository Actions secrets | (empty) |

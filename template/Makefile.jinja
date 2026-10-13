@@ -4,6 +4,8 @@
 DISTRIBUTIONS := {{ distributions }}
 README_DRIVER := {{ readme_driver_slug }}
 README_BUILD  := {{ readme_build }}
+# build.yml sets skip on events that get no repository secrets (fork and Dependabot PRs).
+UNRESOLVED_SECRETS ?= fail
 
 # Paths
 VENV       := .venv
@@ -233,6 +235,12 @@ package: $(VENV_STAMP) $(PACKAGER) ## Create .c4z driver packages
 		done; \
 	done
 
+.PHONY: scan-secrets
+scan-secrets: ## Fail if a packaged distribution still holds a %%SECRET:NAME%% placeholder
+	@for build in $(DISTRIBUTIONS); do \
+		./tools/preprocess.py --$$build --scan --unresolved-secrets $(UNRESOLVED_SECRETS) || exit 1; \
+	done
+
 .PHONY: zip
 zip: $(VENV_STAMP) ## Zip the c4z/, docs/, and source/ subfolders per distribution
 	@repo="$$(basename "$$(pwd)")"; \
@@ -263,9 +271,9 @@ test: ## Run the Lua test suite (test/test_*.lua)
 # ─── Build ────────────────────────────────────────────────────────────────────
 
 .PHONY: build build-nodocs
-build: check-deps clean-build fmt preprocess gen-squishy update-xml docs package zip ## Full build
+build: check-deps clean-build fmt preprocess gen-squishy update-xml docs package zip scan-secrets ## Full build
 
-build-nodocs: check-deps clean-build fmt preprocess gen-squishy update-xml package ## Build without docs
+build-nodocs: check-deps clean-build fmt preprocess gen-squishy update-xml package scan-secrets ## Build without docs
 
 # ─── Clean ────────────────────────────────────────────────────────────────────
 
