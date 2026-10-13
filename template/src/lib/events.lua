@@ -8,6 +8,7 @@ require("drivers-common-public.global.lib")
 require("lib.utils")
 
 --- @class Events
+--- @field _warned boolean Whether the warning that the stored events do not read back as a table has been logged.
 local Events = {}
 Events.__index = Events
 
@@ -33,6 +34,7 @@ local EVENT_ID_END = 999
 function Events:new()
   log:trace("Events:new()")
   local instance = setmetatable({}, self)
+  instance._warned = false
   return instance
 end
 
@@ -157,7 +159,15 @@ end
 --- @return table<string, table<string, Event>> events The events table.
 function Events:_peekEvents()
   local events = persist:peek(EVENTS_PERSIST_KEY, {})
-  return type(events) == "table" and events or {}
+  if type(events) ~= "table" then
+    -- Stored events that do not read back as a table start over rather than fail every call
+    if not self._warned then
+      self._warned = true -- once, as every read comes here until the next save
+      log:warn("Stored %s does not read back as a table; starting over", EVENTS_PERSIST_KEY)
+    end
+    return {}
+  end
+  return events
 end
 
 --- Saves the events to persistent storage. The table is stored as it is, so it

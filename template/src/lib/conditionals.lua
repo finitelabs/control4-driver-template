@@ -7,6 +7,7 @@ require("drivers-common-public.global.lib")
 require("lib.utils")
 
 --- @class Conditionals
+--- @field _warned boolean Whether the warning that the stored conditionals do not read back as a table has been logged.
 --- A class representing conditionals.
 local Conditionals = {}
 Conditionals.__index = Conditionals
@@ -54,6 +55,7 @@ end
 function Conditionals:new()
   log:trace("Conditionals:new()")
   local instance = setmetatable({}, self)
+  instance._warned = false
   return instance
 end
 
@@ -146,7 +148,15 @@ end
 --- @return table<string, table<string, Conditional>> conditionals The conditionals table.
 function Conditionals:_peekConditionals()
   local conditionals = persist:peek(CONDITIONALS_PERSIST_KEY, {})
-  return type(conditionals) == "table" and conditionals or {}
+  if type(conditionals) ~= "table" then
+    -- Stored conditionals that do not read back as a table start over rather than fail every call
+    if not self._warned then
+      self._warned = true -- once, as every read comes here until the next save
+      log:warn("Stored %s does not read back as a table; starting over", CONDITIONALS_PERSIST_KEY)
+    end
+    return {}
+  end
+  return conditionals
 end
 
 --- Saves the conditionals to persistent storage. The table is stored as it is,

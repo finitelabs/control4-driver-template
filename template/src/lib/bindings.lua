@@ -76,6 +76,7 @@ local function restoreConnections(bindingId, provider, class, conns)
 end
 
 --- @class Bindings
+--- @field _warned boolean Whether the warning that the stored bindings do not read back as a table has been logged.
 --- A class representing dynamic bindings.
 local Bindings = {}
 Bindings.__index = Bindings
@@ -113,6 +114,7 @@ local PROXY_BINDING_END = 5999
 function Bindings:new()
   log:trace("Binding:new()")
   local instance = setmetatable({}, self)
+  instance._warned = false
   return instance
 end
 
@@ -361,7 +363,15 @@ end
 --- @return table<string, table<string, Binding>> bindings The bindings table.
 function Bindings:_peekBindings()
   local bindings = persist:peek(CONNECTION_BINDINGS_PERSIST_KEY, {})
-  return type(bindings) == "table" and bindings or {}
+  if type(bindings) ~= "table" then
+    -- Stored bindings that do not read back as a table start over rather than fail every call
+    if not self._warned then
+      self._warned = true -- once, as every read comes here until the next save
+      log:warn("Stored %s does not read back as a table; starting over", CONNECTION_BINDINGS_PERSIST_KEY)
+    end
+    return {}
+  end
+  return bindings
 end
 
 --- Saves the bindings to persistent storage. The table is stored as it is, so it

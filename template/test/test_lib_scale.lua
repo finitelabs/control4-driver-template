@@ -6,7 +6,9 @@
 --     once per library, new variables included;
 --   * an upsertConditional that changes nothing writes nothing;
 --   * getters and the records the add calls return are still copies, so changing
---     them never changes the store.
+--     them never changes the store;
+--   * stored records that do not read back as a table start over, with one
+--     warning that names their key.
 --
 -- Run from the driver root:
 --   make test
@@ -164,6 +166,34 @@ do
   T.eq("getValues()", libs.values:getValue("Value 1").value, 1)
   libs.values:getValue("Value 1").value = 99
   T.eq("getValue()", libs.values:getValues()["Value 1"].value, 1)
+end
+
+T.section("Stored records that are not a table start over, with one warning")
+do
+  local libs = load()
+  local warnings = {}
+  require("lib.logging").warn = function(_, text, ...)
+    table.insert(warnings, string.format(text, ...))
+  end
+  for _, key in ipairs({ "Values", "Events", "Conditionals", "ConnectionBindings" }) do
+    C4:PersistSetValue(key, "not a table")
+  end
+  T.eq("values", libs.values:_peekValues(), {})
+  T.eq("events", libs.events:_peekEvents(), {})
+  T.eq("conditionals", libs.conditionals:_peekConditionals(), {})
+  T.eq("bindings", libs.bindings:_peekBindings(), {})
+  T.eq("and on a second read", {
+    libs.values:_peekValues(),
+    libs.events:_peekEvents(),
+    libs.conditionals:_peekConditionals(),
+    libs.bindings:_peekBindings(),
+  }, { {}, {}, {}, {} })
+  T.eq("each names its key in the log, once", warnings, {
+    "Stored Values does not read back as a table; starting over",
+    "Stored Events does not read back as a table; starting over",
+    "Stored Conditionals does not read back as a table; starting over",
+    "Stored ConnectionBindings does not read back as a table; starting over",
+  })
 end
 
 T.finish()

@@ -13,6 +13,7 @@ require("lib.utils")
 --- @field _byId boolean Whether variables are added at their ids in this load.
 --- @field _rejected table<string, boolean> Names Director would not give a variable in this load.
 --- @field _placeholders table<integer, string> The name of each hidden variable Director listed in this load, by id.
+--- @field _warned boolean Whether the warning that the stored values do not read back as a table has been logged.
 --- A class representing a collection of named values with optional variable/property support.
 local Values = {}
 Values.__index = Values
@@ -96,6 +97,7 @@ function Values:new()
   instance._byId = false
   instance._rejected = {}
   instance._placeholders = {}
+  instance._warned = false
   return instance
 end
 
@@ -335,8 +337,15 @@ end
 --- @return table<string, Value> values The values table.
 function Values:_peekValues()
   local values = persist:peek(VALUES_PERSIST_KEY, {})
-  -- Stored values that do not read back as a table start over rather than fail every load
-  return type(values) == "table" and values or {}
+  if type(values) ~= "table" then
+    -- Stored values that do not read back as a table start over rather than fail every load
+    if not self._warned then
+      self._warned = true -- once, as every read comes here until the next save
+      log:warn("Stored %s does not read back as a table; starting over", VALUES_PERSIST_KEY)
+    end
+    return {}
+  end
+  return values
 end
 
 --- Retrieves a value by name.
