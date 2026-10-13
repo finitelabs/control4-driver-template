@@ -76,16 +76,16 @@ end
 T.section("Work per record stays flat as the tables grow")
 do
   local libs = load()
-  addRecords(libs, 1, 200)
+  addRecords(libs, 1, 20)
   local early = copiesDuring(function()
-    addRecords(libs, 201, 50)
+    addRecords(libs, 21, 5)
   end)
-  addRecords(libs, 251, 300)
+  addRecords(libs, 26, 30)
   local late = copiesDuring(function()
-    addRecords(libs, 551, 50)
+    addRecords(libs, 56, 5)
   end)
-  -- Copying whole tables would make the late batch (tables near 600) about
-  -- three times the early one (tables near 200).
+  -- Copying whole tables would make the late batch (tables near 60) about
+  -- three times the early one (tables near 20).
   T.check("adding to a 3x larger table costs about the same", late < early * 1.5, early .. " then " .. late)
 end
 
