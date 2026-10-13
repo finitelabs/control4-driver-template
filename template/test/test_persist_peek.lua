@@ -1,6 +1,8 @@
 -- lib/persist.lua's peek(), commit(), and durable():
 --   * get() still hands out copies; peek() hands out the stored table itself,
 --     and nil for a key that is not stored and has no default;
+--   * a key that is not stored reads as the caller's default, which is not
+--     remembered, and get() with none as a new empty table on every call;
 --   * commit() stores a table without copying it, set() still copies;
 --   * durable() inside defer() writes once, when the outermost scope closes, even
 --     when the scope ends in an error; outside defer() it writes at once;
@@ -44,6 +46,22 @@ do
   T.eq("and as nil with no default", p:peek("Unset"), nil)
   p:delete("Gone")
   T.check("a deleted key gets the default itself, as before", p:get("Gone", default) == default)
+end
+
+T.section("a key that is not stored")
+do
+  local p = newPersist()
+  local first = p:get("Unset")
+  T.eq("get() with no default is an empty table", first, {})
+  T.check("a new one on every call", p:get("Unset") ~= first)
+  first.leak = true
+  T.eq("so writing into one changes no later get() of the key", p:get("Unset"), {})
+  T.eq("nor of another key that is not stored", p:get("Other"), {})
+  T.eq("a default is returned", p:get("Rate", 5), 5)
+  T.eq("and not remembered for the next call", p:get("Rate", 7), 7)
+  T.eq("nor for a get() with none", p:get("Rate"), {})
+  p:peek("Peeked", 5)
+  T.eq("peek() remembers none either", p:peek("Peeked"), nil)
 end
 
 T.section("commit() stores the table itself")

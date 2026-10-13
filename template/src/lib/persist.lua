@@ -118,6 +118,7 @@ end
 --- If a migration exists for the requested key, it runs once, persists the transformed value,
 --- and removes itself. A table holding a string that is not UTF-8 text reads back with each
 --- byte JSON:decode rejects as its Latin-1 character.
+--- A key that doesn't exist, read with no default, is a new empty table on every call.
 --- @param key string The key to retrieve the value for.
 --- @param default? any The default value to return if the key doesn't exist (optional).
 --- @param encrypted? boolean Whether the value is encrypted (optional).
@@ -126,7 +127,9 @@ function Persist:get(key, default, encrypted)
   log:trace("Persist:get(%s, %s, %s)", key, default, encrypted)
   loadMigrations()
   local value = self:_get(key, default, encrypted)
-  if type(value) == "table" and value == self._persist[key] then
+  if value == EMPTY then
+    value = {} -- not the sentinel, which every missing key shares and a caller may write into
+  elseif type(value) == "table" and value == self._persist[key] then
     value = TableDeepCopy(value)
   end
 
@@ -192,7 +195,8 @@ local function salvage(key, stored)
 end
 
 --- Internal get implementation with caching. A stored table comes back as the
---- cached table itself.
+--- cached table itself, and a key that doesn't exist as this call's default, or
+--- as the sentinel with none.
 --- @private
 --- @param key string The key to retrieve.
 --- @param default any The default value if key is not found.
@@ -217,7 +221,7 @@ function Persist:_get(key, default, encrypted)
       value = salvage(key, stored) or value
     end
     if value == nil then
-      value = default
+      value = EMPTY -- not the default, which is this call's alone
     end
     self._persist[key] = value
   end
