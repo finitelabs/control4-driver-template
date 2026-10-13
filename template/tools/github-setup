@@ -197,7 +197,7 @@ C_DESC=$(gh api "repos/$REPO" --jq '.description // ""')
 if [ "$C_DESC" = "$DESCRIPTION" ]; then
   note "description matches project_description"
 else
-  change "set description from project_description"
+  change "set description from project_description: \"$DESCRIPTION\" (GitHub has: \"$C_DESC\")"
   $APPLY && gh api -X PATCH "repos/$REPO" -f description="$DESCRIPTION" >/dev/null
 fi
 
