@@ -1,5 +1,6 @@
 -- lib/persist.lua's peek(), commit(), and durable():
---   * get() still hands out copies; peek() hands out the stored table itself;
+--   * get() still hands out copies; peek() hands out the stored table itself,
+--     and nil for a key that is not stored and has no default;
 --   * commit() stores a table without copying it, set() still copies;
 --   * durable() inside defer() writes once, when the outermost scope closes, even
 --     when the scope ends in an error; outside defer() it writes at once;
@@ -40,6 +41,7 @@ do
   T.check("get() returns a different table each time", p:get("Table") ~= p:get("Table"))
   local default = {}
   T.check("an unknown key peeks as the default", p:peek("Missing", default) == default)
+  T.eq("and as nil with no default", p:peek("Unset"), nil)
   p:delete("Gone")
   T.check("a deleted key gets the default itself, as before", p:get("Gone", default) == default)
 end

@@ -144,14 +144,18 @@ end
 --- @param key string The key to retrieve the value for.
 --- @param default? any The value to return if the key doesn't exist (optional).
 --- @param encrypted? boolean Whether the value is encrypted (optional).
---- @return any value The stored value, or the default if the key doesn't exist.
+--- @return any value The stored value, or the default if the key doesn't exist, nil with neither.
 function Persist:peek(key, default, encrypted)
   log:trace("Persist:peek(%s, %s, %s)", key, default, encrypted)
   loadMigrations()
   if type(MIGRATIONS[key]) == "function" then
     self:get(key, default, encrypted) -- runs the migration once
   end
-  return self:_get(key, default, encrypted)
+  local value = self:_get(key, default, encrypted)
+  if value == EMPTY then
+    return nil -- the sentinel is shared by every key, and a peeked table may be changed
+  end
+  return value
 end
 
 --- JSON text with each byte that is not part of a UTF-8 character written as \u00XX, which
