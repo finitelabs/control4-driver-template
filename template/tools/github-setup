@@ -52,6 +52,7 @@ command -v gh >/dev/null || { echo "error: gh is not installed" >&2; exit 1; }
 
 # A long answer wraps onto indented continuation lines, which YAML folds into one
 # line with single spaces. A quoted answer loses its quotes ('' is a quote).
+# A double-quoted value keeps its escapes, and a blank line ends the value.
 answer() {
   awk -v key="$1" '
     index($0, key ":") == 1 { value = substr($0, length(key) + 2); sub(/^ +/, "", value); found = 1; next }
