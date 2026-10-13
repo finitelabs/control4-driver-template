@@ -127,6 +127,7 @@ jobs:
           fi
 {% for dist in distributions.split() %}
 
+      # Tag builds are released and uploaded to Driver Central, so 14 days; main builds are for a quick look, 3; PR builds are for side-loading, 1.
       - name: Upload {{ dist }} artifacts
         if: always()
         uses: actions/upload-artifact@v7
@@ -134,4 +135,5 @@ jobs:
           name: {{ dist }}
           path: dist/{{ dist }}/*
           if-no-files-found: error
+          retention-days: {% raw %}${{ github.ref_type == 'tag' && 14 || github.event_name == 'pull_request' && 1 || 3 }}{% endraw %}
 {% endfor %}
