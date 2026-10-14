@@ -28,17 +28,19 @@ import sys
 from pathlib import Path
 
 from markdown_it import MarkdownIt
+from markdown_it.common.utils import escapeHtml, unescapeAll
 from markdown_it.token import Token
 from mdit_py_plugins.anchors import anchors_plugin
 from pygments import highlight
 from pygments.formatters import HtmlFormatter
-from pygments.lexers import get_lexer_by_name, guess_lexer
+from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
 TOOLS_DIR = Path(__file__).resolve().parent
 GITHUB_CSS = (TOOLS_DIR / "github-markdown.css").read_text(encoding="utf-8")
-# Pygments highlight CSS, scoped under .highlight (its default wrapper class).
-PYGMENTS_CSS = HtmlFormatter(style="default").get_style_defs(".highlight")
+# Scoped to `.highlight pre` so github-markdown.css's rounded box outranks the
+# square background Pygments gives its wrapper.
+PYGMENTS_CSS = HtmlFormatter(style="default").get_style_defs(".highlight pre")
 
 # Screen layout matches the Control4 documentation viewer; print layout matches
 # the previous electron-pdf output (Letter, 0.4in margins) and adds automatic
@@ -80,16 +82,21 @@ LAYOUT_CSS = """
 """
 
 
-def _highlight(code: str, lang: str, _attrs) -> str:
+# markdown-it wraps a `highlight` result in its own <pre><code> unless it starts
+# with <pre, so GitHub's one-<pre> shape needs the fence rule itself.
+def _fence(self, tokens, idx, options, env) -> str:
+    token = tokens[idx]
+    info = unescapeAll(token.info).strip()
+    lang = info.split(maxsplit=1)[0] if info else ""
     try:
-        lexer = get_lexer_by_name(lang) if lang else guess_lexer(code)
+        lexer = get_lexer_by_name(lang) if lang else None
     except ClassNotFound:
         lexer = None
     if lexer is None:
-        # No known lexer: return empty so markdown-it emits its default escaped
-        # <pre><code> block.
-        return ""
-    return highlight(code, lexer, HtmlFormatter(nowrap=False))
+        return self.fence(tokens, idx, options, env)
+    code = highlight(token.content, lexer, HtmlFormatter(nowrap=True))
+    lang_class = escapeHtml(lang.lower())
+    return f'<div class="highlight highlight-source-{lang_class}"><pre>{code}</pre></div>\n'
 
 
 # GitHub's alert types, each with the octicon GitHub puts in its title and the
@@ -179,9 +186,8 @@ def _alerts(state) -> None:
 
 
 def _make_md() -> MarkdownIt:
-    md = MarkdownIt(
-        "gfm-like", {"html": True, "linkify": True, "highlight": _highlight}
-    )
+    md = MarkdownIt("gfm-like", {"html": True, "linkify": True})
+    md.add_render_rule("fence", _fence)
     md.use(anchors_plugin, max_level=6, permalink=False)
     md.core.ruler.push("alerts", _alerts)
     return md
