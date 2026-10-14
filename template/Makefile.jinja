@@ -234,12 +234,12 @@ package: $(VENV_STAMP) $(PACKAGER) ## Create .c4z driver packages
 	done
 
 .PHONY: zip
-zip: $(VENV_STAMP) ## Zip the c4z/, docs/, and source/ subfolders per distribution
+zip: $(VENV_STAMP) ## Zip the c4z/ and docs/ subfolders per distribution
 	@repo="$$(basename "$$(pwd)")"; \
 	for build in $(DISTRIBUTIONS); do \
 		(cd "dist/$$build" && \
 			"$(CURDIR)/$(VENV_PY)" "$(CURDIR)/tools/package.py" zip \
-				"$$repo.zip" c4z docs source); \
+				"$$repo.zip" c4z docs); \
 	done
 
 # ─── Test ─────────────────────────────────────────────────────────────────────
