@@ -336,4 +336,22 @@ jobs:
             echo "::error::a tab after an alert marker loses the alert"
             failed=1
           fi
+          # A marker joined to its text: check-md names its line, and fmt leaves the
+          # file alone, even the `*` it would make `-`. Alone, the others make no alert.
+          printf '%s\n' '> [!note] Joined to its text.' '' '* > [!NOTE] In a list.' '' \
+            '> > [!NOTE] In a nested quote.' '' '> A quote.' '>' '> [!NOTE] Mid-quote.' '' \
+            'A paragraph with [!NOTE] in it.' >joined.md
+          cp joined.md "$RUNNER_TEMP/joined.md"
+          if out=$(make check-md 2>&1) ||
+            [ "$(grep -c 'put the alert marker alone' <<<"$out")" -ne 1 ] ||
+            ! grep -qF 'joined.md", line 1: put the alert marker alone on its line.' <<<"$out"; then
+            echo "::error::make check-md does not name exactly the joined alert marker on line 1"
+            failed=1
+          fi
+          if .venv/bin/python3 tools/docs.py fmt --wrap 80 joined.md 2>/dev/null ||
+            ! cmp -s joined.md "$RUNNER_TEMP/joined.md"; then
+            echo "::error::fmt passes or rewrites a file with an alert marker joined to its text"
+            failed=1
+          fi
+          rm joined.md
           exit "$failed"

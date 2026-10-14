@@ -133,7 +133,8 @@ def _alerts(state) -> None:
     parsing, so an escaped marker or one ending in a hard break matches too.
     Around HTML it can differ from GitHub: a quote in a `<div>` or `<details>`
     block, or one whose body is only a comment, becomes an alert here, and
-    `[!NOTE]<br>` does not.
+    `[!NOTE]<br>` does not. A marker on that first line with more after it is
+    listed by line number in env["joined_alert_markers"], which `fmt` reports.
     """
     tokens = state.tokens
     for i in reversed(range(len(tokens) - 4)):
@@ -143,8 +144,14 @@ def _alerts(state) -> None:
         if tokens[i + 1].type != "paragraph_open":
             continue
         first, *rest = inline.children
-        match = first.type == "text" and _ALERT_MARKER_RE.fullmatch(first.content)
-        if not match or (rest and rest[0].type not in ("softbreak", "hardbreak")):
+        match = first.type == "text" and _ALERT_MARKER_RE.match(first.content)
+        if not match:
+            continue
+        if match.end() < len(first.content) or (
+            rest and rest[0].type not in ("softbreak", "hardbreak")
+        ):
+            joined = state.env.setdefault("joined_alert_markers", [])
+            joined.append(tokens[i + 1].map[0] + 1)
             continue
         if not rest and tokens[i + 4].type == "blockquote_close":
             continue
@@ -363,25 +370,40 @@ def readme(input_path: Path, output_path: Path) -> None:
 
 
 def fmt(args: list[str]) -> int:
-    """Format files in place, or with --check name each one that would change."""
+    """Format files in place, or with --check name each one that would change.
+
+    Either way, an alert marker joined to its text is named and its file left
+    alone: splitting the line or escaping the marker would guess what was meant.
+    """
     parser = argparse.ArgumentParser(prog="docs.py fmt")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--wrap", type=int, required=True)
     parser.add_argument("paths", nargs="+", type=Path)
     opts = parser.parse_args(args)
-    unformatted = 0
+    md = _make_md()
+    failed = 0
     for path in opts.paths:
         # Bytes, not read_text: a CRLF file must read as unformatted.
         original = path.read_bytes().decode()
+        env: dict = {}
+        md.parse(original, env)
+        joined = sorted(env.get("joined_alert_markers", []))
+        for line in joined:
+            print(
+                f'Error: File "{path.absolute()}", line {line}: put the alert marker'
+                " alone on its line.",
+                file=sys.stderr,
+            )
+            failed = 1
         formatted = _mdformat(original, opts.wrap)
         if formatted == original:
             continue
         if opts.check:
             print(f'Error: File "{path.absolute()}" is not formatted.', file=sys.stderr)
-            unformatted = 1
-        else:
+            failed = 1
+        elif not joined:
             path.write_bytes(formatted.encode())
-    return unformatted
+    return failed
 
 
 _COMMANDS = {"md2html": md2html, "html2pdf": html2pdf, "readme": readme}
