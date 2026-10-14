@@ -366,12 +366,14 @@ end
 
 --- Removes unknown device IDs and optionally processes known ones using a callback.
 --- This function iterates through device IDs parsed from the `propertyStr` and processes each using the optional callback.
---- If `deleteUnknownDeviceIds` is `true`, invalid device IDs are removed from the property list.
+--- If `deleteUnknownDeviceIds` is `true`, invalid device IDs are removed from the property list. That runs before the
+--- callback, so an ID whose callback raises stays in the property.
 --- @generic T
 --- @param propertyStr string The name of the property that stores the device IDs to parse.
 --- @param callback? fun(deviceId: DeviceId, device: table, index: integer): T Optional callback function that processes each valid device.
 --- @param deleteUnknownDeviceIds? boolean When set to `true`, deletes invalid device IDs from the property list.
 --- @return table<DeviceId, T>|nil devices Returns a table of processed device data or `nil` if parsing fails.
+--- @return table<DeviceId, true>|nil failed The IDs whose callback raised, as `ParseDeviceIdList` returns them.
 function ParseDeviceIdPropertyList(propertyStr, callback, deleteUnknownDeviceIds)
   if deleteUnknownDeviceIds == nil then
     deleteUnknownDeviceIds = true
@@ -431,13 +433,17 @@ end
 --- counted whether or not the entry resolves: an unresolvable ID leaves a gap rather than shifting the entries behind
 --- it. The position is stable only while the list is unchanged, since removing or inserting an entry renumbers every
 --- entry after it.
+--- The second table holds the IDs whose callback raised. An ID in neither table did not resolve or its callback
+--- returned nil, and an ID listed twice can be in both.
 --- @param deviceIdListStr string The string of comma-separated device IDs.
 --- @param c4iNames? string[] Optional list of C4i names to filter devices.
 --- @param callback? fun(deviceId: DeviceId, device: table, index: integer): any Optional callback to process each device.
 --- @return table<DeviceId, any> devices Returns a table of processed devices, keyed by device ID.
+--- @return table<DeviceId, true> failed The IDs whose callback raised.
 function ParseDeviceIdList(deviceIdListStr, c4iNames, callback)
   log:trace("ParseDeviceIdList(%s, %s, <callback>)", deviceIdListStr, c4iNames)
   local devices = {}
+  local failed = {}
   local i = 0
   for deviceIdStr in string.gmatch(deviceIdListStr or "", "([^,]+)") do
     -- Count every entry, resolvable or not; skipping would renumber the entries behind it.
@@ -449,6 +455,7 @@ function ParseDeviceIdList(deviceIdListStr, c4iNames, callback)
         if success then
           devices[device.deviceId] = result
         else
+          failed[device.deviceId] = true
           log:error("Error parsing ids '%s'; %s", deviceIdListStr, result)
         end
       else
@@ -458,7 +465,7 @@ function ParseDeviceIdList(deviceIdListStr, c4iNames, callback)
       log:warn("Unknown device with id '%s'", deviceIdStr)
     end
   end
-  return devices
+  return devices, failed
 end
 
 local xml2lua = require("xml.xml2lua")

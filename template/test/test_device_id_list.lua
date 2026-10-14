@@ -1,4 +1,5 @@
--- Tests for the callback index handed out by ParseDeviceIdList (src/lib/utils.lua).
+-- Tests for ParseDeviceIdList (src/lib/utils.lua): the callback index it hands
+-- out, and the IDs whose callback raised.
 --
 -- The third callback argument is the entry's 1-based position among the
 -- non-empty entries of the device ID list (`gmatch` matches `[^,]+`, so
@@ -34,7 +35,20 @@ local PROJECT = {
 require("c4_shim")
 ShimSetDevices(PROJECT)
 
+local shimGetDeviceData = C4.GetDeviceData
+function C4:GetDeviceData(deviceId, key)
+  if key == "properties" then
+    return "<property><name>Select Outlets</name><type>DEVICE_SELECTOR</type>"
+      .. "<items><item>control4_outlet.c4i</item></items></property>"
+  end
+  return shimGetDeviceData(self, deviceId, key)
+end
+function C4:UpdateProperty(name, value)
+  Properties[name] = value
+end
+
 require("lib.utils")
+local log = require("lib.logging")
 
 --- GetDevice memoizes into an LRU with a 180 second TTL, so a device that
 --- resolved in one scenario would still resolve in the next one. DeviceUpdated
@@ -133,6 +147,55 @@ do
   T.check("the surviving devices are present", devices[100] == 100 and devices[300] == 300)
 end
 
+T.section("A callback that raises is reported apart from an unresolvable ID")
+do
+  forgetAll()
+  local _, failed = ParseDeviceIdList("100,200,999,300", nil, function(deviceId)
+    if deviceId == 200 then
+      error("callback blew up")
+    end
+    return deviceId
+  end)
+  T.eq("only the raising ID is reported", failed, { [200] = true })
+end
+
+T.section("Nothing is reported failed without a callback")
+do
+  forgetAll()
+  local _, failed = ParseDeviceIdList("100,999")
+  T.eq("an empty set", failed, {})
+end
+
+T.section("A raising callback and an unresolvable ID are still logged")
+do
+  forgetAll()
+  log:setLogMode("Print")
+  local _, _, output = T.capture(function()
+    ParseDeviceIdList("100,200,999", nil, function(deviceId)
+      if deviceId == 200 then
+        error("callback blew up")
+      end
+    end)
+  end)
+  log:setLogMode("")
+  T.contains("the raise as an error parsing the ids", output, "Error parsing ids '100,200,999'")
+  T.contains("the unresolvable ID as unknown", output, "Unknown device with id '999'")
+end
+
+T.section("ParseDeviceIdPropertyList reports the raising ID and keeps it in the property")
+do
+  forgetAll()
+  Properties["Select Outlets"] = "100,200,999"
+  local _, failed = ParseDeviceIdPropertyList("Select Outlets", function(deviceId)
+    if deviceId == 200 then
+      error("callback blew up")
+    end
+    return deviceId
+  end)
+  T.eq("the raising ID is reported", failed, { [200] = true })
+  T.eq("only the unresolvable ID leaves the property", Properties["Select Outlets"], "100,200")
+end
+
 T.section("Without a callback the result is keyed by device ID")
 do
   forgetAll()
@@ -165,6 +228,22 @@ do
     table.concat(calls, ",") == "100@1,100@2,300@3",
     table.concat(calls, ",")
   )
+end
+
+T.section("A repeated ID whose callback raises once is in both tables")
+do
+  forgetAll()
+  local seen = {}
+  local devices, failed = ParseDeviceIdList("100,100,300,300", nil, function(deviceId, _, index)
+    seen[deviceId] = (seen[deviceId] or 0) + 1
+    -- 100 raises on its first occurrence, 300 on its second
+    if (deviceId == 100 and seen[deviceId] == 1) or (deviceId == 300 and seen[deviceId] == 2) then
+      error("callback blew up")
+    end
+    return index
+  end)
+  T.eq("each keeps the occurrence that succeeded", devices, { [100] = 2, [300] = 3 })
+  T.eq("and each is reported", failed, { [100] = true, [300] = true })
 end
 
 T.finish()
