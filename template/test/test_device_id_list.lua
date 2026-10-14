@@ -302,8 +302,11 @@ end
 T.section("A room is named once, and a device in it is named with the room")
 do
   forgetAll()
+  PROJECT[401] = { deviceName = "Office", driverFileName = "tv.c4i", roomId = "1", roomName = "Office" }
   T.eq("the room", Select(GetDevice(ROOM), "displayName"), "Office")
   T.eq("a device in the room", Select(GetDevice(400), "displayName"), "Office > Desk Lamp")
+  T.eq("a device named like its room keeps the room", Select(GetDevice(401), "displayName"), "Office > Office")
+  PROJECT[401] = nil
 end
 
 T.section("An ID that is neither a device nor a room is not made a room")
