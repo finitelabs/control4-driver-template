@@ -76,7 +76,8 @@ then pull the change in with `copier update`.
 
 - `preprocess.py`: C-style `#ifdef`/`#ifndef` preprocessor for Lua, XML, and
   Markdown
-- `docs.py`: documentation generation (Markdown -> HTML -> PDF, plus README)
+- `docs.py`: documentation generation (Markdown -> HTML -> PDF, plus README) and
+  the Markdown formatting `make fmt` runs
 - `package.py`: packaging helpers (driver.xml stamping, zip bundling)
 - `deps.py`: build preflight, checks the `.venv` against `requirements.txt`
 - `gen-squishy.lua`: auto-generates squishy files from driver.c4zproj
@@ -109,6 +110,12 @@ then pull the change in with `copier update`.
 `README.md` is in neither list: it is **generated**. `make build` rewrites it
 from the driver's `www/documentation/index.md`, so edit the source doc, not the
 README.
+
+Driver docs can use GitHub's alerts: a quote whose first line is `[!NOTE]`,
+`[!TIP]`, `[!IMPORTANT]`, `[!WARNING]` or `[!CAUTION]`. The README, the HTML doc
+and the PDF all show them as GitHub does. The marker goes alone on its line, and
+the quote must not sit inside a list or another quote; otherwise it stays a
+plain quote that shows the marker.
 
 ## Updating Shared Code
 
