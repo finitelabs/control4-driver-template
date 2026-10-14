@@ -90,8 +90,10 @@ requires) without clobbering the constants a driver has since added.
 
 **Only `.jinja` files have their contents rendered**, with the suffix stripped on
 the way out — currently `Makefile`, `CONTRIBUTING.md`, `CHANGELOG.md`, the build
-workflow, and the answers file. Everything else is copied byte for byte, so `{{`
-in a `.lua` or `.py` file passes straight through and is not a template error.
+workflow, `tools/github-setup`, and the answers file. Everything else is copied
+byte for byte, so `{{` in a `.lua` or `.py` file passes straight through and is
+not a template error. In `tools/github-setup.jinja` a bash `${#var}` would open a
+Jinja comment.
 The corollary is the one that bites: adding `{{ project_name }}` to a file that
 is not named `.jinja` silently ships the literal braces to ten repos.
 

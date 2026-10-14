@@ -6,7 +6,7 @@
 #
 # Usage: tools/github-setup [--apply] [--public]
 #
-# The repository is <github_org>/<project_name> from .copier-answers.yml, so
+# The repository is <github_org>/<project_name> from the copier answers, so
 # it targets whatever organization or personal account the project was
 # scaffolded for. Personal accounts get a repository admin bypass actor on
 # the ruleset instead of the organization admin one.
@@ -17,7 +17,7 @@
 # for release.
 #
 # Standard settings:
-#   - Description: project_description from .copier-answers.yml
+#   - Description: project_description from the copier answers
 #   - Projects and wiki disabled
 #   - Squash merges only, auto-merge allowed, head branches deleted on merge
 #   - Default branch "main" (renames "master" if found)
@@ -30,7 +30,6 @@
 
 set -euo pipefail
 
-ANSWERS=.copier-answers.yml
 APPLY=false
 VISIBILITY=private
 
@@ -48,28 +47,12 @@ while [ $# -gt 0 ]; do
 done
 
 command -v gh >/dev/null || { echo "error: gh is not installed" >&2; exit 1; }
-[ -f "$ANSWERS" ] || { echo "error: $ANSWERS not found; run from the project root" >&2; exit 1; }
+[ -f .copier-answers.yml ] || { echo "error: .copier-answers.yml not found; run from the project root" >&2; exit 1; }
 
-# Copier wraps a long answer onto indented lines and single-quotes one that
-# contains ": ". An answer holding a tab or a line break is not read whole.
-answer() {
-  awk -v key="$1" '
-    index($0, key ":") == 1 { value = substr($0, length(key) + 2); sub(/^ +/, "", value); found = 1; next }
-    found && /^[ \t]/ { line = $0; sub(/^[ \t]+/, "", line); value = value " " line; next }
-    found { exit }
-    END {
-      if (value ~ /^\047.*\047$/) { value = substr(value, 2, length(value) - 2); gsub(/\047\047/, "\047", value) }
-      else if (value ~ /^".*"$/) { value = substr(value, 2, length(value) - 2) }
-      print value
-    }
-  ' "$ANSWERS"
-}
-ORG=$(answer github_org)
-NAME=$(answer project_name)
-DESCRIPTION=$(answer project_description)
+ORG={{ github_org|quote }}
+NAME={{ project_name|quote }}
+DESCRIPTION={{ project_description|quote }}
 REPO="$ORG/$NAME"
-
-[ -n "$ORG" ] && [ -n "$NAME" ] || { echo "error: github_org or project_name missing from $ANSWERS" >&2; exit 1; }
 
 DRIFT=0
 note() { echo "  ok:     $*"; }
