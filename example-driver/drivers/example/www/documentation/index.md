@@ -25,6 +25,10 @@ This is an example driver used by the template's continuous integration to
 exercise the full build. It carries only the properties and handlers common to
 every driver and implements no device-specific behavior.
 
+> [!NOTE]
+> The example driver is never installed on a controller. Its documentation
+> carries one of each GitHub alert so CI can check how they render.
+
 # <span style="color:#17BCF2">Index</span>
 
 <div style="font-size: small">
@@ -45,7 +49,13 @@ every driver and implements no device-specific behavior.
 
 - Control4 OS 3.3+
 
+> [!IMPORTANT]
+> Update the controller to a supported OS before adding the driver.
+
 # <span style="color:#17BCF2">Installer Setup</span>
+
+> [!CAUTION]
+> Deleting the driver from a project also deletes its bindings and programming.
 
 ## Driver Properties
 
@@ -77,14 +87,28 @@ Displays the current version of the driver.
 
 Sets the logging level. Default is `3 - Info`.
 
+> [!TIP]
+> To capture a log for a support request:
+>
+> 1. Set **Log Level** to `5 - Trace`.
+> 1. Set **Log Mode** to `Print`.
+> 1. Send the output from Composer's Lua tab as described under
+>    [Support](#support).
+
 #### Log Mode \[ **_Off_** | Print | Log | Print and Log \]
 
 Sets the logging mode. Default is `Off`.
+
+> [!WARNING]
+> `Log` and `Print and Log` write to the controller's log files. Set it back to
+> `Off` when you are done.
 
 # <span style="color:#17BCF2">Support</span>
 
 If you have any questions or issues, you can file an issue on GitHub:
 
 https://github.com/finitelabs/control4-driver-template/issues/new
+
+> Include the driver version and the controller's OS version in the issue.
 
 <!-- #embed-changelog -->
