@@ -257,7 +257,7 @@ local function lookupDevice(deviceIdInt, filter, names)
     end
   end
   local displayName = device.deviceName
-  if not IsEmpty(device.roomName) then
+  if not IsEmpty(device.roomName) and device.roomName ~= device.deviceName then
     displayName = string.format("%s > %s", device.roomName, device.deviceName)
   end
   --- @type ExtendedDeviceDefinition

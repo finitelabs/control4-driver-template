@@ -299,6 +299,13 @@ do
   T.eq("and a device is not a room", GetDevice(400, { "roomdevice.c4i" }), nil)
 end
 
+T.section("A room is named once, and a device in it is named with the room")
+do
+  forgetAll()
+  T.eq("the room", Select(GetDevice(ROOM), "displayName"), "Office")
+  T.eq("a device in the room", Select(GetDevice(400), "displayName"), "Office > Desk Lamp")
+end
+
 T.section("An ID that is neither a device nor a room is not made a room")
 do
   forgetAll()
