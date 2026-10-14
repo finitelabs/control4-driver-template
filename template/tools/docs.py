@@ -77,6 +77,8 @@ LAYOUT_CSS = """
      across pages (WeasyPrint repeats <thead>). Pinning the whole table with
      break-inside:avoid strands big blank gaps and orphans the heading above it. */
   pre, figure, tr { break-inside: avoid; }
+  /* A page cannot scroll, so a long code line wraps instead of being cut off. */
+  .markdown-body pre, .markdown-body pre > code { white-space: pre-wrap; overflow-wrap: anywhere; }
   p, li { orphans: 3; widows: 3; }
 }
 """

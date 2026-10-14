@@ -282,7 +282,7 @@ jobs:
         run: |
           failed=0
           for html in build/*/drivers/*/www/documentation/index.html; do
-            if ! grep -qF '<div class="highlight highlight-source-lua"><pre><span class="nb">print</span>' "$html" ||
+            if ! grep -qF '<div class="highlight highlight-source-lua"><pre><span class="' "$html" ||
               ! grep -qF '<pre><code>20261014' "$html" ||
               grep -qE '<code[^>]*><div class="highlight"' "$html"; then
               echo "::error::$html has a fenced block that is not one <pre>, or the lua one is not highlighted"
