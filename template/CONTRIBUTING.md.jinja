@@ -188,7 +188,7 @@ on a clean tree until something has populated `build/`.
 1. **Update driver.xml**: stamp version date and modified timestamp
 1. **Generate docs**: Markdown -> HTML -> PDF, plus README
 1. **Package**: run driverpackager to create .c4z files
-1. **Zip**: bundle the c4z, docs and source folders per distribution
+1. **Zip**: bundle the c4z and docs folders per distribution
 
 The driver.xml step stamps today's date as the version unless `DRIVER_VERSION`
 is set. On a tag build CI sets it to the tag's date, so the tag must be
@@ -196,7 +196,9 @@ is set. On a tag build CI sets it to the tag's date, so the tag must be
 
 Each distribution's outputs are grouped by type under `dist/<distribution>/`:
 `c4z/` (packaged drivers), `docs/` (generated PDFs) and `source/` (the squished
-per-driver Lua). `<repo>.zip` sits alongside them and contains all three.
+per-driver Lua). `<repo>.zip` sits alongside them and contains `c4z/` and
+`docs/` only: `source/` is the driver's unencrypted Lua, which an encrypted
+driver must not ship.
 
 Step 1 rewrites tracked files in place. Formatting covers `tools/*.py`, all Lua
 under `drivers/`, `src/`, `test/`, `tools/` and `vendor/`, and every Markdown
