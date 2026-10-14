@@ -915,6 +915,62 @@ T.eq("FileDelete returns true when it deletes", C4:FileDelete("shim.bin"), true)
 T.eq("the file is gone", C4:FileExists("shim.bin"), false)
 
 --------------------------------------------------------------------------------
+T.section("C4:GetDevices")
+--------------------------------------------------------------------------------
+
+-- Measured on 4.3.0, but for the empty filter, spaced names and proxies (the reference), a room's display name (as
+-- GetDevice assumes) and hidden (the shim's transient failure). DeviceIds and C4iNames add up, which is why
+-- lib/utils.lua GetDevice checks a driver itself.
+ShimSetDevices({
+  [10] = { deviceName = "Kitchen", driverFileName = "roomdevice.c4i" },
+  [20] = { deviceName = "Relay", driverFileName = "relaysingle_relay_c4.c4i", roomId = "10", roomName = "Kitchen" },
+  [30] = {
+    deviceName = "Lamp",
+    driverFileName = "lamp.c4z",
+    roomId = "10",
+    roomName = "Kitchen",
+    proxies = { [31] = { deviceName = "Lamp", driverFileName = "light_v2.c4i" } },
+  },
+  [31] = {
+    deviceName = "Lamp",
+    driverFileName = "light_v2.c4i",
+    roomId = "10",
+    roomName = "Kitchen",
+    protocol = { [30] = { deviceName = "Lamp", driverFileName = "lamp.c4z" } },
+  },
+  [40] = { deviceName = "Porch Lamp", driverFileName = "lamp.c4z", roomId = "10", roomName = "Kitchen" },
+})
+local function listed(filter)
+  local ids = {}
+  for id in pairs(C4:GetDevices(filter)) do
+    table.insert(ids, id)
+  end
+  table.sort(ids)
+  return ids
+end
+
+T.eq("DeviceIds lists the ids asked for", listed({ DeviceIds = "20,31" }), { 20, 31 })
+T.eq("C4iNames lists the devices of those drivers, not their proxies", listed({ C4iNames = "lamp.c4z" }), { 30, 40 })
+T.eq("a name is trimmed of the space after a comma", listed({ C4iNames = "light_v2.c4i, lamp.c4z" }), { 30, 31, 40 })
+T.eq("together they add up rather than narrow", listed({ DeviceIds = "20", C4iNames = "lamp.c4z" }), { 20, 30, 40 })
+T.eq(
+  "a proxy carries its protocol",
+  (C4:GetDevices({ DeviceIds = "31" })[31] or {}).protocol,
+  { [30] = { deviceName = "Lamp", driverFileName = "lamp.c4z" } }
+)
+T.eq(
+  "and the protocol its proxies",
+  (C4:GetDevices({ DeviceIds = "30" })[30] or {}).proxies,
+  { [31] = { deviceName = "Lamp", driverFileName = "light_v2.c4i" } }
+)
+T.eq("a room is never listed", listed({ DeviceIds = "10", C4iNames = "roomdevice.c4i" }), {})
+T.eq("though it has a display name", C4:GetDeviceDisplayName(10), "Kitchen")
+T.eq("an empty filter lists every device", listed({}), { 20, 30, 31, 40 })
+ShimSetDeviceHidden(20, true)
+T.eq("a hidden device is not listed", listed({ DeviceIds = "20" }), {})
+ShimResetDevices()
+
+--------------------------------------------------------------------------------
 T.section("Lua 5.1 library")
 --------------------------------------------------------------------------------
 

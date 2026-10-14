@@ -1258,13 +1258,17 @@ end
 -- C4:GetDevices / GetDeviceDisplayName / GetDeviceVariables read a registry a
 -- test populates with ShimSetDevices. An id absent from it is the nameless,
 -- unresolvable case: GetDeviceDisplayName returns no value (arity 0, not nil),
--- which is what the controller does and what a driver must tolerate.
+-- which is what the controller does and what a driver must tolerate. A device
+-- whose driverFileName is roomdevice.c4i is a room: it has a display name, but
+-- C4:GetDevices never lists it.
 ---------------------------------------------------------------------------
+
+local ROOM_C4I_NAME = "roomdevice.c4i"
 
 --- @type table<number, table>
 local shim_devices = {}
 
---- @param devices table<number, table> id -> { deviceName?, driverFileName?, roomId?, roomName?, variables?, hidden? }
+--- @param devices table<number, table> id -> { deviceName?, driverFileName?, roomId?, roomName?, protocol?, proxies?, variables?, hidden? }
 function ShimSetDevices(devices)
   shim_devices = devices or {}
 end
@@ -1281,25 +1285,36 @@ function ShimSetDeviceHidden(deviceId, hidden)
   end
 end
 
+-- As on 4.3.0, it lists the DeviceIds asked for, whatever their driver, and every device of a
+-- driver in C4iNames: a union, not an intersection. An empty filter lists every device.
 function C4:GetDevices(filter)
-  local deviceId = tonumber(filter and filter.DeviceIds)
-  local device = deviceId ~= nil and shim_devices[deviceId] or nil
-  if device == nil or device.hidden then
-    return {}
+  filter = filter or {}
+  local asked, named = {}, {}
+  for deviceId in string.gmatch(filter.DeviceIds or "", "([^,]+)") do
+    asked[tonumber(deviceId) or deviceId] = true
   end
-  if filter.C4iNames ~= nil then
-    local matched = false
-    for c4iName in string.gmatch(filter.C4iNames, "([^,]+)") do
-      if c4iName == device.driverFileName then
-        matched = true
-        break
-      end
-    end
-    if not matched then
-      return {}
+  for c4iName in string.gmatch(filter.C4iNames or "", "([^,]+)") do
+    named[c4iName:match("^%s*(.-)%s*$")] = true
+  end
+  local all = filter.DeviceIds == nil and filter.C4iNames == nil
+  local devices = {}
+  for deviceId, device in pairs(shim_devices) do
+    if
+      not device.hidden
+      and device.driverFileName ~= ROOM_C4I_NAME
+      and (all or asked[deviceId] or named[device.driverFileName])
+    then
+      devices[deviceId] = {
+        driverFileName = device.driverFileName,
+        deviceName = device.deviceName,
+        roomId = device.roomId,
+        roomName = device.roomName,
+        protocol = device.protocol,
+        proxies = device.proxies,
+      }
     end
   end
-  return { [deviceId] = device }
+  return devices
 end
 
 function C4:GetDeviceDisplayName(deviceId)
