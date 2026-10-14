@@ -81,7 +81,17 @@ Displays the current status of the driver.
 
 #### Driver Version (read-only)
 
-Displays the current version of the driver.
+Displays the current version of the driver. To read it from Composer's Lua tab:
+
+```lua
+print(Properties["Driver Version"])
+```
+
+The Lua tab prints the build date it was stamped with:
+
+```
+20261014
+```
 
 #### Log Level \[ 0 - Fatal | 1 - Error | 2 - Warning | **_3 - Info_** | 4 - Debug | 5 - Trace | 6 - Ultra \]
 
