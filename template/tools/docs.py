@@ -5,7 +5,7 @@ Subcommands:
   docs.py md2html  <input.md>   <output-dir>   # styled HTML -> <output-dir>/index.html
   docs.py html2pdf <input.html> <output.pdf>   # HTML -> PDF
   docs.py readme   <input.md>   <output.md>    # driver docs -> repo README.md
-  docs.py fmt      <mdformat args...>         # mdformat, keeping alert markers
+  docs.py fmt      [--check] --wrap N <md...>  # mdformat, keeping alert markers
 
 Pipeline:
   - Markdown -> HTML via markdown-it-py (GitHub-flavored, HTML passthrough),
@@ -22,6 +22,7 @@ Pipeline:
     own line, where wrapping would join it to the text after.
 """
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -341,36 +342,46 @@ class _AlertMarkerExtension:
         pass
 
 
-def _register_alert_marker_extension() -> None:
+def _mdformat(text: str, wrap: int) -> str:
+    """mdformat with gfm, keeping each alert marker on its own line."""
+    import mdformat
     import mdformat.plugins
 
     # mdformat finds extensions by entry point; registering here lets docs.py
     # carry this one without packaging it.
     mdformat.plugins.PARSER_EXTENSIONS["alert_marker"] = _AlertMarkerExtension
+    return mdformat.text(
+        text, options={"wrap": wrap}, extensions=("gfm", "alert_marker")
+    )
 
 
 def readme(input_path: Path, output_path: Path) -> None:
-    import mdformat
-
-    _register_alert_marker_extension()
     text = input_path.read_text(encoding="utf-8")
     # Strip <style> blocks (screen-only chrome), then normalize.
     text = re.sub(r"<style\b[^>]*>.*?</style>", "", text, flags=re.S | re.I)
-    text = mdformat.text(text, options={"wrap": 80}, extensions={"gfm", "alert_marker"})
-    output_path.write_text(text, encoding="utf-8")
+    output_path.write_text(_mdformat(text, 80), encoding="utf-8")
 
 
 def fmt(args: list[str]) -> int:
-    """`python -m mdformat <args>`, with the alert marker extension enabled.
-
-    The CLI enables every registered extension, so this is the stock run plus
-    the marker guard.
-    """
-    # What `python -m mdformat` calls; the CLI has no public Python entry.
-    from mdformat._cli import run
-
-    _register_alert_marker_extension()
-    return run(args)
+    """Format files in place, or with --check name each one that would change."""
+    parser = argparse.ArgumentParser(prog="docs.py fmt")
+    parser.add_argument("--check", action="store_true")
+    parser.add_argument("--wrap", type=int, required=True)
+    parser.add_argument("paths", nargs="+", type=Path)
+    opts = parser.parse_args(args)
+    unformatted = 0
+    for path in opts.paths:
+        # Bytes, not read_text: a CRLF file must read as unformatted.
+        original = path.read_bytes().decode()
+        formatted = _mdformat(original, opts.wrap)
+        if formatted == original:
+            continue
+        if opts.check:
+            print(f'Error: File "{path.absolute()}" is not formatted.', file=sys.stderr)
+            unformatted = 1
+        else:
+            path.write_bytes(formatted.encode())
+    return unformatted
 
 
 _COMMANDS = {"md2html": md2html, "html2pdf": html2pdf, "readme": readme}
