@@ -16,7 +16,7 @@ concurrency:
 jobs:
   render:
     name: render (${{ matrix.name }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
@@ -163,7 +163,7 @@ jobs:
   # (repo root, outside template/, so copier never renders it) supplies one.
   build:
     name: build (${{ matrix.name }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
