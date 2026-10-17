@@ -116,23 +116,26 @@ end
 
 --- Logs and invokes a C4 method, trimming trailing nil arguments.
 --- @param methodName string The C4 method name
+--- @param hidden? integer The argument the trace shows as <not logged> (optional).
 --- @param ... any Arguments to pass
 --- @return any
-local function C4Call(methodName, ...)
+local function C4Call(methodName, hidden, ...)
   local numArgs = select("#", ...)
   local args = { ... }
 
-  -- Single pass: build format string and find last non-nil
+  -- Single pass: build format string and traced values, and find last non-nil
   local lastNonNil = 0
   local fmtParts = {}
+  local shown = {}
   for i = 1, numArgs do
     if args[i] ~= nil then
       lastNonNil = i
     end
     fmtParts[i] = "%s"
+    shown[i] = i == hidden and "<not logged>" or args[i]
   end
 
-  log:trace("C4:" .. methodName .. "(" .. table.concat(fmtParts, ", ") .. ")", unpack(args, 1, numArgs))
+  log:trace("C4:" .. methodName .. "(" .. table.concat(fmtParts, ", ") .. ")", unpack(shown, 1, numArgs))
   return C4[methodName](C4, unpack(args, 1, lastNonNil))
 end
 
@@ -141,34 +144,32 @@ end
 --- @param strCommand string The command to send.
 --- @param tParams table A table containing parameters for the command.
 --- @param allowEmptyValues? boolean Allows empty strings as parameter values (optional). Defaults to false.
---- @param logCommand? boolean If false, prevents logging of the command's content (optional). Defaults to true.
+--- @param logCommand? boolean If false, keeps the parameters out of C4's log and the trace (optional). Defaults to true.
 function SendToDevice(deviceId, strCommand, tParams, allowEmptyValues, logCommand)
-  if logCommand == false then
-    -- C4 keeps a sensitive command's content out of its log, and so does this trace.
-    log:trace("C4:SendToDevice(%s, %s, <not logged>)", deviceId, strCommand)
-    return C4:SendToDevice(deviceId, strCommand, tParams, allowEmptyValues, logCommand)
-  end
-  return C4Call("SendToDevice", deviceId, strCommand, tParams, allowEmptyValues, logCommand)
+  local hidden = logCommand == false and 3 or nil
+  return C4Call("SendToDevice", hidden, deviceId, strCommand, tParams, allowEmptyValues, logCommand)
 end
 
 --- Sends a Control4 BindMessage to a proxy with the specified binding ID.
---- Its trace logs every parameter: send a code or password with C4:SendToProxy instead.
 --- @param idBinding number The proxy binding to send the message to.
 --- @param strCommand string The command to send.
 --- @param tParams table A table containing parameters for the command.
 --- @param strMessage? string Overrides message type ("COMMAND" or "NOTIFY") (optional). Defaults to "COMMAND".
 --- @param allowEmptyValues? boolean Allows empty values in message parameters (optional).
-function SendToProxy(idBinding, strCommand, tParams, strMessage, allowEmptyValues)
-  return C4Call("SendToProxy", idBinding, strCommand, tParams, strMessage, allowEmptyValues)
+--- @param logCommand? boolean If false, keeps the parameters out of the trace (optional). Defaults to true.
+function SendToProxy(idBinding, strCommand, tParams, strMessage, allowEmptyValues, logCommand)
+  local hidden = logCommand == false and 3 or nil
+  return C4Call("SendToProxy", hidden, idBinding, strCommand, tParams, strMessage, allowEmptyValues)
 end
 
 --- Sends an HTTP request to a network binding.
---- Its trace logs the data: send a credential with C4:SendToNetwork instead.
 --- @param idBinding number The ID of the network binding to send to.
 --- @param nPort number The port to use for the request.
 --- @param strData string The data to send with the HTTP request.
-function SendToNetwork(idBinding, nPort, strData)
-  return C4Call("SendToNetwork", idBinding, nPort, strData)
+--- @param logCommand? boolean If false, keeps the data out of the trace (optional). Defaults to true.
+function SendToNetwork(idBinding, nPort, strData, logCommand)
+  local hidden = logCommand == false and 3 or nil
+  return C4Call("SendToNetwork", hidden, idBinding, nPort, strData)
 end
 
 --- Sends a UI Request to another driver.
@@ -177,7 +178,7 @@ end
 --- @param tParams table A table of parameters to send with the request. Use `{}` if no parameters.
 --- @return string response The response to the request in XML format.
 function SendUIRequest(id, request, tParams)
-  return C4Call("SendUIRequest", id, request, tParams)
+  return C4Call("SendUIRequest", nil, id, request, tParams)
 end
 
 --- @type LRUCache<string,table<string,ExtendedDeviceDefinition>>
