@@ -143,10 +143,16 @@ end
 --- @param allowEmptyValues? boolean Allows empty strings as parameter values (optional). Defaults to false.
 --- @param logCommand? boolean If false, prevents logging of the command's content (optional). Defaults to true.
 function SendToDevice(deviceId, strCommand, tParams, allowEmptyValues, logCommand)
+  if logCommand == false then
+    -- C4 keeps a sensitive command's content out of its log, and so does this trace.
+    log:trace("C4:SendToDevice(%s, %s, <not logged>)", deviceId, strCommand)
+    return C4:SendToDevice(deviceId, strCommand, tParams, allowEmptyValues, logCommand)
+  end
   return C4Call("SendToDevice", deviceId, strCommand, tParams, allowEmptyValues, logCommand)
 end
 
 --- Sends a Control4 BindMessage to a proxy with the specified binding ID.
+--- Its trace logs every parameter: send a code or password with C4:SendToProxy instead.
 --- @param idBinding number The proxy binding to send the message to.
 --- @param strCommand string The command to send.
 --- @param tParams table A table containing parameters for the command.
@@ -157,6 +163,7 @@ function SendToProxy(idBinding, strCommand, tParams, strMessage, allowEmptyValue
 end
 
 --- Sends an HTTP request to a network binding.
+--- Its trace logs the data: send a credential with C4:SendToNetwork instead.
 --- @param idBinding number The ID of the network binding to send to.
 --- @param nPort number The port to use for the request.
 --- @param strData string The data to send with the HTTP request.
