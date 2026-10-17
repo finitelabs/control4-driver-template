@@ -691,7 +691,8 @@ end
 -- s 0-100 / v 0-100, and neither is clamped. A kelvin is taken in 10 K steps
 -- from 1000 to 20000 K, on Krystek's fit of the Planckian locus, which lies
 -- within 0.001 of the controller's. A missing argument raises, and a numeric
--- string passes as its number.
+-- string passes as its number. ColorRGBtoXY and ColorXYtoRGB stay out until
+-- zigbee3's light suites stop stubbing them only where the shim has none.
 ---------------------------------------------------------------------------
 
 local GAMUT_PRIMARIES = {
@@ -952,18 +953,6 @@ function C4:ColorRGBtoHSV(...)
   return rgb_to_hsv(r / scale, g / scale, b / scale)
 end
 
-function C4:ColorRGBtoXY(...)
-  local r, g, b, scale, gamut, primaries, whitepoints = color_args(
-    self,
-    { "R", "G", "B", "scale", "gamut", "primaries", "whitepoints" },
-    3,
-    "R, G, B[, scale, gamut, primaries, whitepoints]",
-    ...
-  )
-  scale = scale or 255
-  return rgb_to_xy(r / scale, g / scale, b / scale, gamut_of(gamut, primaries, whitepoints))
-end
-
 function C4:ColorHSVtoXY(...)
   local h, s, v, gamut, primaries, whitepoints = color_args(
     self,
@@ -982,19 +971,6 @@ function C4:ColorXYtoHSV(...)
   local x, y, gamut, primaries, whitepoints =
     color_args(self, { "x", "y", "gamut", "primaries", "whitepoints" }, 2, "x, y[, gamut, primaries, whitepoints]", ...)
   return xy_to_hsv(x, y, gamut_of(gamut, primaries, whitepoints))
-end
-
---- The whole-number HSV of C4:ColorXYtoHSV taken to RGB, so the brightest channel is `scale`.
-function C4:ColorXYtoRGB(...)
-  local x, y, scale, gamut, primaries, whitepoints = color_args(
-    self,
-    { "x", "y", "scale", "gamut", "primaries", "whitepoints" },
-    2,
-    "x, y[, scale, gamut, primaries, whitepoints]",
-    ...
-  )
-  local h, s, v = xy_to_hsv(x, y, gamut_of(gamut, primaries, whitepoints))
-  return hsv_to_rgb(h, s, v, scale or 255)
 end
 
 --- Minimal XML parser returning what C4:ParseXml returns, measured on a

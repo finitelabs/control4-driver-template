@@ -687,38 +687,28 @@ do
   )
   T.check(
     "white is the D65 point",
-    nearAll({ C4:ColorRGBtoXY(255, 255, 255) }, { 0.31271, 0.32902 }),
-    { C4:ColorRGBtoXY(255, 255, 255) }
+    nearAll({ C4:ColorHSVtoXY(0, 0, 100) }, { 0.31271, 0.32902 }),
+    { C4:ColorHSVtoXY(0, 0, 100) }
   )
-  T.eq("black is the point a controller answers", { C4:ColorRGBtoXY(0, 0, 0) }, {
+  T.eq("black is the point a controller answers", { C4:ColorHSVtoXY(0, 0, 0) }, {
     0.31363058811039002,
     0.32889966390724001,
   })
-  T.check(
-    "RGB(128,64,32)",
-    nearAll({ C4:ColorRGBtoXY(128, 64, 32) }, { 0.5746028159438904, 0.36003204263743793 }),
-    { C4:ColorRGBtoXY(128, 64, 32) }
-  )
-  T.check(
-    "an RGB scale is taken",
-    nearAll({ C4:ColorRGBtoXY(1, 0.75, 0.5, 1) }, { C4:ColorRGBtoXY(255, 191.25, 127.5) }),
-    { C4:ColorRGBtoXY(1, 0.75, 0.5, 1) }
-  )
   local primaries = "0.7,0.25,0.25,0.75,0.1,0.5"
   T.check(
     "custom primaries",
-    nearAll({ C4:ColorRGBtoXY(255, 0, 0, 255, "custom", primaries) }, { 0.7, 0.25 }),
-    { C4:ColorRGBtoXY(255, 0, 0, 255, "custom", primaries) }
+    nearAll({ C4:ColorHSVtoXY(0, 100, 100, "custom", primaries) }, { 0.7, 0.25 }),
+    { C4:ColorHSVtoXY(0, 100, 100, "custom", primaries) }
   )
   T.check(
     "and a custom white",
-    nearAll({ C4:ColorRGBtoXY(255, 255, 255, 255, "custom", primaries, "0.33, 0.34") }, { 0.33, 0.34 }),
-    { C4:ColorRGBtoXY(255, 255, 255, 255, "custom", primaries, "0.33, 0.34") }
+    nearAll({ C4:ColorHSVtoXY(0, 0, 100, "custom", primaries, "0.33, 0.34") }, { 0.33, 0.34 }),
+    { C4:ColorHSVtoXY(0, 0, 100, "custom", primaries, "0.33, 0.34") }
   )
   T.check(
     "custom primaries that are not six numbers fall back to Rec. 2020",
-    nearAll({ C4:ColorRGBtoXY(255, 0, 0, 255, "custom", "0.7,0.25") }, { 0.708, 0.292 }),
-    { C4:ColorRGBtoXY(255, 0, 0, 255, "custom", "0.7,0.25") }
+    nearAll({ C4:ColorHSVtoXY(0, 100, 100, "custom", "0.7,0.25") }, { 0.708, 0.292 }),
+    { C4:ColorHSVtoXY(0, 100, 100, "custom", "0.7,0.25") }
   )
 
   T.eq("xy to HSV is in whole numbers at full value", { C4:ColorXYtoHSV(0.64, 0.33) }, { 14, 82, 100 })
@@ -726,13 +716,6 @@ do
   T.eq("xy outside the gamut is clipped to its nearest edge", { C4:ColorXYtoHSV(0.4, 0) }, { 295, 100, 100 })
   T.eq("or corner", { C4:ColorXYtoHSV(0, 0) }, { 240, 100, 100 })
   T.eq("in the gamut named", { C4:ColorXYtoHSV(0.7, 0.29, "srgb") }, { 0, 100, 100 })
-  T.check(
-    "xy to RGB goes through those whole numbers",
-    nearAll({ C4:ColorXYtoRGB(0.64, 0.33) }, { 255, 94.69, 45.9 }),
-    { C4:ColorXYtoRGB(0.64, 0.33) }
-  )
-  T.eq("with its brightest channel at the scale", { C4:ColorXYtoRGB(0.708, 0.292, 100) }, { 100, 0, 0 })
-
   -- The Planckian locus within 0.001 of the controller's, in 10 K steps.
   T.check(
     "1000 K",
@@ -771,7 +754,7 @@ do
     C4:ColorCCTtoXY("warm")
   end, "kelvin should be a number")
   T.raises("or an optional one passed as nil", function()
-    C4:ColorXYtoRGB(0.64, 0.33, nil, "srgb")
+    C4:ColorHSVtoRGB(120, 75, 100, nil)
   end, "scale should be a number")
   T.raises("or a gamut passed as nil", function()
     C4:ColorHSVtoXY(0, 100, 100, nil)
