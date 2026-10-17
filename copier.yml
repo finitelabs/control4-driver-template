@@ -24,6 +24,11 @@ _exclude:
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_alias.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_self_last.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_write.lua{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}src/lib/light.lua{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}src/lib/light{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}test/light_harness.lua{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}test/light_setup{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}test/test_light_proxy.lua{% endif %}"
 
 project_name:
   type: str
@@ -59,5 +64,5 @@ primary_color:
 
 vendor_modules:
   type: str
-  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf version). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless."
+  help: "Space-separated optional modules (available: bitn crypto bthome noiseprotocol protobuf version light). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless. light ships the Light V2 library (src/lib/light.lua, src/lib/light/), its test kit (test/light_harness.lua, test/light_setup/) and its suite (test/test_light_proxy.lua); a Light V2 driver is then an adapter over it."
   default: ""

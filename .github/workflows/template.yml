@@ -39,10 +39,11 @@ jobs:
             distributions: drivercentral
             readme_build: drivercentral
             vendor_modules: version
+          # The only leg with light; the rest prove nothing that always renders requires lib.light.
           - name: crypto-bundles
             distributions: drivercentral oss
             readme_build: oss
-            vendor_modules: bitn crypto noiseprotocol protobuf bthome
+            vendor_modules: bitn crypto noiseprotocol protobuf bthome light
 
     steps:
       - uses: actions/checkout@v4
@@ -175,7 +176,7 @@ jobs:
             variants: ""
           - name: crypto-bundles
             distributions: drivercentral oss
-            vendor_modules: bitn crypto noiseprotocol protobuf bthome
+            vendor_modules: bitn crypto noiseprotocol protobuf bthome light
             readme_driver_slug: example
             variants: ""
           # The README driver is a generated variant: build/ has

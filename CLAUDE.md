@@ -58,8 +58,9 @@ diffing the two trees is what turns "this looks right" into evidence.
 A merged PR reaches zero drivers. The sequence is **merge → tag → `copier update`
 per repo**, and each of those is a separate step someone has to do.
 
-Ten repos carry `.copier-answers.yml`. Enumerate them live rather than trusting a
-list — the count has been wrong before, and a stale local clone is not evidence:
+Twelve repos carry `.copier-answers.yml`. Enumerate them live rather than
+trusting a list, since the count has been wrong before and a stale local clone
+is not evidence:
 
 ```bash
 gh api repos/finitelabs/<repo>/contents/.copier-answers.yml \
@@ -71,15 +72,29 @@ A template ticket is not done at merge; it is done when the drift is closed.
 
 ## `_exclude` gates files on answers
 
-`copier.yml`'s `_exclude` list drops files the answers did not select —
+`copier.yml`'s `_exclude` list drops files the answers did not select:
 `distributions` controls OSS versus DriverCentral, `vendor_modules` the optional
-vendored libraries. There is no module-to-module gating: every `src/lib/*.lua`
-renders unconditionally, and `gen-squishy` bundles only what a driver actually
-requires, so a rendered-but-unused module is zero bytes in the `.c4z`. A new
-`src/lib` file needs no `_exclude` entry.
+vendored libraries and the Light V2 library. There is no module-to-module
+gating, and every `src/lib` module but the two below renders unconditionally:
+`gen-squishy` bundles only what a driver actually requires, so a
+rendered-but-unused module is zero bytes in the `.c4z`. A new `src/lib` file
+needs no `_exclude` entry.
 
-`github-updater.lua` and its tests are gated on `oss`, the distribution whose
-update mechanism they are.
+Two `src/lib` entries are gated. `github-updater.lua` and its tests are gated on
+`oss`, the distribution whose update mechanism they are. The `light` token gates
+the Light V2 library (`src/lib/light.lua`, `src/lib/light/`), its test kit
+(`test/light_harness.lua`, `test/light_setup/`) and its suite
+(`test/test_light_proxy.lua`). Gating a module its siblings call was the
+require-hygiene defect class that #37 removed; `lib.light` is safe to gate
+because it is a leaf. It requires only modules that always render, and nothing
+that always renders may require it, which every CI leg without the token
+proves.
+
+A new question that `_exclude` reads must be written `(name | default(''))`.
+Copier applies the new excludes while it renders a repo's old answers, which
+lack the key, so a bare name fails every update from an older tag. That is why
+`light` is a token on `vendor_modules`, which every answers file already has,
+and not a question of its own.
 
 `_skip_if_exists` holds `CHANGELOG.md` and `src/constants.lua`, so existing repos
 never receive changes to them — only newly created ones do. This is why the

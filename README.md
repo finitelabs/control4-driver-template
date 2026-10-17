@@ -127,4 +127,4 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
-| `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version) | (empty) |
+| `vendor_modules` | Space-separated *optional* modules: the `vendor` ones (bitn crypto bthome noiseprotocol protobuf version), and `light` for the Light V2 library, its test kit and its suite | (empty) |
