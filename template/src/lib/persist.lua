@@ -70,7 +70,7 @@ local REDACTED = "***REDACTED***"
 --- A value as a trace may show it: an encrypted key's is never logged.
 --- @private
 local function traced(value, encrypted)
-  if encrypted and value ~= nil then
+  if encrypted and value ~= nil and value ~= "" then
     return REDACTED
   end
   return value
