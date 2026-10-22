@@ -376,8 +376,8 @@ def _mdformat(text: str, wrap: int) -> str:
     )
 
 
-# A markdown link to another page beside the docs: no scheme, anchor or path.
-_PAGE_LINK_RE = re.compile(r"(?<!!)\[([^\]]*)\]\([\w.-]+\.html\)")
+# A markdown link to another page beside the docs, with or without an anchor: no scheme or path.
+_PAGE_LINK_RE = re.compile(r"(?<!!)\[([^\]]*)\]\([\w.-]+\.html(?:#[\w.-]*)?\)")
 
 
 def readme(input_path: Path, output_path: Path) -> None:
