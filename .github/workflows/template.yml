@@ -53,13 +53,13 @@ jobs:
         with:
           luaVersion: "luajit-2.1"
 
-      # Installs stylua; it is run through a shell below, not this action, whose
-      # arg splitter drops single-quoted globs and would check zero files.
-      - uses: JohnnyMorganz/stylua-action@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          version: latest
-          args: --version
+      - name: Install stylua
+        run: |
+          curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/stylua.zip" \
+            "https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-$(uname -m).zip"
+          unzip -q "$RUNNER_TEMP/stylua.zip" -d "$RUNNER_TEMP/stylua"
+          echo "$RUNNER_TEMP/stylua" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/stylua/stylua" --version
 
       - name: Install copier
         run: pipx install copier
@@ -199,11 +199,13 @@ jobs:
         with:
           python-version: "3.x"
 
-      - uses: JohnnyMorganz/stylua-action@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          version: latest
-          args: --version
+      - name: Install stylua
+        run: |
+          curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/stylua.zip" \
+            "https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-$(uname -m).zip"
+          unzip -q "$RUNNER_TEMP/stylua.zip" -d "$RUNNER_TEMP/stylua"
+          echo "$RUNNER_TEMP/stylua" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/stylua/stylua" --version
 
       - name: Install system dependencies
         run: |
