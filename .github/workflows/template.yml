@@ -53,8 +53,6 @@ jobs:
         with:
           luaVersion: "luajit-2.1"
 
-      # stylua-action asks the releases API for the version on every run, and an
-      # empty answer fails the job; the latest release's asset URL needs no API.
       - name: Install stylua
         run: |
           curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/stylua.zip" \
