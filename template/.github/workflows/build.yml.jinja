@@ -54,12 +54,15 @@ jobs:
         with:
           node-version-file: .node-version
 
+      # stylua-action asks the releases API for the version on every run, and an
+      # empty answer fails the build; the latest release's asset URL needs no API.
       - name: Setup stylua
-        uses: JohnnyMorganz/stylua-action@v4
-        with:
-          token: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
-          version: latest
-          args: --version
+        run: |
+          curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/stylua.zip" \
+            https://github.com/JohnnyMorganz/StyLua/releases/latest/download/stylua-linux-x86_64.zip
+          unzip -q "$RUNNER_TEMP/stylua.zip" -d "$RUNNER_TEMP/stylua"
+          echo "$RUNNER_TEMP/stylua" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/stylua/stylua" --version
 
       - name: Install system dependencies
         run: |
