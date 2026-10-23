@@ -10,7 +10,9 @@
 --      type (self.TOKEN_HEADERS == 'table'), which is always a string, so a non-table
 --      value reached pairs and threw.
 --   3. A response body that is not a decoded table (url.lua wraps a body it cannot
---      decode as { body }) is read as an empty table, where upstream indexed it.
+--      decode as { body }) is read as an empty table, where upstream indexed it, and
+--      a state response's expiresAt that is not a number falls back to
+--      REDIRECT_DURATION.
 --   4. A token response that is neither 200 nor 4xx (a 5xx, a redirect) retries the
 --      refresh in 30 seconds, as a transport error does. Upstream did nothing, so no
 --      refresh was ever scheduled again and the access token lapsed.

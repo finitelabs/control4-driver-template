@@ -442,39 +442,20 @@ def parse_env_file(path: Path) -> dict[str, str]:
 
 def resolve_build_secrets(repo_root: Path) -> dict[str, str]:
     """
-    Resolve the build secrets `.env.default` declares.
-
-    `.env.default` (committed) names every secret the build substitutes. Each value
-    comes from, in order: the process environment, the SECRETS_JSON environment
-    variable (CI passes `toJSON(secrets)` there), then `.env` (gitignored, local).
-    Only declared names are read, so no other secret reaches the build.
-
-    A secret with no value builds as an empty string with a warning, so a pull
-    request from a fork, which CI gives no secrets, still builds. With
-    REQUIRE_SECRETS set, a missing secret fails the build instead. Values are never
-    printed, only whether each name was set.
+    Resolve each name `.env.default` declares from the environment, then `.env`.
+    A missing value resolves to "" with a warning, or exits when REQUIRE_SECRETS is
+    set. Only whether each name was set is printed.
     """
     declared = list(parse_env_file(repo_root / ".env.default"))
     if not declared:
         return {}
 
     local = parse_env_file(repo_root / ".env")
-    ci: dict = {}
-    raw = os.environ.get("SECRETS_JSON", "")
-    if raw:
-        try:
-            parsed = json.loads(raw)
-            ci = parsed if isinstance(parsed, dict) else {}
-        except json.JSONDecodeError:
-            print("Warning: SECRETS_JSON is not a JSON object; ignoring it")
-
     required = os.environ.get("REQUIRE_SECRETS", "") not in ("", "0", "false")
     secrets: dict[str, str] = {}
     missing: list[str] = []
     for name in declared:
-        value = os.environ.get(name) or ci.get(name) or local.get(name) or ""
-        if not isinstance(value, str):
-            value = str(value)
+        value = os.environ.get(name) or local.get(name) or ""
         if value:
             print(f"Build secret {name}: set")
         else:

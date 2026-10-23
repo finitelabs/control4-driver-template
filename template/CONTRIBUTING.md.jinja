@@ -377,10 +377,12 @@ without it has no build secrets. `tools/preprocess.py` reads only the declared
 names, and takes each value from, in order:
 
 1. the process environment
-2. `SECRETS_JSON`, which the Build workflow sets from the repository's GitHub
-   Actions secrets (add each name under Settings > Secrets and variables >
-   Actions)
-3. `.env`, gitignored, for local builds: `cp .env.default .env` and fill it in
+1. `.env`, gitignored: for a local build, `cp .env.default .env` and fill it in
+
+In CI, the Build workflow writes `.env` from the repository's GitHub Actions
+secrets (add each name under Settings > Secrets and variables > Actions) in a
+step of its own, copying only the names `.env.default` declares, so `make build`
+and the tools it runs never see any other secret. Each value is a single line.
 
 A name with no value builds as an empty string with a warning, so a pull request
 from a fork, which gets no secrets, still builds. A tag build sets
