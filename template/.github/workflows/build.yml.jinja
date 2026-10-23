@@ -88,8 +88,14 @@ jobs:
       - name: Test
         run: make test
 
+      # Secrets that .env.default names are baked in here; preprocess.py reads only
+      # those names from SECRETS_JSON. A tag build is released, so it fails when one
+      # is missing; other builds (and fork PRs, which get no secrets) build them empty.
       - name: Build
         run: make build
+        env:
+          SECRETS_JSON: {% raw %}${{ toJSON(secrets) }}{% endraw %}
+          REQUIRE_SECRETS: {% raw %}${{ github.ref_type == 'tag' && '1' || '' }}{% endraw %}
 
       - name: Verify PDFs were generated
         run: |

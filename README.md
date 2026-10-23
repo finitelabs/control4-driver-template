@@ -12,6 +12,8 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 ### Build Tooling (`tools/`)
 - **preprocess.py**: C preprocessor-style `#ifdef`/`#ifndef` for Lua, XML, and Markdown. Supports
   variant expansion for generating multiple driver configurations from a single source.
+  Also substitutes build secrets: `__NAME__` placeholders for the names `.env.default` declares, from
+  the environment, CI's `SECRETS_JSON` or a gitignored `.env` (see the rendered CONTRIBUTING.md).
 - **docs.py**: documentation generation, Markdown -> HTML (markdown-it-py + Pygments) -> PDF
   (WeasyPrint, a CSS Paged Media engine, no browser), plus the repo README.
 - **package.py**: packaging helpers for driver.xml version/modified stamping and zip bundling (stdlib).
@@ -45,6 +47,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **bthome.lua**: BTHome protocol support
 - **noiseprotocol.lua**: Noise Protocol encryption
 - **protobuf.lua**: Protocol Buffers
+- **drivers-common-public/module/auth_code_grant.lua** + **global/make_short_link.lua** (`oauth`): Control4's OAuth authorization-code grant through its redirect service, and its short links. Both need API keys from Control4
 
 ### Test Support (`test/`)
 - **c4_shim.lua**: shim layer replacing C4 API calls with native Lua equivalents for local testing
@@ -127,4 +130,4 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
-| `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version) | (empty) |
+| `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version oauth) | (empty) |

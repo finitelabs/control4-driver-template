@@ -43,6 +43,10 @@ jobs:
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: bitn crypto noiseprotocol protobuf bthome
+          - name: oauth
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: oauth
 
     steps:
       - uses: actions/checkout@v4
@@ -149,6 +153,30 @@ jobs:
         working-directory: ${{ runner.temp }}/render
         run: make test
 
+      # tools/preprocess.py takes .env.default's names from the environment,
+      # SECRETS_JSON and .env, in that order, and REQUIRE_SECRETS fails on a gap.
+      - name: Build secrets are substituted
+        if: matrix.name == 'default'
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          set -euo pipefail
+          mkdir -p drivers/probe
+          printf 'A="__CI_SECRET_A__" B="__CI_SECRET_B__" C="__CI_SECRET_C__" D="__CI_SECRET_D__"\n' > drivers/probe/driver.lua
+          printf '# CI probe\nCI_SECRET_A=\nCI_SECRET_B=\nCI_SECRET_C=\nCI_SECRET_D=\n' > .env.default
+          printf 'CI_SECRET_A=from-dotenv\nCI_SECRET_B=from-dotenv\nCI_SECRET_C=from-dotenv\n' > .env
+          out=$(CI_SECRET_A=from-env SECRETS_JSON='{"CI_SECRET_A":"no","CI_SECRET_B":"from-json"}' \
+            python3 tools/preprocess.py --oss)
+          got=$(cat build/oss/drivers/probe/driver.lua)
+          want='A="from-env" B="from-json" C="from-dotenv" D=""'
+          [ "$got" = "$want" ] || { echo "::error::got $got, want $want"; exit 1; }
+          if grep -q 'from-' <<<"$out"; then echo "::error::a value was printed"; exit 1; fi
+          grep -q 'CI_SECRET_D is not set' <<<"$out"
+          if REQUIRE_SECRETS=1 python3 tools/preprocess.py --oss >/dev/null 2>&1; then
+            echo "::error::REQUIRE_SECRETS passed with CI_SECRET_D missing"; exit 1
+          fi
+          grep -qx '/.env' .gitignore
+          rm -rf drivers/probe build .env .env.default
+
       - name: Formatted
         working-directory: ${{ runner.temp }}/render
         run: |
@@ -176,6 +204,11 @@ jobs:
           - name: crypto-bundles
             distributions: drivercentral oss
             vendor_modules: bitn crypto noiseprotocol protobuf bthome
+            readme_driver_slug: example
+            variants: ""
+          - name: oauth
+            distributions: drivercentral oss
+            vendor_modules: oauth
             readme_driver_slug: example
             variants: ""
           # The README driver is a generated variant: build/ has

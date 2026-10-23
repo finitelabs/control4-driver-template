@@ -413,6 +413,106 @@ def process_directory(
             process_file(build_item_path, conditions, variant_map)
 
 
+def parse_env_file(path: Path) -> dict[str, str]:
+    """
+    Read KEY=VALUE lines from a dotenv-style file. Blank lines and # comments are
+    skipped, an optional leading `export ` is dropped, and one pair of matching
+    surrounding quotes is removed from the value.
+    """
+    values: dict[str, str] = {}
+    if not path.is_file():
+        return values
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].lstrip()
+        key, sep, value = line.partition("=")
+        key = key.strip()
+        if not sep or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key):
+            print(f"Warning: {path.name}: ignoring a line that is not KEY=VALUE")
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
+            value = value[1:-1]
+        values[key] = value
+    return values
+
+
+def resolve_build_secrets(repo_root: Path) -> dict[str, str]:
+    """
+    Resolve the build secrets `.env.default` declares.
+
+    `.env.default` (committed) names every secret the build substitutes. Each value
+    comes from, in order: the process environment, the SECRETS_JSON environment
+    variable (CI passes `toJSON(secrets)` there), then `.env` (gitignored, local).
+    Only declared names are read, so no other secret reaches the build.
+
+    A secret with no value builds as an empty string with a warning, so a pull
+    request from a fork, which CI gives no secrets, still builds. With
+    REQUIRE_SECRETS set, a missing secret fails the build instead. Values are never
+    printed, only whether each name was set.
+    """
+    declared = list(parse_env_file(repo_root / ".env.default"))
+    if not declared:
+        return {}
+
+    local = parse_env_file(repo_root / ".env")
+    ci: dict = {}
+    raw = os.environ.get("SECRETS_JSON", "")
+    if raw:
+        try:
+            parsed = json.loads(raw)
+            ci = parsed if isinstance(parsed, dict) else {}
+        except json.JSONDecodeError:
+            print("Warning: SECRETS_JSON is not a JSON object; ignoring it")
+
+    required = os.environ.get("REQUIRE_SECRETS", "") not in ("", "0", "false")
+    secrets: dict[str, str] = {}
+    missing: list[str] = []
+    for name in declared:
+        value = os.environ.get(name) or ci.get(name) or local.get(name) or ""
+        if not isinstance(value, str):
+            value = str(value)
+        if value:
+            print(f"Build secret {name}: set")
+        else:
+            print(f"Warning: build secret {name} is not set; it builds as empty")
+            missing.append(name)
+        secrets[name] = value
+
+    if missing and required:
+        raise SystemExit(
+            "Error: REQUIRE_SECRETS is set and these build secrets have no value: "
+            + ", ".join(missing)
+        )
+    return secrets
+
+
+def substitute_build_secrets(build_dir: Path, secrets: dict[str, str]) -> None:
+    """
+    Replace __NAME__ (and %%NAME%%) for each build secret in every built file.
+
+    Works on bytes and rewrites only a file that holds a placeholder, so binary
+    files and line endings are left exactly as they are.
+    """
+    pairs = []
+    for name, value in secrets.items():
+        encoded = value.encode("utf-8")
+        pairs.append((f"__{name}__".encode(), encoded))
+        pairs.append((f"%%{name}%%".encode(), encoded))
+    for path in sorted(build_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        content = path.read_bytes()
+        replaced = content
+        for placeholder, encoded in pairs:
+            replaced = replaced.replace(placeholder, encoded)
+        if replaced != content:
+            path.write_bytes(replaced)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Build the project with conditional directives."
@@ -473,6 +573,10 @@ def main():
 
     # Copy and process src directory
     process_directory(build_dir, conditions, variant_map)
+
+    secrets = resolve_build_secrets(repo_root)
+    if secrets:
+        substitute_build_secrets(build_dir, secrets)
 
     print(f"Build completed successfully. Output in {build_dir}")
 
