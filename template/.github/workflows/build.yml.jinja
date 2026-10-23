@@ -89,20 +89,9 @@ jobs:
         run: make test
 
       - name: Write .env from the secrets .env.default names
-        if: hashFiles('.env.default') != ''
+        run: python3 tools/preprocess.py --write-dotenv
         env:
           SECRETS_JSON: {% raw %}${{ toJSON(secrets) }}{% endraw %}
-        run: |
-          python3 -I - <<'PY'
-          import json, os, re
-          secrets = json.loads(os.environ["SECRETS_JSON"])
-          with open(".env.default", encoding="utf-8") as f:
-              names = [m.group(1) for m in (re.match(r"\s*(?:export\s+)?([A-Za-z_]\w*)\s*=", line) for line in f) if m]
-          with open(".env", "a", encoding="utf-8") as f:
-              for name in names:
-                  if secrets.get(name):
-                      f.write(f"{name}={secrets[name]}\n")
-          PY
 
       - name: Build
         run: make build

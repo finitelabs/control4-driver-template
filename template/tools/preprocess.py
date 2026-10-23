@@ -471,6 +471,21 @@ def resolve_build_secrets(repo_root: Path) -> dict[str, str]:
     return secrets
 
 
+def write_dotenv_from_secrets(repo_root: Path) -> None:
+    """
+    Append to `.env` each name `.env.default` declares that SECRETS_JSON (a JSON
+    object, CI's `toJSON(secrets)`) gives a value. No other secret is written.
+    """
+    declared = parse_env_file(repo_root / ".env.default")
+    if not declared:
+        return
+    secrets = json.loads(os.environ.get("SECRETS_JSON") or "{}")
+    lines = [f"{name}={secrets[name]}\n" for name in declared if secrets.get(name)]
+    with open(repo_root / ".env", "a", encoding="utf-8") as f:
+        f.writelines(lines)
+    print(f"Wrote {len(lines)} of {len(declared)} build secrets to .env")
+
+
 SECRETS_MARKER = ".build-secrets"
 
 
@@ -550,7 +565,16 @@ def main():
         help="Enable DRIVERCENTRAL + DRIVERCENTRAL_DEV build",
     )
     group.add_argument("--oss", action="store_true", help="Enable OSS build")
+    group.add_argument(
+        "--write-dotenv",
+        action="store_true",
+        help="Write .env.default's names from SECRETS_JSON into .env, then exit",
+    )
     args = parser.parse_args()
+
+    if args.write_dotenv:
+        write_dotenv_from_secrets(Path(__file__).parent.parent)
+        return
 
     if args.drivercentral:
         distribution = "drivercentral"

@@ -161,7 +161,10 @@ jobs:
           mkdir -p drivers/probe
           printf 'A="__CI_SECRET_A__" B="__CI_SECRET_B__" D="__CI_SECRET_D__"\n' > drivers/probe/driver.lua
           printf '# CI probe\nCI_SECRET_A=\nCI_SECRET_B=\nCI_SECRET_D=\n' > .env.default
-          printf 'CI_SECRET_A=from-dotenv\nCI_SECRET_B=from-dotenv\n' > .env
+          printf 'CI_SECRET_A=from-dotenv\n' > .env
+          SECRETS_JSON='{"CI_SECRET_B":"from-dotenv","GITHUB_TOKEN":"not-declared"}' \
+            python3 tools/preprocess.py --write-dotenv
+          if grep -q GITHUB_TOKEN .env; then echo "::error::an undeclared secret reached .env"; exit 1; fi
           out=$(CI_SECRET_A=from-env python3 tools/preprocess.py --oss)
           got=$(cat build/oss/drivers/probe/driver.lua)
           want='A="from-env" B="from-dotenv" D=""'
