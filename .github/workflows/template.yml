@@ -329,3 +329,33 @@ jobs:
             fi
           done
           exit "$missing"
+
+      # A build that preprocess.py substitutes a secret into ships every driver
+      # encrypted, with no plain-text copy of the secret in the .c4z or in
+      # dist/<build>/source, which the Build workflow would upload as an artifact.
+      - name: A build with secrets is encrypted
+        if: matrix.name == 'oauth'
+        working-directory: ${{ runner.temp }}/render
+        env:
+          DISTRIBUTIONS: ${{ matrix.distributions }}
+        run: |
+          set -euo pipefail
+          printf '# CI probe\nEXAMPLE_SECRET=\n' > .env.default
+          printf '\nEXAMPLE_BUILD_SECRET = "__EXAMPLE_SECRET__"\n' >> drivers/example/driver.lua
+          EXAMPLE_SECRET=ci-secret-value make build-nodocs
+          for build in $DISTRIBUTIONS; do
+            for c4z in "dist/$build/c4z"/*.c4z; do
+              unzip -l "$c4z" | grep -q 'driver\.lua\.encrypted' \
+                || { echo "::error::$c4z has no driver.lua.encrypted"; exit 1; }
+              unzip -p "$c4z" driver.xml | grep -q 'encryption="2"' \
+                || { echo "::error::$c4z driver.xml does not ask for encryption"; exit 1; }
+              if unzip -p "$c4z" | grep -aq ci-secret-value; then
+                echo "::error::$c4z holds the secret in plain text"; exit 1
+              fi
+            done
+            if [ -e "dist/$build/source" ]; then
+              echo "::error::dist/$build/source was kept with a secret in it"; exit 1
+            fi
+          done
+          git checkout -- drivers/example/driver.lua
+          rm .env.default

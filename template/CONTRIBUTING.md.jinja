@@ -387,6 +387,9 @@ from a fork, which gets no secrets, still builds. A tag build sets
 `REQUIRE_SECRETS`, and a missing value fails it, so a release never ships
 without them. The build log says only whether each name was set.
 
-Only `build/` and the packaged `.c4z` hold the values. Anything shipped in a
-driver can be read out of it, so a build secret keeps a value out of the
-repository and its history, not out of the hands of someone who has the driver.
+When a build substitutes any placeholder, every driver in it is packaged
+encrypted (`encryption="2"` on its `<script>`, set in the build copy of
+`driver.xml`), and `make package` deletes the plain-text squished Lua in
+`dist/<build>/source`, so neither the `.c4z` nor a CI artifact carries the value
+in the clear. Only `build/` keeps it, and that is gitignored and never uploaded.
+Keep placeholders out of documentation: a PDF is not encrypted.

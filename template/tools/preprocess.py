@@ -490,18 +490,25 @@ def resolve_build_secrets(repo_root: Path) -> dict[str, str]:
     return secrets
 
 
+SECRETS_MARKER = ".build-secrets"
+
+
 def substitute_build_secrets(build_dir: Path, secrets: dict[str, str]) -> None:
     """
     Replace __NAME__ (and %%NAME%%) for each build secret in every built file.
 
     Works on bytes and rewrites only a file that holds a placeholder, so binary
-    files and line endings are left exactly as they are.
+    files and line endings are left exactly as they are. When any file held one,
+    every driver in the build is set to encrypt its Lua (see encrypt_drivers) and
+    build_dir gets SECRETS_MARKER, which tells `make package` to delete the
+    plain-text squished Lua it leaves in dist/<build>/source.
     """
     pairs = []
     for name, value in secrets.items():
         encoded = value.encode("utf-8")
         pairs.append((f"__{name}__".encode(), encoded))
         pairs.append((f"%%{name}%%".encode(), encoded))
+    substituted = False
     for path in sorted(build_dir.rglob("*")):
         if not path.is_file():
             continue
@@ -511,6 +518,41 @@ def substitute_build_secrets(build_dir: Path, secrets: dict[str, str]) -> None:
             replaced = replaced.replace(placeholder, encoded)
         if replaced != content:
             path.write_bytes(replaced)
+            substituted = True
+    if substituted:
+        encrypt_drivers(build_dir / "drivers")
+        (build_dir / SECRETS_MARKER).write_text(
+            "Build secrets were substituted into this build.\n", encoding="utf-8"
+        )
+
+
+def encrypt_drivers(drivers_dir: Path) -> None:
+    """
+    Set encryption="2" on each driver.xml's <script> so the packager encrypts it.
+
+    A secret can sit in a src/ module that any driver squishes in, so every driver
+    in the build is encrypted, not only one whose own files held a placeholder.
+    """
+    script_tag = re.compile(rb"<script\b[^>]*?/?>")
+    encryption_attr = re.compile(rb"""\sencryption\s*=\s*(["'])[^"']*\1""")
+    for xml_path in sorted(drivers_dir.glob("*/driver.xml")):
+        content = xml_path.read_bytes()
+
+        def encrypted(match: "re.Match[bytes]") -> bytes:
+            tag = match.group(0)
+            if encryption_attr.search(tag):
+                return encryption_attr.sub(b' encryption="2"', tag)
+            return tag.replace(b"<script", b'<script encryption="2"', 1)
+
+        replaced, count = script_tag.subn(encrypted, content)
+        if count == 0:
+            raise SystemExit(
+                f"Error: {xml_path} has no <script> to encrypt, and build secrets "
+                "were substituted into this build"
+            )
+        if replaced != content:
+            xml_path.write_bytes(replaced)
+        print(f"Encrypting {xml_path.parent.name}: build secrets were substituted")
 
 
 def main():
@@ -559,6 +601,7 @@ def main():
     shutil.rmtree(build_dir / "drivers", ignore_errors=True)
     shutil.rmtree(build_dir / "vendor", ignore_errors=True)
     shutil.rmtree(build_dir / "documentation", ignore_errors=True)
+    (build_dir / SECRETS_MARKER).unlink(missing_ok=True)
 
     shutil.copytree(src_dir, build_dir / "src")
     shutil.copytree(drivers_dir, build_dir / "drivers")
