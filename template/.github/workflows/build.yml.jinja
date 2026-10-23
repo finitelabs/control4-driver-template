@@ -88,8 +88,15 @@ jobs:
       - name: Test
         run: make test
 
+      - name: Write .env from the secrets .env.default names
+        run: python3 tools/preprocess.py --write-dotenv
+        env:
+          SECRETS_JSON: {% raw %}${{ toJSON(secrets) }}{% endraw %}
+
       - name: Build
         run: make build
+        env:
+          REQUIRE_SECRETS: {% raw %}${{ github.ref_type == 'tag' && '1' || '' }}{% endraw %}
 
       - name: Verify PDFs were generated
         run: |

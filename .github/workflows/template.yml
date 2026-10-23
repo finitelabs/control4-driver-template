@@ -43,6 +43,10 @@ jobs:
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: bitn crypto noiseprotocol protobuf bthome
+          - name: oauth
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: oauth
 
     steps:
       - uses: actions/checkout@v4
@@ -149,6 +153,30 @@ jobs:
         working-directory: ${{ runner.temp }}/render
         run: make test
 
+      - name: Build secrets are substituted
+        if: matrix.name == 'default'
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          set -euo pipefail
+          mkdir -p drivers/probe
+          printf 'A="__CI_SECRET_A__" B="__CI_SECRET_B__" D="__CI_SECRET_D__"\n' > drivers/probe/driver.lua
+          printf '# CI probe\nCI_SECRET_A=\nCI_SECRET_B=\nCI_SECRET_D=\n' > .env.default
+          printf 'CI_SECRET_A=from-dotenv\n' > .env
+          SECRETS_JSON='{"CI_SECRET_B":"from-dotenv","GITHUB_TOKEN":"not-declared"}' \
+            python3 tools/preprocess.py --write-dotenv
+          if grep -q GITHUB_TOKEN .env; then echo "::error::an undeclared secret reached .env"; exit 1; fi
+          out=$(CI_SECRET_A=from-env python3 tools/preprocess.py --oss)
+          got=$(cat build/oss/drivers/probe/driver.lua)
+          want='A="from-env" B="from-dotenv" D=""'
+          [ "$got" = "$want" ] || { echo "::error::got $got, want $want"; exit 1; }
+          if grep -q 'from-' <<<"$out"; then echo "::error::a value was printed"; exit 1; fi
+          grep -q 'CI_SECRET_D is not set' <<<"$out"
+          if REQUIRE_SECRETS=1 python3 tools/preprocess.py --oss >/dev/null 2>&1; then
+            echo "::error::REQUIRE_SECRETS passed with CI_SECRET_D missing"; exit 1
+          fi
+          grep -qx '/.env' .gitignore
+          rm -rf drivers/probe build .env .env.default
+
       - name: Formatted
         working-directory: ${{ runner.temp }}/render
         run: |
@@ -176,6 +204,11 @@ jobs:
           - name: crypto-bundles
             distributions: drivercentral oss
             vendor_modules: bitn crypto noiseprotocol protobuf bthome
+            readme_driver_slug: example
+            variants: ""
+          - name: oauth
+            distributions: drivercentral oss
+            vendor_modules: oauth
             readme_driver_slug: example
             variants: ""
           # The README driver is a generated variant: build/ has
@@ -296,3 +329,30 @@ jobs:
             fi
           done
           exit "$missing"
+
+      - name: A build with secrets is encrypted
+        if: matrix.name == 'oauth'
+        working-directory: ${{ runner.temp }}/render
+        env:
+          DISTRIBUTIONS: ${{ matrix.distributions }}
+        run: |
+          set -euo pipefail
+          printf '# CI probe\nEXAMPLE_SECRET=\n' > .env.default
+          printf '\nEXAMPLE_BUILD_SECRET = "__EXAMPLE_SECRET__"\n' >> drivers/example/driver.lua
+          EXAMPLE_SECRET=ci-secret-value make build-nodocs
+          for build in $DISTRIBUTIONS; do
+            for c4z in "dist/$build/c4z"/*.c4z; do
+              unzip -l "$c4z" | grep -q 'driver\.lua\.encrypted' \
+                || { echo "::error::$c4z has no driver.lua.encrypted"; exit 1; }
+              unzip -p "$c4z" driver.xml | grep -q 'encryption="2"' \
+                || { echo "::error::$c4z driver.xml does not ask for encryption"; exit 1; }
+              if unzip -p "$c4z" | grep -aq ci-secret-value; then
+                echo "::error::$c4z holds the secret in plain text"; exit 1
+              fi
+            done
+            if [ -e "dist/$build/source" ]; then
+              echo "::error::dist/$build/source was kept with a secret in it"; exit 1
+            fi
+          done
+          git checkout -- drivers/example/driver.lua
+          rm .env.default
