@@ -221,9 +221,8 @@ docs-pdf: $(VENV_STAMP)
 .PHONY: package
 # The packager writes the .c4z into the output dir passed here (c4z/); the
 # squished .lua goes to source/ via the squishy Output path (see gen-squishy.lua),
-# so both subfolders are created up front. A build that preprocess.py put build
-# secrets into (build/<build>/.build-secrets) is packaged encrypted, and its
-# plain-text squished .lua is deleted so CI never uploads it as an artifact.
+# so both subfolders are created up front. preprocess.py writes
+# build/<build>/.build-secrets when it substitutes a secret.
 package: $(VENV_STAMP) $(PACKAGER) ## Create .c4z driver packages
 	@for build in $(DISTRIBUTIONS); do \
 		mkdir -p "dist/$$build/c4z" "dist/$$build/source"; \
