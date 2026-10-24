@@ -37,20 +37,6 @@ CancelTimer = function(name)
   timers[name] = nil
 end
 
--- The shim's C4:Encrypt does only raw AES-128-CBC, not the salted cipher lib.lua's
--- SaltedEncrypt asks for, so a reversible stand-in keeps the store-and-reload path
--- under test. The key still has to match for the token to come back.
-SaltedEncrypt = function(key, plaintext)
-  return "enc:" .. key .. ":" .. plaintext
-end
-SaltedDecrypt = function(key, ciphertext)
-  local prefix = "enc:" .. key .. ":"
-  if type(ciphertext) == "string" and ciphertext:sub(1, #prefix) == prefix then
-    return ciphertext:sub(#prefix + 1)
-  end
-  return nil, "wrong key"
-end
-
 local function reset()
   requests, timers = {}, {}
 end
