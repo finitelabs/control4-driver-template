@@ -1850,10 +1850,9 @@ end
 --- key_encoding, iv_encoding, data_encoding and return_encoding (NONE or BASE64,
 --- raw when absent) and padding (PKCS7, on unless false).
 ---
---- A nil iv is 16 zero bytes. Measured nowhere: lib.lua's SaltedEncrypt passes
---- nil and prepends 16 random bytes that SaltedDecrypt drops, and with CBC the iv
---- only reaches the first block, so its round trip holds whatever the controller
---- puts there. A value encrypted on a controller is not modelled.
+--- A nil iv is 16 zero bytes, as on a controller (measured on OS 4.3: a nil iv
+--- and an explicit zero iv encrypt identically, and match this shim byte for
+--- byte; test_c4_shim.lua pins both vectors).
 local function aes(encrypt, cipher, key, iv, data, options)
   if not crypto_backend then
     return nil, "C4 shim: no crypto backend"

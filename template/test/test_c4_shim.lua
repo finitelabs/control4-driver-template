@@ -711,6 +711,27 @@ do
       C4:Encrypt("AES-128-CBC", key, iv, "x", { return_encoding = "HEX" }) == nil
     )
 
+    -- Captured on a 4.3 controller: C4:Encrypt with lib.lua's AES_ENC_DEFAULTS
+    -- options and a nil iv, and a SaltedEncrypt the shim has to read back.
+    local controllerOptions = {
+      return_encoding = "BASE64",
+      key_encoding = "NONE",
+      iv_encoding = "NONE",
+      data_encoding = "NONE",
+      padding = true,
+    }
+    T.eq(
+      "a nil iv encrypts as the controller does",
+      C4:Encrypt("AES-256-CBC", string.rep("k", 32), nil, "hello world, salted", controllerOptions),
+      "0VC3a7Pm+wLzZuJUoix64v6kYXRJcBXg2UaPOSuBEjE="
+    )
+    require("drivers-common-public.global.lib")
+    T.eq(
+      "a controller's SaltedEncrypt decrypts",
+      SaltedDecrypt("device-key", "UE/lhd3fPDbBZUt4iJAtZapMTybvPQT7SF8cuL0uY40="),
+      "refresh-token"
+    )
+
     -- lib.lua's SaltedEncrypt/SaltedDecrypt, which auth_code_grant uses to store
     -- a refresh token, round trip under the shim.
     require("drivers-common-public.global.lib")
