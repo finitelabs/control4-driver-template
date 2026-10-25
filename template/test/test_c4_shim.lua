@@ -682,9 +682,7 @@ do
     local nistIv = unhex("000102030405060708090a0b0c0d0e0f")
     local block = unhex("6bc1bee22e409f96e93d7e117393172a")
     local nist = C4:Encrypt("AES-256-CBC", key256, nistIv, block, { padding = false })
-    T.eq("AES-256-CBC matches NIST F.2.5", nist and unhex(nist:gsub(".", function(c)
-      return string.format("%02x", c:byte())
-    end)), unhex("f58c4c04d6e5f1ba779eabfb5f7bfbd6"))
+    T.eq("AES-256-CBC matches NIST F.2.5", nist, unhex("f58c4c04d6e5f1ba779eabfb5f7bfbd6"))
     T.eq("and decrypts back", C4:Decrypt("AES-256-CBC", key256, nistIv, nist or "", { padding = false }), block)
 
     -- The options lib.lua's AES_ENC_DEFAULTS / AES_DEC_DEFAULTS pass: BASE64
@@ -725,7 +723,6 @@ do
       C4:Encrypt("AES-256-CBC", string.rep("k", 32), nil, "hello world, salted", controllerOptions),
       "0VC3a7Pm+wLzZuJUoix64v6kYXRJcBXg2UaPOSuBEjE="
     )
-    require("drivers-common-public.global.lib")
     T.eq(
       "a controller's SaltedEncrypt decrypts",
       SaltedDecrypt("device-key", "UE/lhd3fPDbBZUt4iJAtZapMTybvPQT7SF8cuL0uY40="),
@@ -734,7 +731,6 @@ do
 
     -- lib.lua's SaltedEncrypt/SaltedDecrypt, which auth_code_grant uses to store
     -- a refresh token, round trip under the shim.
-    require("drivers-common-public.global.lib")
     local sealed = SaltedEncrypt("device-key", "refresh-token")
     T.truthy("SaltedEncrypt returns a ciphertext", sealed)
     T.eq("SaltedDecrypt recovers the plaintext", SaltedDecrypt("device-key", sealed), "refresh-token")
