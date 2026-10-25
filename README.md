@@ -131,3 +131,7 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
 | `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version oauth) | (empty) |
+| `stale_issues` | Ping inactive issues, then close them, unless an exempt author opened them | `false` |
+| `stale_exempt_authors` | Space-separated GitHub logins whose issues are left alone; a GitHub App is `name[bot]` (asked when `stale_issues` is true) | (empty) |
+| `stale_days` | Days without activity before the ping (asked when `stale_issues` is true) | `30` |
+| `stale_close_days` | Days after the ping before the issue closes (asked when `stale_issues` is true) | `14` |

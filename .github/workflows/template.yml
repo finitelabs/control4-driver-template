@@ -47,6 +47,15 @@ jobs:
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: oauth
+          # stale.yml renders only with stale_issues; every other leg checks it is absent.
+          - name: stale-issues
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: ""
+            stale_issues: true
+            stale_exempt_authors: octocat ci-app[bot]
+            stale_days: 45
+            stale_close_days: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -74,7 +83,18 @@ jobs:
           DISTRIBUTIONS: ${{ matrix.distributions }}
           README_BUILD: ${{ matrix.readme_build }}
           VENDOR_MODULES: ${{ matrix.vendor_modules }}
+          STALE_ISSUES: ${{ matrix.stale_issues }}
+          STALE_EXEMPT_AUTHORS: ${{ matrix.stale_exempt_authors }}
+          STALE_DAYS: ${{ matrix.stale_days }}
+          STALE_CLOSE_DAYS: ${{ matrix.stale_close_days }}
         run: |
+          stale=()
+          if [ "$STALE_ISSUES" = true ]; then
+            stale=(--data stale_issues=true
+              --data stale_exempt_authors="$STALE_EXEMPT_AUTHORS"
+              --data stale_days="$STALE_DAYS"
+              --data stale_close_days="$STALE_CLOSE_DAYS")
+          fi
           copier copy --trust --defaults --vcs-ref HEAD \
             --data project_name=ci-render \
             --data project_description="Template CI render" \
@@ -83,7 +103,44 @@ jobs:
             --data distributions="$DISTRIBUTIONS" \
             --data readme_build="$README_BUILD" \
             --data vendor_modules="$VENDOR_MODULES" \
+            "${stale[@]}" \
             . "$RUNNER_TEMP/render"
+
+      # An empty exempt list has to render fromJSON('[]'), so it gets a render of its own.
+      - name: stale.yml renders only when asked, with the exempt list as JSON
+        working-directory: ${{ runner.temp }}/render
+        env:
+          STALE_ISSUES: ${{ matrix.stale_issues }}
+          STALE_EXEMPT_AUTHORS: ${{ matrix.stale_exempt_authors }}
+          STALE_DAYS: ${{ matrix.stale_days }}
+          STALE_CLOSE_DAYS: ${{ matrix.stale_close_days }}
+        run: |
+          f=.github/workflows/stale.yml
+          if [ "$STALE_ISSUES" != true ]; then
+            if [ -e "$f" ]; then echo "::error::$f rendered with stale_issues off"; exit 1; fi
+            echo "no $f, as stale_issues is off"
+            exit 0
+          fi
+          check() {
+            local cond list got
+            cond=$(yq -e '.jobs["label-external"].if' "$1") \
+              || { echo "::error::$1 is not YAML with a label-external if"; exit 1; }
+            list=$(sed -n "s/.*fromJSON('\(.*\)').*/\1/p" <<<"$cond")
+            got=$(jq -c . <<<"$list") || { echo "::error::$1 exempt list $list is not JSON"; exit 1; }
+            [ "$got" = "$2" ] || { echo "::error::$1 exempts $got, want $2"; exit 1; }
+            if grep -nE '\{%|\{#|(^|[^$])\{\{' "$1"; then echo "::error::$1 has unrendered Jinja"; exit 1; fi
+            echo "$1 exempts $got"
+          }
+          check "$f" "$(jq -cn --arg s "$STALE_EXEMPT_AUTHORS" '$s | split(" ")')"
+          yq -e '.jobs.stale.steps[0].with."days-before-issue-stale" == env(STALE_DAYS) and .jobs.stale.steps[0].with."days-before-issue-close" == env(STALE_CLOSE_DAYS)' "$f" > /dev/null \
+            || { echo "::error::$f does not use stale_days $STALE_DAYS and stale_close_days $STALE_CLOSE_DAYS"; exit 1; }
+          copier copy --trust --defaults --vcs-ref HEAD \
+            --data project_name=ci-render \
+            --data github_org=finitelabs \
+            --data readme_driver_slug=ci \
+            --data stale_issues=true \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/render-empty"
+          check "$RUNNER_TEMP/render-empty/$f" '[]'
 
       - name: tools/github-setup is rendered and executable
         working-directory: ${{ runner.temp }}/render

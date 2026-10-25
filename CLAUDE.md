@@ -73,10 +73,11 @@ A template ticket is not done at merge; it is done when the drift is closed.
 
 `copier.yml`'s `_exclude` list drops files the answers did not select —
 `distributions` controls OSS versus DriverCentral, `vendor_modules` the optional
-vendored libraries. There is no module-to-module gating: every `src/lib/*.lua`
-renders unconditionally, and `gen-squishy` bundles only what a driver actually
-requires, so a rendered-but-unused module is zero bytes in the `.c4z`. A new
-`src/lib` file needs no `_exclude` entry.
+vendored libraries, and `stale_issues` the stale-issue workflow. There is no
+module-to-module gating: every `src/lib/*.lua` renders unconditionally, and
+`gen-squishy` bundles only what a driver actually requires, so a
+rendered-but-unused module is zero bytes in the `.c4z`. A new `src/lib` file
+needs no `_exclude` entry.
 
 `github-updater.lua` and its tests are gated on `oss`, the distribution whose
 update mechanism they are.
@@ -90,10 +91,10 @@ requires) without clobbering the constants a driver has since added.
 
 **Only `.jinja` files have their contents rendered**, with the suffix stripped on
 the way out — currently `Makefile`, `CONTRIBUTING.md`, `CHANGELOG.md`, the build
-workflow, `tools/github-setup`, and the answers file. Everything else is copied
-byte for byte, so `{{` in a `.lua` or `.py` file passes straight through and is
-not a template error. In `tools/github-setup.jinja` a bash `${#var}` would open a
-Jinja comment.
+and stale workflows, `tools/github-setup`, and the answers file. Everything else
+is copied byte for byte, so `{{` in a `.lua` or `.py` file passes straight
+through and is not a template error. In `tools/github-setup.jinja` a bash
+`${#var}` would open a Jinja comment.
 The corollary is the one that bites: adding `{{ project_name }}` to a file that
 is not named `.jinja` silently ships the literal braces to ten repos.
 
