@@ -17,6 +17,7 @@ _exclude:
   - "{% if 'oss' not in distributions.split() %}.github/workflows/release.yml{% endif %}"
   - "{% if 'oss' not in distributions.split() %}.github/workflows/label-release-pr.yml{% endif %}"
   - "{% if 'oss' not in distributions.split() %}.github/release.yml{% endif %}"
+  - "{% if not stale_issues %}.github/workflows/stale.yml{% endif %}"
   - "{% if 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}vendor/cloud-client-byte.lua{% endif %}"
   - "{% if 'bitn' not in vendor_modules.split() %}vendor/bitn.lua{% endif %}"
   - "{% if 'crypto' not in vendor_modules.split() %}vendor/crypto.lua{% endif %}"
@@ -68,3 +69,30 @@ vendor_modules:
   type: str
   help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf version oauth). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless. oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua)."
   default: ""
+
+stale_issues:
+  type: bool
+  help: "Ping inactive issues, then close them, unless an exempt author opened them"
+  default: false
+
+stale_exempt_authors:
+  type: str
+  help: "Space-separated GitHub logins whose issues are left alone, checked when an issue is opened or reopened. A GitHub App is name[bot] (e.g., 'octocat my-app[bot]'). Empty exempts no one."
+  default: ""
+  when: "{{ stale_issues }}"
+  validator: >-
+    {% for login in stale_exempt_authors.split() %}{% if not login | regex_search('^[A-Za-z0-9][A-Za-z0-9-]*(\\[bot\\])?$') %}{{ login }} is not a GitHub login. List a GitHub App as name[bot], not app/name. {% endif %}{% endfor %}
+
+stale_days:
+  type: int
+  help: "Days without activity before an issue is pinged"
+  default: 30
+  when: "{{ stale_issues }}"
+  validator: "{% if stale_days < 1 %}Must be at least 1{% endif %}"
+
+stale_close_days:
+  type: int
+  help: "Days after the ping, still without activity, before the issue is closed"
+  default: 14
+  when: "{{ stale_issues }}"
+  validator: "{% if stale_close_days < 1 %}Must be at least 1{% endif %}"

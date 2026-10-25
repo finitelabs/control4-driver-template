@@ -1,0 +1,50 @@
+name: Stale issues
+
+on:
+  issues:
+    types: [opened, reopened]
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  label-external:
+    if: >-
+      github.event_name == 'issues' &&
+      !contains(fromJSON('{{ stale_exempt_authors.split() | tojson }}'), github.event.issue.user.login)
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Label the issue external
+        run: |
+          gh label create external --description "Pinged when inactive, then closed" 2>/dev/null || true
+          gh api "repos/$GH_REPO/issues/$ISSUE/labels" -f 'labels[]=external' > /dev/null
+        env:
+          GH_TOKEN: {% raw %}${{ secrets.GITHUB_TOKEN }}{% endraw %}
+          GH_REPO: {% raw %}${{ github.repository }}{% endraw %}
+          ISSUE: {% raw %}${{ github.event.issue.number }}{% endraw %}
+
+  stale:
+    if: github.event_name != 'issues'
+    runs-on: ubuntu-26.04
+    # actions/stale keeps its progress in the Actions cache and replaces it through the API.
+    permissions:
+      actions: write
+      issues: write
+    steps:
+      - uses: actions/stale@v11
+        with:
+          any-of-issue-labels: external
+          days-before-issue-stale: {{ stale_days }}
+          days-before-issue-close: {{ stale_close_days }}
+          days-before-pr-stale: -1
+          days-before-pr-close: -1
+          close-issue-reason: not_planned
+          stale-issue-message: >-
+            This issue has had no activity for {{ stale_days }} day{{ '' if stale_days == 1 else 's' }}. If it still matters,
+            leave a comment and it stays open. Otherwise it closes in {{ stale_close_days }} day{{ '' if stale_close_days == 1 else 's' }}.
+          close-issue-message: >-
+            Closed after another {{ stale_close_days }} day{{ '' if stale_close_days == 1 else 's' }} without activity. If it
+            still matters, leave a comment and it can be reopened.
