@@ -15,6 +15,8 @@ _exclude:
   - "{% if 'oss' not in distributions.split() %}src/lib/github-updater.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() and 'version' not in vendor_modules.split() %}vendor/version.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}.github/workflows/release.yml{% endif %}"
+  - "{% if 'oss' not in distributions.split() %}.github/workflows/label-release-pr.yml{% endif %}"
+  - "{% if 'oss' not in distributions.split() %}.github/release.yml{% endif %}"
   - "{% if 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}vendor/cloud-client-byte.lua{% endif %}"
   - "{% if 'bitn' not in vendor_modules.split() %}vendor/bitn.lua{% endif %}"
   - "{% if 'crypto' not in vendor_modules.split() %}vendor/crypto.lua{% endif %}"
