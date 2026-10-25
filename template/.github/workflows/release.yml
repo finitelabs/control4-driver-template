@@ -50,19 +50,10 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           WAIT_MINUTES: 20
 
-      - name: Generate release notes without the release PR
-        run: |
-          gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" \
-            -f tag_name="$GITHUB_REF_NAME" \
-            --jq .body > generated-notes.md
-          sed -E '/^\* release: v[0-9]{8}[^ ]* by @/d' generated-notes.md > release-notes.md
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
-          body_path: release-notes.md
+          generate_release_notes: true
           # A suffixed tag (v20260918-rc1) publishes as a pre-release, which only
           # drivers on the Prerelease update channel pick up. The updater orders by
           # the date alone, so the final has to be dated after its pre-releases.
