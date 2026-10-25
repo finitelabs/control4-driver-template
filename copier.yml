@@ -26,6 +26,7 @@ _exclude:
   - "{% if 'oauth' not in vendor_modules.split() %}test/test_oauth_auth_code_grant.lua{% endif %}"
   - "{% if 'oauth' not in vendor_modules.split() %}test/test_oauth_short_link.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_alias.lua{% endif %}"
+  - "{% if 'oss' not in distributions.split() %}test/test_github_updater_one_at_a_time.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_self_last.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_write.lua{% endif %}"
 
