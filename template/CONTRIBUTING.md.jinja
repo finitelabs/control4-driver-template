@@ -23,7 +23,9 @@ then pull the change in with `copier update`.
   release only when its tag's date is later than the installed driver's version,
   so give each release a later date than the last. A suffixed tag such as
   `v20260918-rc1` publishes as a pre-release, which only drivers on the
-  Prerelease update channel pick up
+  Prerelease update channel pick up. Title the pull request that dates the
+  changelog `release: vYYYYMMDD`; the release notes leave out a pull request
+  titled that way, and list every other one merged since the previous release
 {%- endif %}
 
 **Common libraries (`src/lib/`):**
