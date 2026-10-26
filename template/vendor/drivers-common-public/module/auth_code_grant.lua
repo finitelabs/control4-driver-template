@@ -1,10 +1,10 @@
 -- Copyright 2026 Snap One, LLC. All rights reserved.
 --
 -- LOCAL FORK of Snap One's drivers-common-public auth_code_grant module, upstream
--- AUTH_CODE_GRANT 36. Re-vendoring from upstream silently drops everything listed here,
+-- AUTH_CODE_GRANT 37. Re-vendoring from upstream silently drops everything listed here,
 -- in every repo the template renders. Keep this list current.
 --
--- Deltas against upstream AUTH_CODE_GRANT 36:
+-- Deltas against upstream AUTH_CODE_GRANT 37:
 --   1. Metrics are removed, with the require of module/metrics.
 --   2. TOKEN_HEADERS is merged only when it is a table. Upstream tested
 --      type (self.TOKEN_HEADERS == 'table'), which is always a string, so a non-table
@@ -29,7 +29,7 @@
 --
 -- test/test_oauth_auth_code_grant.lua covers 2 to 7.
 
-AUTH_CODE_GRANT_VER = 36
+AUTH_CODE_GRANT_VER = 37
 
 require("drivers-common-public.global.lib")
 require("drivers-common-public.global.url")
@@ -285,7 +285,7 @@ function oauthObject:GetLinkCode(state, contextInfo, extraParamsForAuthLink)
     local _linkCallback = function(shortLink)
       self:setLink(shortLink, contextInfo)
     end
-    MakeShortLink(link, _linkCallback, self.SHORT_LINK_AUTHORIZATION)
+    MakeShortLink(link, _linkCallback, self.SHORT_LINK_AUTHORIZATION, self.REDIRECT_DURATION)
   else
     self:setLink(link, contextInfo)
   end

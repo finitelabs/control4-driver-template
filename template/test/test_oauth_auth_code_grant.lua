@@ -1,8 +1,8 @@
 -- auth_code_grant.lua against a scripted redirect server and token endpoint: the
--- golden path from state to stored refresh token, and the deltas against upstream
--- AUTH_CODE_GRANT 36 (TOKEN_HEADERS guard, bodies that are not tables, retry on a
--- token response that is neither 200 nor 4xx, MakeStateFailed, reported callback
--- errors).
+-- golden path from state to stored refresh token, the short link getting the
+-- redirect duration, and the deltas against upstream AUTH_CODE_GRANT 37
+-- (TOKEN_HEADERS guard, bodies that are not tables, retry on a token response that
+-- is neither 200 nor 4xx, MakeStateFailed, reported callback errors).
 --
 -- Run from the driver root:
 --   make test
@@ -126,6 +126,35 @@ local again = OAuth:new({
   TOKEN_ENDPOINT_URI = "https://id.example.invalid/connect/token",
 })
 T.truthy("a new grant for the client finds the stored token", timers[again.timerPrefix .. "InitWithToken"])
+
+T.section("a short link is made for the redirect duration")
+reset()
+local realMakeShortLink = MakeShortLink
+local shortened
+MakeShortLink = function(link, callback, apiKey, duration)
+  shortened = { link = link, apiKey = apiKey, duration = duration }
+  callback("https://link.example.invalid/abc")
+end
+local shortLinks = {}
+local short = newGrant({
+  SHORT_LINK_AUTHORIZATION = "link-key",
+  REDIRECT_DURATION = 600,
+  LINK_CHANGE_CALLBACK = function(link)
+    table.insert(shortLinks, link)
+  end,
+})
+respond = function(req)
+  if req.url:find("state$") then
+    return nil, 200, { nonce = "n1", expiresAt = os.time() + 600 }
+  end
+end
+short:MakeState()
+MakeShortLink = realMakeShortLink
+T.truthy("the link is shortened", shortened)
+T.eq("with the link API key", shortened and shortened.apiKey, "link-key")
+T.eq("for the redirect duration", shortened and shortened.duration, 600)
+T.contains("of the authorize link", shortened and shortened.link, "client_id=" .. short.API_CLIENT_ID)
+T.eq("and the short link is shown", shortLinks[1], "https://link.example.invalid/abc")
 
 T.section("delta 2: TOKEN_HEADERS is merged only when it is a table")
 reset()
