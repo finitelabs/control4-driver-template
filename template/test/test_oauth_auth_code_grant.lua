@@ -2,7 +2,8 @@
 -- golden path from state to stored refresh token, the short link getting the
 -- redirect duration, and the deltas against upstream AUTH_CODE_GRANT 37
 -- (TOKEN_HEADERS guard, bodies that are not tables, retry on a token response that
--- is neither 200 nor 4xx, MakeStateFailed, reported callback errors).
+-- is neither 200 nor 4xx, MakeStateFailed, reported callback errors, an optional
+-- client secret).
 --
 -- Run from the driver root:
 --   make test
@@ -264,5 +265,62 @@ ok, _, out = T.capture(function()
 end)
 T.check("a URL callback that raises does not escape", ok)
 T.contains("and is printed, where upstream dropped it", out, "response handler broke")
+
+T.section("delta 9: the client secret is optional")
+--- The refresh token a grant stored for clientId, decrypted with key.
+local function storedToken(clientId, key)
+  local stored = PersistGetValue(C4:Hash("SHA256", C4:GetDeviceID() .. clientId, SHA_ENC_DEFAULTS))
+  return stored and SaltedDecrypt(key, stored)
+end
+respond = function()
+  return nil, 200, { access_token = "a9", refresh_token = "rt9", expires_in = 60 }
+end
+
+reset()
+grant = newGrant({ USE_BASIC_AUTH_HEADER = true })
+grant:GetUserToken("c")
+T.contains("with a secret, the exchange still sends it", requests[1].data, "client_secret=secret")
+T.contains("and the Basic header", requests[1].headers.Authorization or "", "Basic ")
+T.eq(
+  "and stores the token under the same key as before",
+  storedToken(grant.API_CLIENT_ID, C4:GetDeviceID() .. "secret" .. grant.API_CLIENT_ID),
+  "rt9"
+)
+
+reset()
+-- false, as pairs in newGrant skips a nil; the module reads either as no secret.
+grant, events = newGrant({ API_SECRET = false, USE_BASIC_AUTH_HEADER = true, USE_PKCE = true })
+ok, _, out = T.capture(function()
+  grant:GetUserToken("c")
+end)
+T.excludes("with none, nothing raises", out, "Lua error")
+T.eq("the access token is granted", lastEvent(events, "AccessTokenGranted").args[1], "a9")
+T.excludes("the exchange sends no client_secret", requests[1].data, "client_secret")
+T.eq("and no Basic header", requests[1].headers.Authorization, nil)
+T.eq(
+  "the token is stored under the device and client ID",
+  storedToken(grant.API_CLIENT_ID, C4:GetDeviceID() .. grant.API_CLIENT_ID),
+  "rt9"
+)
+reset()
+grant.RefreshingToken = false
+grant:RefreshToken()
+T.contains("a refresh is sent", requests[1].data, "grant_type=refresh_token")
+T.excludes("with no client_secret", requests[1].data, "client_secret")
+
+reset()
+again = OAuth:new({
+  NAME = "Secretless",
+  API_CLIENT_ID = grant.API_CLIENT_ID,
+  TOKEN_ENDPOINT_URI = "https://id.example.invalid/connect/token",
+})
+T.truthy("a new grant with no secret finds the stored token", timers[again.timerPrefix .. "InitWithToken"])
+timers[again.timerPrefix .. "InitWithToken"].callback()
+T.contains("and refreshes with it", requests[#requests].data, "refresh_token=rt9")
+
+reset()
+grant = newGrant({ API_SECRET = "" })
+grant:GetUserToken("c")
+T.excludes("an empty secret counts as none", requests[1].data, "client_secret")
 
 T.finish()
