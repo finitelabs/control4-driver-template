@@ -55,7 +55,7 @@ function MakeShortLink(link, callback, apiKey, duration)
 
   if type(apiKey) ~= "string" then
     dbg("Error MakeShortLink: apiKey must be a string", apiKey)
-    MakeShortLinkResponse("apiKey must be a string", nil, nil, nil, { link = link, callback = callback }, nil)
+    MakeShortLinkResponse("apiKey must be a string", nil, nil, nil, { link = link, callback = callback }, url)
     return
   end
 
