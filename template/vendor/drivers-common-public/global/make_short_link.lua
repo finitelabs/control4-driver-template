@@ -1,8 +1,8 @@
--- Copyright 2020 Wirepath Home Systems, LLC. All rights reserved.
+-- Copyright 2026 Snap One, LLC. All rights reserved.
 --
 -- LOCAL FORK of Snap One's drivers-common-public make_short_link module, upstream
--- MAKE_SHORT_LINK 8. Re-vendoring from upstream silently drops everything listed here, in
--- every repo the template renders. Keep this list current.
+-- MAKE_SHORT_LINK 8 (4a99695, which added duration). Re-vendoring from upstream silently
+-- drops everything listed here, in every repo the template renders. Keep this list current.
 --
 -- Deltas against upstream MAKE_SHORT_LINK 8:
 --   1. A transport error hands the callback the long link. Upstream returned without
@@ -11,9 +11,11 @@
 --      decode as { body }) keeps the long link rather than indexing it.
 --   3. A callback that raises is reported with its traceback. Upstream's pcall dropped
 --      the error.
---   4. MakeShortLink and MakeShortLinkResponse carry LuaDoc.
+--   4. An apiKey that is not a string hands the callback the long link. Upstream
+--      returned without calling it, which left no link to show.
+--   5. MakeShortLink and MakeShortLinkResponse carry LuaDoc.
 --
--- test/test_oauth_short_link.lua covers 1 to 3.
+-- test/test_oauth_short_link.lua covers 1 to 4.
 
 MAKE_SHORT_LINK_VER = 8
 
@@ -26,7 +28,9 @@ require("drivers-common-public.global.url")
 --- @param link string The URL to shorten.
 --- @param callback fun(link: string, expiresAt: number|nil)|nil Receives the link.
 --- @param apiKey string The link service API key Control4 issues.
-function MakeShortLink(link, callback, apiKey)
+--- @param duration number|nil Seconds the short link lasts; the service caps it at 600
+--- and uses its own default when it is nil.
+function MakeShortLink(link, callback, apiKey, duration)
   local url
   if IN_PRODUCTION then
     url = "https://link.ctrl4.co/new"
@@ -34,8 +38,30 @@ function MakeShortLink(link, callback, apiKey)
     url = "https://link.control4driversdev.com/new"
   end
 
+  if type(link) ~= "string" then
+    dbg("Error MakeShortLink: link must be a string", link)
+    return
+  end
+
+  if type(duration) ~= "number" then
+    dbg("Warning MakeShortLink: duration must be a number", duration)
+    duration = nil
+  end
+
+  if type(callback) ~= "function" then
+    dbg("Warning MakeShortLink: callback must be a function", callback)
+    callback = nil
+  end
+
+  if type(apiKey) ~= "string" then
+    dbg("Error MakeShortLink: apiKey must be a string", apiKey)
+    MakeShortLinkResponse("apiKey must be a string", nil, nil, nil, { link = link, callback = callback }, url)
+    return
+  end
+
   local data = {
     url = link,
+    duration = duration,
   }
 
   local headers = {
@@ -58,7 +84,7 @@ end
 --- @param context table The contextInfo MakeShortLink passed.
 --- @param url string The request URL.
 function MakeShortLinkResponse(strError, responseCode, tHeaders, data, context, url)
-  local link = context.link
+  local link = context.link -- original link to allow fallback if short link creation fails
   local callback = context.callback
 
   local expiresAt
@@ -71,7 +97,7 @@ function MakeShortLinkResponse(strError, responseCode, tHeaders, data, context, 
   end
 
   if link then
-    if callback and type(callback) == "function" then
+    if type(callback) == "function" then
       local success, err = xpcall(function()
         return callback(link, expiresAt)
       end, debug.traceback)
