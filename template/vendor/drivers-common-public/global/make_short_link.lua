@@ -1,8 +1,8 @@
 -- Copyright 2026 Snap One, LLC. All rights reserved.
 --
 -- LOCAL FORK of Snap One's drivers-common-public make_short_link module, upstream
--- MAKE_SHORT_LINK 8 (4a99695, which added duration). Re-vendoring from upstream silently
--- drops everything listed here, in every repo the template renders. Keep this list current.
+-- MAKE_SHORT_LINK 8 (4a99695). Re-vendoring from upstream silently drops everything
+-- listed here, in every repo the template renders. Keep this list current.
 --
 -- Deltas against upstream MAKE_SHORT_LINK 8:
 --   1. A transport error hands the callback the long link. Upstream returned without
@@ -55,7 +55,7 @@ function MakeShortLink(link, callback, apiKey, duration)
 
   if type(apiKey) ~= "string" then
     dbg("Error MakeShortLink: apiKey must be a string", apiKey)
-    MakeShortLinkResponse("apiKey must be a string", nil, nil, nil, { link = link, callback = callback }, url)
+    MakeShortLinkResponse("apiKey must be a string", nil, nil, nil, { link = link, callback = callback }, nil)
     return
   end
 
