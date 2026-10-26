@@ -26,13 +26,9 @@
 --      nothing. Upstream passed nil to SaltedEncrypt, which threw before
 --      AccessTokenGranted, so a provider that issues no refresh token never connected.
 --   8. The class and its public methods carry LuaDoc.
---   9. API_SECRET is optional, for a client that signs in with PKCE alone. An empty
---      secret counts as none. With none, the exchange and refresh send no
---      client_secret, USE_BASIC_AUTH_HEADER adds no Basic header, and the refresh
---      token is stored under the device ID followed by the client ID. With a secret
---      the key is unchanged (device ID, secret, client ID), so stored sign-ins stay
---      readable. A driver that drops its secret later gets the shorter key, can't
---      read the token it stored before, and has to be linked again.
+--   9. A grant with no API_SECRET (a PKCE-only client) stores its refresh token under
+--      the device ID and client ID. Upstream joined the nil secret into the key and
+--      raised. With a secret the key is unchanged.
 --
 -- test/test_oauth_auth_code_grant.lua covers 2 to 7 and 9.
 
@@ -43,14 +39,6 @@ require("drivers-common-public.global.url")
 require("drivers-common-public.global.timer")
 
 pcall(require, "drivers-common-public.global.make_short_link")
-
---- The key a grant's refresh token is encrypted under on this device. A grant with no
---- secret leaves it out, which keeps a secret's key what it always was.
---- @param grant table
---- @return string
-local function tokenEncryptionKey(grant)
-  return C4:GetDeviceID() .. (grant.API_SECRET or "") .. grant.API_CLIENT_ID
-end
 
 --- An OAuth 2.0 authorization code grant through Control4's OAuth redirect service.
 --- notifyHandler's functions, all optional, are called with (contextInfo, ...):
@@ -109,7 +97,7 @@ end
 --- Create the grant. tParams carries NAME, AUTHORIZATION (the C4 OAuth API key),
 --- SHORT_LINK_AUTHORIZATION (the C4 Link API key), LINK_CHANGE_CALLBACK, REDIRECT_URI
 --- (the redirect server's base URL, with a trailing slash), AUTH_ENDPOINT_URI,
---- TOKEN_ENDPOINT_URI, REDIRECT_DURATION, API_CLIENT_ID, API_SECRET (optional), SCOPES,
+--- TOKEN_ENDPOINT_URI, REDIRECT_DURATION, API_CLIENT_ID, API_SECRET, SCOPES,
 --- TOKEN_HEADERS, USE_PKCE, USE_BASIC_AUTH_HEADER, MAX_EXPIRES_IN and
 --- DEFAULT_EXPIRES_IN. A refresh token stored by an earlier grant with the same client
 --- ID on this device is refreshed a second after creation.
@@ -132,7 +120,7 @@ function oauthObject:new(tParams, providedRefreshToken)
     REDIRECT_DURATION = tParams.REDIRECT_DURATION,
 
     API_CLIENT_ID = tParams.API_CLIENT_ID,
-    API_SECRET = tParams.API_SECRET ~= "" and tParams.API_SECRET or nil,
+    API_SECRET = tParams.API_SECRET,
 
     SCOPES = tParams.SCOPES,
 
@@ -146,7 +134,7 @@ function oauthObject:new(tParams, providedRefreshToken)
     notifyHandler = {},
   }
 
-  if tParams.USE_BASIC_AUTH_HEADER and o.API_SECRET then
+  if tParams.USE_BASIC_AUTH_HEADER then
     o.BasicAuthHeader = "Basic " .. C4:Base64Encode(o.API_CLIENT_ID .. ":" .. o.API_SECRET)
   end
 
@@ -163,7 +151,7 @@ function oauthObject:new(tParams, providedRefreshToken)
     local persistStoreKey = C4:Hash("SHA256", C4:GetDeviceID() .. o.API_CLIENT_ID, SHA_ENC_DEFAULTS)
     local encryptedToken = PersistGetValue(persistStoreKey)
     if encryptedToken then
-      local encryptionKey = tokenEncryptionKey(o)
+      local encryptionKey = C4:GetDeviceID() .. (o.API_SECRET or "") .. o.API_CLIENT_ID
       local refreshToken = SaltedDecrypt(encryptionKey, encryptedToken)
       if refreshToken then
         initialRefreshToken = refreshToken
@@ -490,7 +478,7 @@ function oauthObject:GetTokenResponse(strError, responseCode, tHeaders, data, co
     if self.REFRESH_TOKEN then
       local persistStoreKey = C4:Hash("SHA256", C4:GetDeviceID() .. self.API_CLIENT_ID, SHA_ENC_DEFAULTS)
 
-      local encryptionKey = tokenEncryptionKey(self)
+      local encryptionKey = C4:GetDeviceID() .. (self.API_SECRET or "") .. self.API_CLIENT_ID
       local encryptedToken = SaltedEncrypt(encryptionKey, self.REFRESH_TOKEN)
 
       PersistSetValue(persistStoreKey, encryptedToken)
