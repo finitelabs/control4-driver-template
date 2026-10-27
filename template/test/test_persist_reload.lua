@@ -49,8 +49,19 @@ p:set("Code", "1234", true)
 ShimPersistLand() -- deleted in a later call: in the same one, the set lands after the delete
 p:set("Code", "", true)
 T.eq('an encrypted string set to "" reads as the default', reload():get("Code", "default", true), "default")
+p:set("Reading", 5)
 p:set("Reading", 0 / 0)
+ShimPersistLand()
 T.eq("a NaN is not stored", C4:PersistGetValue("Reading"), nil)
+
+T.section('a key stored as "" reads as the default')
+-- Persist:set deletes with a "" that 4.3.0 deletes; an OS that stores it must read it as not stored.
+local storedGet = C4.PersistGetValue
+C4.PersistGetValue = function()
+  return ""
+end
+T.eq("not as an empty string", reload():get("Kept", "default"), "default")
+C4.PersistGetValue = storedGet
 
 -- Known limits: telling these from a string would need a new stored form.
 T.section("a string that is base64 of JSON reads as that JSON, as it always did")
