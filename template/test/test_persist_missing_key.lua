@@ -11,8 +11,7 @@ local T = require("testlib")
 
 require("c4_shim")
 
--- A fresh instance has an empty cache, so get() reads storage as it does after a reload, by
--- which time every write has landed.
+-- A fresh instance has an empty cache, so get() reads storage as it does after a reload.
 local function reload()
   ShimPersistLand()
   return getmetatable(require("lib.persist")):new()

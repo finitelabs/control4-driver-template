@@ -3,9 +3,6 @@
 ---
 --- When luasocket is available, provides full networking and timer support.
 --- Without luasocket, provides stubs sufficient for module loading and static analysis.
----
---- As on a controller, a C4:PersistSetValue reads back only once it lands, which ShimFireTimers,
---- C4:ProcessTimers and ShimPersistLand bring about; ShimPersistLater(false) turns that off.
 
 -- Try to load luasocket (optional dependency)
 local has_socket, socket = pcall(require, "socket")

@@ -36,7 +36,6 @@ local function reset()
   calls, timers, encryptedFlag = {}, {}, {}
 end
 
--- What storage holds once every write has landed.
 local function stored(key)
   ShimPersistLand()
   return Deserialize(C4:PersistGetValue(key))
