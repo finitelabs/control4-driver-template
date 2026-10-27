@@ -1363,7 +1363,7 @@ end
 -- As on 4.3.0, a write reads back only once it lands, about 50 ms after the call. It
 -- lands as the shim moves time on: at ShimFireTimers, by C4:ProcessTimers' clock, at a
 -- driver update or Director restart, and at ShimPersistLand.
-local persist_store = {}
+local persist_store = {} -- one value per key, whichever flag wrote it
 local persist_pending = {} -- writes not landed yet, oldest first; nil while ShimPersistLater(false)
 local PERSIST_LANDS_AFTER = 0.05 -- seconds
 
@@ -1376,7 +1376,7 @@ function C4:PersistGetValue(key, encrypted)
 end
 
 -- As on 4.3.0: a string is cut at its first NUL and a NaN is stored as Director's text for it.
--- "" deletes a plain key and leaves an encrypted one as it was.
+-- A plain "" deletes the key, whichever flag wrote it, and an encrypted "" is ignored.
 local function persist_land(key, value, encrypted)
   if type(value) == "string" then
     value = value:match("^[^%z]*")
