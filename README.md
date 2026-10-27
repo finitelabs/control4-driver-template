@@ -23,6 +23,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **github-markdown.css**: vendored stylesheet for the rendered documentation.
 - **github-setup**: checks the GitHub repository against the standard settings and prints the
   drift; with `--apply` it creates the repository if needed and fixes the drift.
+- **test_preprocess.py**: tests for preprocess.py's `#embed` directive, run by `make test`.
 
 ### Common Libraries (`src/lib/`)
 - **bindings.lua**: binding management (add/remove/query Control4 driver bindings)
@@ -98,8 +99,9 @@ repositories to check for or fix drift. The standard is:
 - Squash merges only, auto-merge allowed, head branches deleted on merge
 - Default branch `main` (an existing `master` gets renamed)
 - Branch ruleset named `Default` on the default branch: no deletions or force
-  pushes, PRs require one approval and a passing `build` check, squash merges
-  only, org admins can bypass
+  pushes, PRs require one approval and a passing `build` check, plus any
+  checks named in `extra_required_checks`, squash merges only, org admins can
+  bypass
 - Dependabot alerts and security updates enabled
 
 One step stays manual: add the repository to the project's VCS integration in
@@ -131,6 +133,7 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
 | `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version oauth) | (empty) |
+| `extra_required_checks` | Space-separated status checks a PR must pass besides `build`, each a job name from the repo's own workflows; `tools/github-setup` puts them in the branch ruleset | (empty) |
 | `stale_issues` | Ping inactive issues, then close them, unless an exempt author opened them | `false` |
 | `stale_exempt_authors` | Space-separated GitHub logins whose issues are left alone; a GitHub App is `name[bot]` (asked when `stale_issues` is true) | (empty) |
 | `stale_days` | Days without activity before the ping (asked when `stale_issues` is true) | `30` |

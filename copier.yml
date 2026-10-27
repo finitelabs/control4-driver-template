@@ -70,6 +70,13 @@ vendor_modules:
   help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf version oauth). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless. oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua)."
   default: ""
 
+extra_required_checks:
+  type: str
+  help: "Space-separated status checks a pull request must pass besides build, each a job name from this repo's own workflows (e.g., 'catalogue'). tools/github-setup puts them in the branch ruleset."
+  default: ""
+  validator: >-
+    {% for check in extra_required_checks.split() %}{% if not check | regex_search('^[A-Za-z0-9._-]+$') %}{{ check }} is not a check name tools/github-setup can require: use letters, digits, '.', '_' and '-'. {% endif %}{% endfor %}
+
 stale_issues:
   type: bool
   help: "Ping inactive issues, then close them, unless an exempt author opened them"
