@@ -36,7 +36,9 @@ local function reset()
   calls, timers, encryptedFlag = {}, {}, {}
 end
 
+-- What storage holds once every write has landed.
 local function stored(key)
+  ShimPersistLand()
   return Deserialize(C4:PersistGetValue(key))
 end
 
@@ -56,6 +58,7 @@ p:defer(function()
   p:set("Plain", { n = 2 })
 end)
 T.eq("each set is its own write", calls, { "set Plain", "set Plain" })
+ShimPersistLand()
 T.eq("the bytes are the value serialized, as before", C4:PersistGetValue("Plain"), Serialize({ n = 2 }))
 T.eq("and no timer is armed", #timers, 0)
 

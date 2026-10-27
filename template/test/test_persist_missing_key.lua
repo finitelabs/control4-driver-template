@@ -11,8 +11,10 @@ local T = require("testlib")
 
 require("c4_shim")
 
--- A fresh instance has an empty cache, so get() reads storage as it does after a reload.
+-- A fresh instance has an empty cache, so get() reads storage as it does after a reload, by
+-- which time every write has landed.
 local function reload()
+  ShimPersistLand()
   return getmetatable(require("lib.persist")):new()
 end
 
@@ -59,6 +61,7 @@ T.eq("and the key is still not stored", p:get("Rates"), nil)
 
 T.section("a deleted key reads as one that was never stored")
 p:set("Room", "Den")
+ShimPersistLand() -- deleted in a later call: in the same one, the set lands after the delete
 p:set("Room", nil)
 T.eq("nil with no default", p:get("Room"), nil)
 T.eq("the default with one", p:get("Room", "default"), "default")
@@ -87,6 +90,7 @@ T.eq("a write into it does not reach the stored value", p:get("Scene"), { level 
 T.section("a migration is not run for a key that is not stored")
 C4:PersistSetValue("Stored", 1)
 C4:PersistSetValue("Emptied", 1)
+ShimPersistLand()
 p:get("Legacy")
 p:get("Seeded", 5)
 T.eq("with a default or without", migrated, {})

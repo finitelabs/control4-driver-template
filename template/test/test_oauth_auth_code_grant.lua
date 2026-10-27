@@ -119,6 +119,7 @@ T.eq("the access token is granted", lastEvent(events, "AccessTokenGranted").args
 T.truthy("a refresh is scheduled", timers[grant.timerPrefix .. "RefreshToken"])
 
 reset()
+ShimPersistLand()
 local again = OAuth:new({
   NAME = "Again",
   API_CLIENT_ID = grant.API_CLIENT_ID,

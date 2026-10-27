@@ -72,8 +72,10 @@ local STORED_VALUES = table.concat({
   "bmRleCI6NCwidmFsdWUiOiIwMjAwMDAwMDAwMDAwMDAxIiwidmFyVHlwZSI6IlNUUklORyIsIndyaXRhYmxlIjpmYWxzZX19",
 })
 
--- A fresh instance has an empty cache, so get() reads storage as it does after a reload.
+-- A fresh instance has an empty cache, so get() reads storage as it does after a reload, by
+-- which time every write has landed.
 local function reload()
+  ShimPersistLand()
   return getmetatable(require("lib.persist")):new()
 end
 

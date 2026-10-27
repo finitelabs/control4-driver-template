@@ -1002,23 +1002,26 @@ T.section("C4:PersistSetValue")
 
 -- Measured on 4.3.0.
 C4:PersistSetValue("Nul", "a\0b")
+ShimPersistLand()
 T.eq("a string is cut at its first NUL", C4:PersistGetValue("Nul"), "a")
 C4:PersistSetValue("NaN", 0 / 0)
+ShimPersistLand()
 T.eq("a NaN is stored as Director's text for it", C4:PersistGetValue("NaN"), '{":number:":null}')
 C4:PersistSetValue("Plain", "x")
 C4:PersistSetValue("Plain", "")
+ShimPersistLand()
 T.eq('"" deletes a plain key', C4:PersistGetValue("Plain"), nil)
 C4:PersistSetValue("Secret", "x", true)
 C4:PersistSetValue("Secret", "", true)
+ShimPersistLand()
 T.eq("and leaves an encrypted one as it was", C4:PersistGetValue("Secret", true), "x")
 T.eq("an absent key answers no value at all", select("#", C4:PersistGetValue("Absent")), 0)
 
 --------------------------------------------------------------------------------
-T.section("ShimPersistLater")
+T.section("A persist write lands later")
 --------------------------------------------------------------------------------
 
 -- Measured on 4.3.0: a write lands about 50 ms after the call.
-ShimPersistLater(true)
 C4:PersistSetValue("Later", "x")
 T.eq("a write is not read back until it lands", C4:PersistGetValue("Later"), nil)
 ShimPersistLand()
@@ -1028,14 +1031,50 @@ C4:PersistDeleteValue("Later")
 T.eq("a delete is read back at once", C4:PersistGetValue("Later"), nil)
 ShimPersistLand()
 T.eq("and a write still waiting lands after it", C4:PersistGetValue("Later"), "y")
-C4:PersistSetValue("Later", "a\0b")
+C4:PersistSetValue("Later", "a")
+C4:PersistSetValue("Later", "b")
 ShimPersistLand()
-T.eq("a write lands as the store keeps it", C4:PersistGetValue("Later"), "a")
+T.eq("writes land in the order they were made", C4:PersistGetValue("Later"), "b")
+
+do
+  local read
+  C4:SetTimer(1000, function()
+    read = C4:PersistGetValue("Later")
+    C4:PersistSetValue("Later", "set by the timer")
+  end)
+  C4:PersistSetValue("Later", "c")
+  ShimFireTimers()
+  T.eq("ShimFireTimers lands the writes made before it", read, "c")
+  T.eq("and one its callback makes waits", C4:PersistGetValue("Later"), "c")
+end
+
+C4:PersistSetValue("Later", "d")
+ShimUpdateDriver()
+T.eq("a driver update lands every write", C4:PersistGetValue("Later"), "d")
+C4:PersistSetValue("Later", "e")
+ShimRestartDirector()
+T.eq("and so does a Director restart", C4:PersistGetValue("Later"), "e")
+
+do
+  local reloaded, reloadErr = F.withShim({ luasocket = true }, function(clock)
+    C4:PersistSetValue("Later", "x")
+    clock.advance(0.04)
+    T.eq("by the clock, a write 40 ms old is not read back", C4:PersistGetValue("Later"), nil)
+    clock.advance(0.02)
+    T.eq("and one 60 ms old is", C4:PersistGetValue("Later"), "x")
+  end)
+  T.check("shim reload (with luasocket)", reloaded, reloadErr)
+end
+
 C4:PersistSetValue("Later", "z")
 ShimPersistLater(false)
-T.eq("turning it off lands what waits", C4:PersistGetValue("Later"), "z")
+T.eq("ShimPersistLater(false) lands what waits", C4:PersistGetValue("Later"), "z")
 C4:PersistSetValue("Later", "now")
-T.eq("and a write reads back at once again", C4:PersistGetValue("Later"), "now")
+T.eq("and has a write read back at once", C4:PersistGetValue("Later"), "now")
+ShimPersistLater(true)
+C4:PersistSetValue("Later", "later")
+T.eq("ShimPersistLater(true) restores the default", C4:PersistGetValue("Later"), "now")
+ShimPersistLand()
 
 --------------------------------------------------------------------------------
 T.section("C4:FileOpen / C4:FileWrite / C4:FileDelete")

@@ -3,9 +3,16 @@
 ---
 --- When luasocket is available, provides full networking and timer support.
 --- Without luasocket, provides stubs sufficient for module loading and static analysis.
+---
+--- As on a controller, a C4:PersistSetValue reads back only once it lands, which ShimFireTimers,
+--- C4:ProcessTimers and ShimPersistLand bring about; ShimPersistLater(false) turns that off.
 
 -- Try to load luasocket (optional dependency)
 local has_socket, socket = pcall(require, "socket")
+
+local function clock()
+  return has_socket and socket.gettime() or 0
+end
 
 -- Lua 5.2+ compatibility: loadstring was removed in favor of load
 if not loadstring then
@@ -1162,14 +1169,17 @@ function ShimVariableRename(enabled)
   C4.SetVariableName = enabled and set_variable_name or nil
 end
 
---- Harness: a driver update. Director keeps every variable, and the new load's
---- counter starts again at 1001.
+--- Harness: a driver update. Director keeps every variable and every persist write
+--- has landed, and the new load's counter starts again at 1001.
 function ShimUpdateDriver()
+  ShimPersistLand()
   next_variable_id = 1001
 end
 
---- Harness: a Director restart or controller boot. No driver variable survives it.
+--- Harness: a Director restart or controller boot. No driver variable survives it,
+--- and every persist write has landed.
 function ShimRestartDirector()
+  ShimPersistLand()
   for _, meta in pairs(variable_meta) do
     Variables[meta.name] = nil
   end
@@ -1352,8 +1362,13 @@ end
 -- PersistGetValue/SetValue/DeleteValue globals belong to global/lib.lua, whose
 -- wrappers delegate here when C4.PersistSetValue exists; stubbing the globals
 -- instead would be paved over the moment any module requires global.lib.
+--
+-- As on 4.3.0, a write reads back only once it lands, about 50 ms after the call. It
+-- lands as the shim moves time on: at ShimFireTimers, by C4:ProcessTimers' clock, at a
+-- driver update or Director restart, and at ShimPersistLand.
 local persist_store = {}
-local persist_pending -- writes not landed yet, while ShimPersistLater is on
+local persist_pending = {} -- writes not landed yet, oldest first; nil while ShimPersistLater(false)
+local PERSIST_LANDS_AFTER = 0.05 -- seconds
 
 -- As on 4.3.0, an absent key answers no value at all.
 function C4:PersistGetValue(key, encrypted)
@@ -1378,30 +1393,43 @@ local function persist_land(key, value, encrypted)
   end
 end
 
+--- Land every waiting write due by `now` on the shim's clock, oldest first.
+local function persist_land_by(now)
+  local waiting = persist_pending
+  if not waiting then
+    return
+  end
+  persist_pending = {}
+  for _, write in ipairs(waiting) do
+    if write.at + PERSIST_LANDS_AFTER <= now then
+      persist_land(write.key, write.value, write.encrypted)
+    else
+      persist_pending[#persist_pending + 1] = write
+    end
+  end
+end
+
 function C4:PersistSetValue(key, value, encrypted)
   if persist_pending then
-    persist_pending[key] = { value = value, encrypted = encrypted }
+    persist_pending[#persist_pending + 1] = { key = key, value = value, encrypted = encrypted, at = clock() }
   else
     persist_land(key, value, encrypted)
   end
 end
 
+-- A delete reads back at once, and a write still waiting lands after it.
 function C4:PersistDeleteValue(key)
   persist_store[key] = nil
 end
 
---- Harness: land every write made so far, as a controller has by the next call into the driver.
+--- Harness: land every write still waiting, for the time between two calls a test makes
+--- into the driver.
 function ShimPersistLand()
-  if persist_pending then
-    for key, write in pairs(persist_pending) do
-      persist_land(key, write.value, write.encrypted)
-    end
-    persist_pending = {}
-  end
+  persist_land_by(math.huge)
 end
 
---- Harness: whether a write reads back only once ShimPersistLand lands it, as on 4.3.0 about 50 ms
---- later. Off by default. A delete reads back at once, and a write still waiting lands after it.
+--- Harness: whether a write reads back only once it lands, as on 4.3.0 (the default),
+--- or at once, for a suite that needs that. Either way it lands what waits.
 function ShimPersistLater(enabled)
   ShimPersistLand()
   persist_pending = enabled and {} or nil
@@ -1446,10 +1474,6 @@ end
 local timers = {}
 local timer_id = 0
 
-local function clock()
-  return has_socket and socket.gettime() or 0
-end
-
 function C4:SetTimer(delay_ms, callback, repeating)
   timer_id = timer_id + 1
   local id = timer_id
@@ -1480,6 +1504,7 @@ function C4:ProcessTimers()
     return
   end
   local now = socket.gettime()
+  persist_land_by(now)
   for id, timer in pairs(timers) do
     if not timer.cancelled and now >= timer.next_fire then
       timer.callback(timer.handle, 0)
@@ -1496,8 +1521,10 @@ end
 --- delay, so a test can drive a long timeout without waiting for it. Works on
 --- both branches, which is what lets a test avoid defining its own SetTimer.
 --- The slot is cleared before the callback runs, so a callback that re-arms the
---- same timer is not immediately fired again.
+--- same timer is not immediately fired again. Every persist write made before it
+--- lands first; one a callback makes waits for the next.
 function ShimFireTimers()
+  ShimPersistLand()
   local due = {}
   for id, timer in pairs(timers) do
     if not timer.cancelled then

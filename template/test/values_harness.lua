@@ -83,8 +83,9 @@ function H.visible()
   return out
 end
 
---- The stored values, decoded.
+--- The stored values, decoded, once every write has landed.
 function H.blob()
+  ShimPersistLand()
   local raw = C4:PersistGetValue("Values")
   return raw and Deserialize(raw) or {}
 end

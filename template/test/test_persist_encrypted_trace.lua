@@ -17,8 +17,10 @@ local log = require("lib.logging")
 local CODE = "FAKE-CODE-0000"
 local TOKEN = "not-a-real-token"
 
--- A fresh instance has an empty cache, so get() reads storage as it does after a reload.
+-- A fresh instance has an empty cache, so get() reads storage as it does after a reload, by
+-- which time every write has landed.
 local function reload()
+  ShimPersistLand()
   return getmetatable(require("lib.persist")):new()
 end
 

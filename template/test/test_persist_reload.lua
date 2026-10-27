@@ -11,8 +11,10 @@ local T = require("testlib")
 
 require("c4_shim")
 
--- A fresh instance has an empty cache, so get() reads storage as it does after a reload.
+-- A fresh instance has an empty cache, so get() reads storage as it does after a reload, by
+-- which time every write has landed.
 local function reload()
+  ShimPersistLand()
   return getmetatable(require("lib.persist")):new()
 end
 
@@ -45,6 +47,7 @@ T.eq("not as Director's text for it", reload():get("NaN", "default"), "default")
 
 T.section('"" or NaN deletes the key')
 p:set("Code", "1234", true)
+ShimPersistLand() -- deleted in a later call: in the same one, the set lands after the delete
 p:set("Code", "", true)
 T.eq('an encrypted string set to "" reads as the default', reload():get("Code", "default", true), "default")
 p:set("Reading", 0 / 0)
@@ -59,6 +62,7 @@ T.section("a string that is a JSON object or array reads as that JSON, as it alw
 -- Director reads '{"a":1}' back from storage as a table, and '{":number:":5}' as 5. The shim
 -- keeps the text, so this puts back what Director returns.
 p:set("JsonText", '{"a":1}')
+ShimPersistLand()
 C4:PersistSetValue("JsonText", JSON:decode(C4:PersistGetValue("JsonText")))
 T.eq('{"a":1} reads as a table', reload():get("JsonText"), { a = 1 })
 
