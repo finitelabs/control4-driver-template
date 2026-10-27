@@ -935,6 +935,66 @@ T.eq("so does a string shorter than one group", C4:Base64Decode("Den"), "")
 T.eq("a trailing partial group is dropped", C4:Base64Decode("MTIzN"), "123")
 T.eq("the input is trimmed", C4:Base64Decode(" MTIz "), "123")
 T.eq("and cut at its first NUL", C4:Base64Decode("MTIz\0MTIz"), "123")
+T.eq("a number is read as its digits", C4:Base64Decode(12345), "\215\109\248")
+T.eq("so a fraction's point is outside the alphabet", C4:Base64Decode(12.5), "")
+local function decodeError(...)
+  return select(2, pcall(C4.Base64Decode, C4, ...))
+end
+T.eq("nil raises", decodeError(nil), "strDecode should be a string")
+T.eq("so does a table", decodeError({}), "strDecode should be a string")
+T.eq("and C4 itself, as an argument", decodeError(C4, "YQ=="), "strDecode should be a string")
+T.eq("no argument at all", decodeError(), "Not enough arguments passed (expected 1: strDecode)")
+
+local function hex(s)
+  return (s:gsub(".", function(c)
+    return string.format("%02x", c:byte())
+  end))
+end
+for _, m in ipairs({
+  -- Base64 with its padding.
+  { "W10=", "5b5d" },
+  { "YQ==", "61" },
+  { "YWI=", "6162" },
+  { "eyJhIjoxfQ==", "7b2261223a317d" },
+  { "a+/b", "6befdb" },
+  -- A partial last group is dropped, whatever it holds.
+  { "", "" },
+  { "1", "" },
+  { "123", "" },
+  { "W10", "" },
+  { "YQ=", "" },
+  { "1234", "d76df8" },
+  { "65537", "eb9e77" },
+  { "abcdefg", "69b71d" },
+  { "YQ==abc", "61" },
+  { "6553,", "eb9e77" },
+  { "65537,", "eb9e77" },
+  { "65537:1", "eb9e77" },
+  { "65793:2", "eb9efd" },
+  { "1234:5", "d76df8" },
+  { "abcd:", "69b71d" },
+  -- A whole group with a character outside the alphabet answers nothing at all.
+  { "65537,65793", "" },
+  { "65793:2,65537:1", "" },
+  { "123,456", "" },
+  { "1234:56789", "" },
+  { "abcd,efgh", "" },
+  { ",abcd", "" },
+  { "abc!", "" },
+  { "ab cd", "" },
+  { "-_ab", "" },
+  -- "=" inside a group reads as zero bits, and only the last group's padding trims it.
+  { "=abc", "01a6dc" },
+  { "ab=c", "69b01c" },
+  { "abc=abcd", "69b70069b71d" },
+  { "YQ==YQ==", "61000061" },
+  { "a===", "68" },
+  { "====", "00" },
+  -- An EUI64, stored as a plain string.
+  { "00124B0001CE4B21", "d34d76e01d34d35084e01db5" },
+}) do
+  T.eq(string.format("%q", m[1]), hex(C4:Base64Decode(m[1])), m[2])
+end
 
 --------------------------------------------------------------------------------
 T.section("C4:PersistSetValue")
@@ -951,6 +1011,31 @@ T.eq('"" deletes a plain key', C4:PersistGetValue("Plain"), nil)
 C4:PersistSetValue("Secret", "x", true)
 C4:PersistSetValue("Secret", "", true)
 T.eq("and leaves an encrypted one as it was", C4:PersistGetValue("Secret", true), "x")
+T.eq("an absent key answers no value at all", select("#", C4:PersistGetValue("Absent")), 0)
+
+--------------------------------------------------------------------------------
+T.section("ShimPersistLater")
+--------------------------------------------------------------------------------
+
+-- Measured on 4.3.0: a write lands about 50 ms after the call.
+ShimPersistLater(true)
+C4:PersistSetValue("Later", "x")
+T.eq("a write is not read back until it lands", C4:PersistGetValue("Later"), nil)
+ShimPersistLand()
+T.eq("then it is", C4:PersistGetValue("Later"), "x")
+C4:PersistSetValue("Later", "y")
+C4:PersistDeleteValue("Later")
+T.eq("a delete is read back at once", C4:PersistGetValue("Later"), nil)
+ShimPersistLand()
+T.eq("and a write still waiting lands after it", C4:PersistGetValue("Later"), "y")
+C4:PersistSetValue("Later", "a\0b")
+ShimPersistLand()
+T.eq("a write lands as the store keeps it", C4:PersistGetValue("Later"), "a")
+C4:PersistSetValue("Later", "z")
+ShimPersistLater(false)
+T.eq("turning it off lands what waits", C4:PersistGetValue("Later"), "z")
+C4:PersistSetValue("Later", "now")
+T.eq("and a write reads back at once again", C4:PersistGetValue("Later"), "now")
 
 --------------------------------------------------------------------------------
 T.section("C4:FileOpen / C4:FileWrite / C4:FileDelete")

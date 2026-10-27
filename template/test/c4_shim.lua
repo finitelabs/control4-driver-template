@@ -670,18 +670,19 @@ function C4:Base64Encode(data, ...)
   end
 end
 
--- Handle both C4:Base64Decode() and C4.Base64Decode(C4, ...) calling styles
-function C4:Base64Decode(data, ...)
-  -- If called as C4.Base64Decode(C4, data), first arg is C4
-  -- If called as C4:Base64Decode(data), first arg is data
-  if type(data) == "table" and data == C4 then
-    -- Called as C4.Base64Decode(C4, data) - get the real data argument
-    local realData = select(1, ...)
-    return base64_decode_impl(realData)
-  else
-    -- Called as C4:Base64Decode(data)
-    return base64_decode_impl(data)
+-- As 4.3.0 takes its argument: a number is read as its digits, and anything else that is not a
+-- string raises, C4 itself included.
+function C4:Base64Decode(...)
+  if select("#", ...) == 0 then
+    error("Not enough arguments passed (expected 1: strDecode)", 0)
   end
+  local data = ...
+  if type(data) == "number" then
+    data = tostring(data)
+  elseif type(data) ~= "string" then
+    error("strDecode should be a string", 0)
+  end
+  return base64_decode_impl(data)
 end
 
 ---------------------------------------------------------------------------
@@ -1352,14 +1353,19 @@ end
 -- wrappers delegate here when C4.PersistSetValue exists; stubbing the globals
 -- instead would be paved over the moment any module requires global.lib.
 local persist_store = {}
+local persist_pending -- writes not landed yet, while ShimPersistLater is on
 
+-- As on 4.3.0, an absent key answers no value at all.
 function C4:PersistGetValue(key, encrypted)
-  return persist_store[key]
+  local value = persist_store[key]
+  if value ~= nil then
+    return value
+  end
 end
 
 -- As on 4.3.0: a string is cut at its first NUL and a NaN is stored as Director's text for it.
 -- "" deletes a plain key and leaves an encrypted one as it was.
-function C4:PersistSetValue(key, value, encrypted)
+local function persist_land(key, value, encrypted)
   if type(value) == "string" then
     value = value:match("^[^%z]*")
   elseif value ~= value then
@@ -1372,8 +1378,33 @@ function C4:PersistSetValue(key, value, encrypted)
   end
 end
 
+function C4:PersistSetValue(key, value, encrypted)
+  if persist_pending then
+    persist_pending[key] = { value = value, encrypted = encrypted }
+  else
+    persist_land(key, value, encrypted)
+  end
+end
+
 function C4:PersistDeleteValue(key)
   persist_store[key] = nil
+end
+
+--- Harness: land every write made so far, as a controller has by the next call into the driver.
+function ShimPersistLand()
+  if persist_pending then
+    for key, write in pairs(persist_pending) do
+      persist_land(key, write.value, write.encrypted)
+    end
+    persist_pending = {}
+  end
+end
+
+--- Harness: whether a write reads back only once ShimPersistLand lands it, as on 4.3.0 about 50 ms
+--- later. Off by default. A delete reads back at once, and a write still waiting lands after it.
+function ShimPersistLater(enabled)
+  ShimPersistLand()
+  persist_pending = enabled and {} or nil
 end
 
 ---------------------------------------------------------------------------

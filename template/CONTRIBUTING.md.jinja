@@ -103,6 +103,7 @@ then pull the change in with `copier update`.
 - `github-markdown.css`: vendored stylesheet for the rendered docs
 - `github-setup`: checks the GitHub repo against the standard settings and
   prints the drift; `--apply` fixes it
+- `test_preprocess.py`: tests for `preprocess.py`'s `#embed` directive
 
 **Other:**
 
@@ -238,7 +239,7 @@ make init          # Install all dependencies (safe to re-run)
 make check-deps    # Install if needed, then verify .venv matches requirements.txt
 make build         # Full build, from clean through zip (see Build Pipeline)
 make build-nodocs  # Build without generating docs
-make test          # Run the Lua test suite (test/test_*.lua)
+make test          # Run the Lua test suite (test/test_*.lua) and tools/test_*.py
 make fmt           # Format all code (Lua, Python, Markdown)
 make check         # Assert formatting without rewriting; this is what CI runs
 make clean         # Remove build artifacts and dist/ (including driverpackager)
@@ -379,6 +380,12 @@ resolves on its own.
 
 Promote either one into the template only once a second driver needs it.
 
+### Tools tests
+
+`make test` also runs each `tools/test_*.py` with `python3`. These test the
+Python tools in `tools/` with the standard library's `unittest` and need no
+`.venv`.
+
 ## Preprocessor Directives
 
 The `tools/preprocess.py` script supports C-style conditional compilation. It
@@ -404,8 +411,10 @@ DRIVER_GITHUB_REPO = "{{ github_org }}/{{ project_name }}"
 ```
 
 It also resolves `<!-- #embed-changelog -->`, which splices `CHANGELOG.md` into
-the generated documentation. That runs as a pre-pass, so directives inside the
-changelog are still honored.
+the generated documentation, and `<!-- #embed <path> -->`, which splices the
+file at `<path>`, relative to the file holding the directive. Both run as a
+pre-pass, so directives inside the spliced text are still honored. A missing
+`<path>`, or an `#embed` inside an embedded file, fails the build.
 
 ### Variant Expansion
 
