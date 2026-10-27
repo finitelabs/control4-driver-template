@@ -364,7 +364,9 @@ runs `fn` with `print` collected and returns `ok, err, output`, and
 
 As on a controller, a `C4:PersistSetValue` reads back only once it lands, about
 50 ms after the call, and until then `C4:PersistGetValue` answers what the store
-held. A delete reads back at once, and a write still waiting lands after it.
+held. A delete reads back at once, and a write still waiting lands after it. A
+value written encrypted reads back only with the encrypted flag, so a suite that
+seeds or reads such a key passes the flag the driver does.
 
 The shim lands a write when it moves time on: `ShimFireTimers` lands every write
 made before it, `C4:ProcessTimers` each one 50 ms old by its clock, and

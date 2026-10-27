@@ -1363,14 +1363,25 @@ end
 -- As on 4.3.0, a write reads back only once it lands, about 50 ms after the call. It
 -- lands as the shim moves time on: at ShimFireTimers, by C4:ProcessTimers' clock, at a
 -- driver update or Director restart, and at ShimPersistLand.
-local persist_store = {} -- one value per key, whichever flag wrote it
+local persist_store = {} -- the text Director's row holds, one per key whichever flag wrote it
 local persist_pending = {} -- writes not landed yet, oldest first; nil while ShimPersistLater(false)
 local PERSIST_LANDS_AFTER = 0.05 -- seconds
 
--- As on 4.3.0, an absent key answers no value at all.
+-- Stands in for Director's cipher, a fixed XOR keystream; flipping each byte's top bit undoes itself.
+local function persist_cipher(text)
+  return (text:gsub(".", function(c)
+    return string.char((c:byte() + 128) % 256)
+  end))
+end
+
+-- As on 4.3.0: a plain read answers the row's text, so an encrypted value reads as base64, and an
+-- encrypted read decrypts whatever the row holds. An absent key, or a row that decrypts to "", answers no value.
 function C4:PersistGetValue(key, encrypted)
   local value = persist_store[key]
-  if value ~= nil then
+  if encrypted and type(value) == "string" then
+    value = persist_cipher(C4:Base64Decode(value))
+  end
+  if value ~= nil and value ~= "" then
     return value
   end
 end
@@ -1384,7 +1395,7 @@ local function persist_land(key, value, encrypted)
     value = '{":number:":null}'
   end
   if value ~= "" then
-    persist_store[key] = value
+    persist_store[key] = encrypted and type(value) == "string" and C4:Base64Encode(persist_cipher(value)) or value
   elseif not encrypted then
     persist_store[key] = nil
   end

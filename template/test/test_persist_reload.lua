@@ -27,7 +27,6 @@ local q = reload()
 T.eq("one with a space", q:get("Room", "default"), "Living Room")
 T.eq("one under four characters", q:get("Short", "default"), "Den")
 T.eq("one that looks like a number, as a string", q:get("Numeric", "default"), "12.5")
--- The shim keeps one store for both flags, so this only documents that an encrypted string reads the same.
 T.eq("one set encrypted", q:get("Secret", "default", true), "Living Room")
 T.eq("stored raw, as every shipped build stored it", C4:PersistGetValue("Room"), "Living Room")
 
