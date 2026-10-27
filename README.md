@@ -99,8 +99,9 @@ repositories to check for or fix drift. The standard is:
 - Squash merges only, auto-merge allowed, head branches deleted on merge
 - Default branch `main` (an existing `master` gets renamed)
 - Branch ruleset named `Default` on the default branch: no deletions or force
-  pushes, PRs require one approval and passing `build` and
-  `extra_required_checks` checks, squash merges only, org admins can bypass
+  pushes, PRs require one approval and a passing `build` check, plus any
+  checks named in `extra_required_checks`, squash merges only, org admins can
+  bypass
 - Dependabot alerts and security updates enabled
 
 One step stays manual: add the repository to the project's VCS integration in
