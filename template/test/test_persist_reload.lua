@@ -46,7 +46,7 @@ T.eq("not as Director's text for it", reload():get("NaN", "default"), "default")
 
 T.section('"" or NaN deletes the key')
 p:set("Code", "1234", true)
-ShimPersistLand() -- deleted in a later call: in the same one, the set lands after the delete
+ShimPersistLand() -- a later call: a "" clearing an encrypted set still waiting is not measured
 p:set("Code", "", true)
 T.eq('an encrypted string set to "" reads as the default', reload():get("Code", "default", true), "default")
 p:set("Reading", 5)
