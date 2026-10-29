@@ -69,7 +69,8 @@ Displays the DriverCentral cloud license status.
 
 #### Automatic Updates \[ Off | **_On_** \]
 
-Enables or disables automatic driver updates via DriverCentral.
+Enables or disables automatic driver updates via DriverCentral. Changing it on
+any item of this driver changes it on all of them.
 
 <!-- #endif -->
 
