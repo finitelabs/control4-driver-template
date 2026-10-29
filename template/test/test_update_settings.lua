@@ -8,10 +8,12 @@
 local T = require("testlib")
 
 require("c4_shim")
+local constants = require("constants")
 local updateSettings = require("lib.update-settings")
 
--- Director's project: two items of each driver.
+-- Director's project: two items of one driver, one of another, and the repo's third driver not installed.
 local ITEMS = { ["a.c4z"] = { 601, 602 }, ["b.c4z"] = { 611 } }
+constants.DRIVER_FILENAMES = { "a.c4z", "b.c4z", "c.c4z" }
 local me = 601
 function C4:GetDeviceID()
   return me
@@ -51,16 +53,13 @@ local function commands()
   return sent
 end
 
-T.section("A change goes to every other item of the drivers named, once")
-updateSettings:share({ "a.c4z", "b.c4z" }, "Automatic Updates", "Off")
+T.section("A change goes to every other item of the repo's drivers, once")
+updateSettings:share("Automatic Updates", "Off")
 T.eq(
   "each other item is sent it, and this one is not",
   commands(),
   { "602 SET_UPDATE_SETTING Automatic Updates Off", "611 SET_UPDATE_SETTING Automatic Updates Off" }
 )
-sent = {}
-updateSettings:share({ "a.c4z", "c.c4z" }, "Update Channel", "Prerelease")
-T.eq("a driver with no items is passed over", sent, { "602 SET_UPDATE_SETTING Update Channel Prerelease" })
 
 T.section("A setting another item sends is set, and goes no further")
 sent, written = {}, {}
@@ -74,7 +73,7 @@ T.eq("written as the driver writes a property", written, { "Automatic Updates Of
 T.eq("which runs no OnPropertyChanged", ran, 0)
 T.eq("so nothing is sent", sent, {})
 
-T.section("Only an update setting, and only a value it offers, is taken")
+T.section("Only an update setting the item has, and only a value it offers, is taken")
 written = {}
 T.capture(function()
   updateSettings:take({ Name = "Automatic Updates", Value = "Maybe" })
@@ -82,6 +81,11 @@ end)
 T.eq("a value the setting does not offer is not set", Properties["Automatic Updates"], "Off")
 updateSettings:take({ Name = "Log Level", Value = "6 - Trace" })
 T.eq("nor is a setting other than an update setting", Properties["Log Level"], "3 - Info")
-T.eq("and neither is written", written, {})
+local _, _, output = T.capture(function()
+  updateSettings:take({ Name = "Update Channel", Value = "Prerelease" })
+end)
+T.eq("an update setting the item does not have is passed over", Properties["Update Channel"], nil)
+T.eq("without a word", output, "")
+T.eq("and none of them is written", written, {})
 
 T.finish()

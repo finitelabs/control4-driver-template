@@ -1,7 +1,8 @@
---- Update settings every item of a set of drivers keeps the same. Only the item someone changed sends the value, as a
---- command the others set without OnPropertyChanged. Director runs OnPropertyChanged for every UPDATE_PROPERTY, an
---- unchanged value too, so each receiver of a pushed property would push it on.
+--- Update settings every item of the suite keeps the same. Only the item someone changed sends the value, as a command
+--- the others set without OnPropertyChanged. Director runs OnPropertyChanged for every UPDATE_PROPERTY, an unchanged
+--- value too, so each receiver of a pushed property would push it on.
 
+local constants = require("constants")
 require("drivers-common-public.global.handlers")
 require("lib.utils")
 
@@ -18,13 +19,13 @@ function UpdateSettings:new()
   return setmetatable({}, self)
 end
 
---- Sends a change made on this item to every other installed item of `filenames`, as `SET_UPDATE_SETTING`.
---- @param filenames string[] The drivers whose items keep the setting the same.
+--- Sends a change made on this item to every other installed item of `constants.DRIVER_FILENAMES`, as
+--- `SET_UPDATE_SETTING`.
 --- @param name string The setting.
 --- @param value string Its new value.
-function UpdateSettings:share(filenames, name, value)
+function UpdateSettings:share(name, value)
   local myId = C4:GetDeviceID()
-  for _, filename in ipairs(filenames) do
+  for _, filename in ipairs(constants.DRIVER_FILENAMES) do
     for id in pairs(C4:GetDevicesByC4iName(filename) or {}) do
       if tonumber(id) ~= myId then
         SendToDevice(tonumber(id), "SET_UPDATE_SETTING", { Name = name, Value = value })
@@ -33,10 +34,11 @@ function UpdateSettings:share(filenames, name, value)
   end
 end
 
---- Sets an update setting another item sent with `SET_UPDATE_SETTING`.
+--- Sets an update setting another item sent with `SET_UPDATE_SETTING`, if this item has it: a companion with no
+--- update settings of its own is sent them too.
 --- @param params table The command's parameters: `Name` the setting, `Value` its value.
 function UpdateSettings:take(params)
-  if SHARED[params.Name] then
+  if SHARED[params.Name] and Properties[params.Name] ~= nil then
     UpdateProperty(params.Name, params.Value)
   end
 end

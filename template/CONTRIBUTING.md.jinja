@@ -49,7 +49,7 @@ then pull the change in with `copier update`.
 - `lru.lua`: LRU cache utility
 - `persist.lua`: persistent storage abstraction
 - `update-settings.lua`: keeps Automatic Updates and Update Channel the same on
-  every item of a driver's suite
+  every item of the drivers in `constants.DRIVER_FILENAMES`
 - `utils.lua`: general utilities (XML, device queries, table helpers, type
   coercion)
 - `values.lua`: value parsing, coercion, and formatting
@@ -117,7 +117,8 @@ then pull the change in with `copier update`.
 
 ### What's Driver-Specific (Yours to Edit)
 
-- `src/constants.lua`: driver-specific constants
+- `src/constants.lua`: driver-specific constants, and `DRIVER_FILENAMES`, every
+  `.c4z` the repo builds
 - `drivers/*/driver.lua`: main driver logic
 - `drivers/*/driver.xml`: driver XML configuration
 - `drivers/*/driver.c4zproj`: driver packaging manifest

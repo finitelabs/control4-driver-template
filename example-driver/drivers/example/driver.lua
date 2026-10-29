@@ -63,7 +63,7 @@ end
 function OPC.Automatic_Updates(propertyValue)
   log:trace("OPC.Automatic_Updates('%s')", propertyValue)
   if gInitialized then
-    updateSettings:share({ DC_FILENAME }, "Automatic Updates", propertyValue)
+    updateSettings:share("Automatic Updates", propertyValue)
   end
 end
 
