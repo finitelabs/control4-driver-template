@@ -1,8 +1,8 @@
---- Update settings every item of the suite keeps the same. Only the item someone changed sends the value, as a command
---- the others set without OnPropertyChanged. Director runs OnPropertyChanged for every UPDATE_PROPERTY, an unchanged
---- value too, so each receiver of a pushed property would push it on.
+--- Update settings every item of the repo's drivers keeps the same, in DriverCentral and OSS builds. Only the item
+--- someone changed sends the value, as a command the others set without OnPropertyChanged. Director runs
+--- OnPropertyChanged for every UPDATE_PROPERTY, an unchanged value too, so each receiver of a pushed property would
+--- push it on.
 
-local constants = require("constants")
 require("drivers-common-public.global.handlers")
 require("lib.utils")
 
@@ -13,19 +13,24 @@ UpdateSettings.__index = UpdateSettings
 --- The settings an item takes from another.
 local SHARED = { ["Automatic Updates"] = true, ["Update Channel"] = true }
 
+--- Every .c4z the repo builds, which `tools/preprocess.py` writes in.
+--- @type string[]
+UpdateSettings.DRIVER_FILENAMES = {
+  -- #driver-filenames
+}
+
 --- Creates a new `UpdateSettings` instance.
 --- @return UpdateSettings updateSettings A new `UpdateSettings` instance.
 function UpdateSettings:new()
   return setmetatable({}, self)
 end
 
---- Sends a change made on this item to every other installed item of `constants.DRIVER_FILENAMES`, as
---- `SET_UPDATE_SETTING`.
+--- Sends a change made on this item to every other installed item of the repo's drivers, as `SET_UPDATE_SETTING`.
 --- @param name string The setting.
 --- @param value string Its new value.
 function UpdateSettings:share(name, value)
   local myId = C4:GetDeviceID()
-  for _, filename in ipairs(constants.DRIVER_FILENAMES) do
+  for _, filename in ipairs(self.DRIVER_FILENAMES) do
     for id in pairs(C4:GetDevicesByC4iName(filename) or {}) do
       if tonumber(id) ~= myId then
         SendToDevice(tonumber(id), "SET_UPDATE_SETTING", { Name = name, Value = value })

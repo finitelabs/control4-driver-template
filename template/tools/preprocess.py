@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 
+# Keeps PEP 604 annotations (`list[str] | None`) readable on the documented 3.9
+# floor, where they would otherwise raise TypeError at import.
+from __future__ import annotations
+
 import argparse
 import itertools
 import json
@@ -14,6 +18,7 @@ def process_file(
     conditions: set[str],
     variant_map: dict[str, list[str]] = {},
     passthrough_unknown: bool = False,
+    driver_names: list[str] | None = None,
 ) -> None:
     """
     Process a file for conditional directives.
@@ -26,6 +31,8 @@ def process_file(
             the conditions set are passed through unchanged (directive lines and
             content preserved). Used during variant expansion so that
             distribution-level conditions survive for the next processing pass.
+        driver_names: Every driver the build packages, which `#driver-filenames`
+            expands to; None leaves the directive in place for a later pass.
     """
     # Stack to track nested conditions: (condition, parent_including, transparent)
     # transparent=True means this condition is unknown and should be passed through
@@ -74,6 +81,7 @@ def process_file(
 
     # Variant filenames pattern (Lua comment style)
     variant_filenames_pattern = re.compile(r"^(\s*)--\s*#variant-filenames\s+(\w+)\s*$")
+    driver_filenames_pattern = re.compile(r"^(\s*)--\s*#driver-filenames\s*$")
 
     ifdef_patterns = [
         xml_ifdef_pattern,
@@ -149,6 +157,7 @@ def process_file(
             (m for pattern in endif_patterns if (m := pattern.match(line))), None
         )
         variant_filenames_match = variant_filenames_pattern.match(line)
+        driver_filenames_match = driver_filenames_pattern.match(line)
 
         # Check for #ifdef
         if ifdef_match:
@@ -211,6 +220,13 @@ def process_file(
                     f"Known templates: {list(variant_map.keys())}"
                 )
             for name in names:
+                output_lines.append(f'{indent}"{name}.c4z",\n')
+            continue
+
+        # #driver-filenames: one line per driver the build packages
+        if driver_filenames_match and including and driver_names is not None:
+            indent = driver_filenames_match.group(1)
+            for name in driver_names:
                 output_lines.append(f'{indent}"{name}.c4z",\n')
             continue
 
@@ -391,7 +407,10 @@ def expand_variants(drivers_dir: Path) -> dict[str, list[str]]:
 
 
 def process_directory(
-    build_dir: Path, conditions: set[str], variant_map: dict[str, list[str]] = {}
+    build_dir: Path,
+    conditions: set[str],
+    variant_map: dict[str, list[str]] = {},
+    driver_names: list[str] | None = None,
 ):
     """
     Copy a directory and process all files for conditional directives.
@@ -400,6 +419,7 @@ def process_directory(
         build_dir: Build directory
         conditions: Set of enabled conditions
         variant_map: Dict mapping template names to generated variant names
+        driver_names: Every driver the build packages, for `#driver-filenames`
     """
     # Copy and process all files and subdirectories
     for item in os.listdir(build_dir):
@@ -407,10 +427,12 @@ def process_directory(
 
         if build_item_path.is_dir():
             # Recursively copy and process subdirectories
-            process_directory(build_item_path, conditions, variant_map)
+            process_directory(build_item_path, conditions, variant_map, driver_names)
         else:
             # Process the file for conditional directives
-            process_file(build_item_path, conditions, variant_map)
+            process_file(
+                build_item_path, conditions, variant_map, driver_names=driver_names
+            )
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
@@ -620,8 +642,15 @@ def main():
     # Expand template variants before processing conditionals
     variant_map = expand_variants(build_dir / "drivers")
 
+    # Each driver directory with a project file is packaged as <name>.c4z.
+    driver_names = sorted(
+        d.name
+        for d in (build_dir / "drivers").iterdir()
+        if (d / "driver.c4zproj").is_file()
+    )
+
     # Copy and process src directory
-    process_directory(build_dir, conditions, variant_map)
+    process_directory(build_dir, conditions, variant_map, driver_names)
 
     secrets = resolve_build_secrets(repo_root)
     if secrets and substitute_build_secrets(build_dir, secrets):

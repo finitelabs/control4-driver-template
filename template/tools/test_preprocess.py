@@ -53,5 +53,32 @@ class EmbedDirectiveTest(unittest.TestCase):
         self.assertIn("Changelog", out)
 
 
+class DriverFilenamesDirectiveTest(unittest.TestCase):
+    def _process(self, content, driver_names):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        f = Path(tmp.name) / "driver.lua"
+        f.write_text(content, encoding="utf-8")
+        process_file(f, {"OSS"}, driver_names=driver_names)
+        return f.read_text(encoding="utf-8")
+
+    def test_expands_to_one_line_per_packaged_driver(self):
+        out = self._process(
+            "LIST = {\n  -- #driver-filenames\n}\n", ["hub", "hub_light"]
+        )
+        self.assertEqual(out, 'LIST = {\n  "hub.c4z",\n  "hub_light.c4z",\n}\n')
+
+    def test_left_in_place_while_the_drivers_are_unknown(self):
+        out = self._process("LIST = {\n  -- #driver-filenames\n}\n", None)
+        self.assertEqual(out, "LIST = {\n  -- #driver-filenames\n}\n")
+
+    def test_dropped_with_a_branch_the_build_leaves_out(self):
+        out = self._process(
+            "--#ifdef DRIVERCENTRAL\nLIST = {\n  -- #driver-filenames\n}\n--#endif\n",
+            ["hub"],
+        )
+        self.assertEqual(out, "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

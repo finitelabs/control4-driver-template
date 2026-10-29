@@ -8,12 +8,11 @@
 local T = require("testlib")
 
 require("c4_shim")
-local constants = require("constants")
 local updateSettings = require("lib.update-settings")
 
 -- Director's project: two items of one driver, one of another, and the repo's third driver not installed.
 local ITEMS = { ["a.c4z"] = { 601, 602 }, ["b.c4z"] = { 611 } }
-constants.DRIVER_FILENAMES = { "a.c4z", "b.c4z", "c.c4z" }
+updateSettings.DRIVER_FILENAMES = { "a.c4z", "b.c4z", "c.c4z" } -- what the build writes in
 local me = 601
 function C4:GetDeviceID()
   return me
