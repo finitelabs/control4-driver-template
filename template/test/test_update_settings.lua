@@ -1,7 +1,4 @@
--- lib.update-settings keeps Automatic Updates and Update Channel the same on every item of a set of drivers. The item
--- a setting is changed on sends it to each other item as SET_UPDATE_SETTING, and an item that takes one sets it with
--- UpdateProperty, which runs no OnPropertyChanged, so the value goes no further: Director runs OnPropertyChanged for
--- every UPDATE_PROPERTY, an unchanged value too.
+-- lib.update-settings: which items a change is sent to, and what an item does with a setting it is sent.
 --
 -- Run from the driver root:
 --   make test
