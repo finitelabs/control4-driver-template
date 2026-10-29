@@ -1746,6 +1746,7 @@ if has_ffi then
         unsigned char *CC_MD5(const void *data, uint32_t len, unsigned char *md);
         unsigned char *CC_SHA1(const void *data, uint32_t len, unsigned char *md);
         unsigned char *CC_SHA256(const void *data, uint32_t len, unsigned char *md);
+        unsigned char *CC_SHA512(const void *data, uint32_t len, unsigned char *md);
         int CCCrypt(uint32_t op, uint32_t alg, uint32_t options,
                     const void *key, size_t keyLength, const void *iv,
                     const void *dataIn, size_t dataInLength,
@@ -1758,6 +1759,7 @@ if has_ffi then
         MD5 = { fn = C.CC_MD5, len = 16 },
         SHA1 = { fn = C.CC_SHA1, len = 20 },
         SHA256 = { fn = C.CC_SHA256, len = 32 },
+        SHA512 = { fn = C.CC_SHA512, len = 64 },
       }
       crypto_backend = {
         hash = function(algorithm, data)
@@ -1803,6 +1805,7 @@ if has_ffi then
           unsigned char *MD5(const unsigned char *d, size_t n, unsigned char *md);
           unsigned char *SHA1(const unsigned char *d, size_t n, unsigned char *md);
           unsigned char *SHA256(const unsigned char *d, size_t n, unsigned char *md);
+          unsigned char *SHA512(const unsigned char *d, size_t n, unsigned char *md);
           typedef struct evp_cipher_ctx_st EVP_CIPHER_CTX;
           const void *EVP_aes_128_cbc(void);
           const void *EVP_aes_192_cbc(void);
@@ -1822,6 +1825,7 @@ if has_ffi then
           MD5 = { fn = libcrypto.MD5, len = 16 },
           SHA1 = { fn = libcrypto.SHA1, len = 20 },
           SHA256 = { fn = libcrypto.SHA256, len = 32 },
+          SHA512 = { fn = libcrypto.SHA512, len = 64 },
         }
         crypto_backend = {
           hash = function(algorithm, data)

@@ -643,6 +643,12 @@ do
       C4:Hash("SHA256", ""),
       "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
     )
+    T.eq(
+      "SHA512 of abc",
+      C4:Hash("SHA512", "abc"),
+      "DDAF35A193617ABACC417349AE20413112E6FA4E89A97EA20A9EEEE64B55D39A"
+        .. "2192992A274FC1A836BA3C23A3FEEBBD454D4423643CE80E2A9AC94FA54CA49F"
+    )
 
     -- Hex is upper case and twice the digest length; drivers slice these by
     -- byte offset, so the width is part of the contract.
@@ -656,8 +662,8 @@ do
     T.check("NONE is not the hex string", raw ~= C4:Hash("SHA256", "abc"))
 
     -- An unsupported digest returns nil plus a reason rather than a wrong hash.
-    T.check("an unsupported algorithm returns nil", C4:Hash("SHA512", "abc") == nil)
-    T.contains("and says which one", select(2, C4:Hash("SHA512", "abc")), "SHA512")
+    T.check("an unsupported algorithm returns nil", C4:Hash("SHA384", "abc") == nil)
+    T.contains("and says which one", select(2, C4:Hash("SHA384", "abc")), "SHA384")
 
     -- AES-128-CBC with PKCS7: 5 bytes pad up to one block, and the round trip
     -- recovers the plaintext exactly.
