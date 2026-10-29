@@ -295,6 +295,13 @@ preprocessor recognizes three distributions: `drivercentral` and
 `DRIVERCENTRAL_DEV`) and `oss` (which defines `OSS`). Any other token in the
 answers file fails the build.
 
+Every DriverCentral build (`drivercentral` and `drivercentral-dev`) is packaged
+encrypted, `encryption="2"` on each driver's `<script>`, and `make package`
+deletes its plain-text `dist/<build>/source`: a sold driver's Lua, its license
+check included, never ships or uploads readable. Only `driver.lua` is encrypted,
+so any other file a driver loads from its `.c4z` stays readable. An `oss` build
+is encrypted only when it substitutes a build secret.
+
 ## Writing Tests
 
 A test is a plain Lua script in `test/`, named `test_*.lua`, run by `make test`
