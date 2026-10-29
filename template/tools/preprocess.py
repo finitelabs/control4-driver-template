@@ -489,7 +489,7 @@ def write_dotenv_from_secrets(repo_root: Path) -> None:
 ENCRYPTED_MARKER = ".encrypted"
 
 
-def substitute_build_secrets(build_dir: Path, secrets: dict[str, str]) -> None:
+def substitute_build_secrets(build_dir: Path, secrets: dict[str, str]) -> bool:
     """
     Replace __NAME__ (and %%NAME%%) for each build secret in every built file.
 
@@ -546,9 +546,7 @@ def encrypt_drivers(drivers_dir: Path, why: str) -> None:
 
         replaced, count = script_tag.subn(encrypted, content)
         if count == 0:
-            raise SystemExit(
-                f"Error: {xml_path} has no <script> to encrypt, and {why}"
-            )
+            raise SystemExit(f"Error: {xml_path} has no <script> to encrypt, and {why}")
         if replaced != content:
             xml_path.write_bytes(replaced)
         print(f"Encrypting {xml_path.parent.name}: {why}")
@@ -629,7 +627,6 @@ def main():
     if secrets and substitute_build_secrets(build_dir, secrets):
         encrypt_build(build_dir, "build secrets were substituted")
     elif "DRIVERCENTRAL" in conditions:
-        # A sold driver's Lua, its license check included, must not ship readable.
         encrypt_build(build_dir, "a DriverCentral build")
 
     print(f"Build completed successfully. Output in {build_dir}")

@@ -232,7 +232,7 @@ package: $(VENV_STAMP) $(PACKAGER) ## Create .c4z driver packages
 			pwd_saved="$$(pwd)"; \
 			cd "build/$$build/drivers/$$dir" && \
 			"$$pwd_saved/$(VENV_PY)" "$$pwd_saved/$(PACKAGER)" . "$$pwd_saved/dist/$$build/c4z" driver.c4zproj && \
-			cd "$$pwd_saved"; \
+			cd "$$pwd_saved" || exit 1; \
 		done; \
 		if [ -e "build/$$build/.encrypted" ]; then \
 			rm -rf "dist/$$build/source"; \
