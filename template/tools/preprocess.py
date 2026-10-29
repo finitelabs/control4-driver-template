@@ -486,7 +486,7 @@ def write_dotenv_from_secrets(repo_root: Path) -> None:
     print(f"Wrote {len(lines)} of {len(declared)} build secrets to .env")
 
 
-SECRETS_MARKER = ".build-secrets"
+ENCRYPTED_MARKER = ".encrypted"
 
 
 def substitute_build_secrets(build_dir: Path, secrets: dict[str, str]) -> None:
@@ -494,10 +494,8 @@ def substitute_build_secrets(build_dir: Path, secrets: dict[str, str]) -> None:
     Replace __NAME__ (and %%NAME%%) for each build secret in every built file.
 
     Works on bytes and rewrites only a file that holds a placeholder, so binary
-    files and line endings are left exactly as they are. When any file held one,
-    every driver in the build is set to encrypt its Lua (see encrypt_drivers) and
-    build_dir gets SECRETS_MARKER, which tells `make package` to delete the
-    plain-text squished Lua it leaves in dist/<build>/source.
+    files and line endings are left exactly as they are. Returns whether any file
+    held one: such a build is encrypted (see encrypt_build).
     """
     pairs = []
     for name, value in secrets.items():
@@ -515,14 +513,20 @@ def substitute_build_secrets(build_dir: Path, secrets: dict[str, str]) -> None:
         if replaced != content:
             path.write_bytes(replaced)
             substituted = True
-    if substituted:
-        encrypt_drivers(build_dir / "drivers")
-        (build_dir / SECRETS_MARKER).write_text(
-            "Build secrets were substituted into this build.\n", encoding="utf-8"
-        )
+    return substituted
 
 
-def encrypt_drivers(drivers_dir: Path) -> None:
+def encrypt_build(build_dir: Path, why: str) -> None:
+    """
+    Encrypt every driver's Lua in the build (encrypt_drivers) and write
+    ENCRYPTED_MARKER, which tells `make package` to delete the plain-text squished
+    Lua it leaves in dist/<build>/source.
+    """
+    encrypt_drivers(build_dir / "drivers", why)
+    (build_dir / ENCRYPTED_MARKER).write_text(f"Encrypted: {why}.\n", encoding="utf-8")
+
+
+def encrypt_drivers(drivers_dir: Path, why: str) -> None:
     """
     Set encryption="2" on each driver.xml's <script> so the packager encrypts it.
 
@@ -543,12 +547,11 @@ def encrypt_drivers(drivers_dir: Path) -> None:
         replaced, count = script_tag.subn(encrypted, content)
         if count == 0:
             raise SystemExit(
-                f"Error: {xml_path} has no <script> to encrypt, and build secrets "
-                "were substituted into this build"
+                f"Error: {xml_path} has no <script> to encrypt, and {why}"
             )
         if replaced != content:
             xml_path.write_bytes(replaced)
-        print(f"Encrypting {xml_path.parent.name}: build secrets were substituted")
+        print(f"Encrypting {xml_path.parent.name}: {why}")
 
 
 def main():
@@ -606,7 +609,7 @@ def main():
     shutil.rmtree(build_dir / "drivers", ignore_errors=True)
     shutil.rmtree(build_dir / "vendor", ignore_errors=True)
     shutil.rmtree(build_dir / "documentation", ignore_errors=True)
-    (build_dir / SECRETS_MARKER).unlink(missing_ok=True)
+    (build_dir / ENCRYPTED_MARKER).unlink(missing_ok=True)
 
     shutil.copytree(src_dir, build_dir / "src")
     shutil.copytree(drivers_dir, build_dir / "drivers")
@@ -623,8 +626,11 @@ def main():
     process_directory(build_dir, conditions, variant_map)
 
     secrets = resolve_build_secrets(repo_root)
-    if secrets:
-        substitute_build_secrets(build_dir, secrets)
+    if secrets and substitute_build_secrets(build_dir, secrets):
+        encrypt_build(build_dir, "build secrets were substituted")
+    elif "DRIVERCENTRAL" in conditions:
+        # A sold driver's Lua, its license check included, must not ship readable.
+        encrypt_build(build_dir, "a DriverCentral build")
 
     print(f"Build completed successfully. Output in {build_dir}")
 
