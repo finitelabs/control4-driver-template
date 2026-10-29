@@ -12,5 +12,5 @@ return {
   --- Every .c4z the repo builds, companions included: the drivers whose items lib.update-settings keeps the update
   --- settings the same across.
   --- @type string[]
-  DRIVER_FILENAMES = { "{{ readme_driver_slug }}.c4z" },
+  DRIVER_FILENAMES = {% if readme_driver_slug == "root" %}{}{% else %}{ "{{ readme_driver_slug }}.c4z" }{% endif %},
 }
