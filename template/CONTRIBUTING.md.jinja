@@ -452,10 +452,11 @@ Substitute a variant value with `__NAME__`, or with `%%NAME%%` in Markdown,
 where `__NAME__` would render as bold instead. In `.c4zproj` files,
 `--#variant-filenames <template>` emits one filename line per generated variant.
 
-In any Lua file, `-- #driver-filenames` emits one `"<driver>.c4z",` line per
-driver the build packages, variants included, so a list of the repo's drivers
-never goes stale. `lib/update-settings.lua` uses it for the drivers it shares
-update settings across.
+In any Lua file, `-- #driver-filenames` emits one `"<name>.c4z",` line per
+driver the build packages, variants included, `<name>` being the `<Driver name>`
+its `driver.c4zproj` gives in that build, so a list of the repo's drivers never
+goes stale. `lib/update-settings.lua` uses it for the drivers it shares update
+settings across.
 
 `readme_driver_slug` may name a generated variant, e.g. `<driver>_<suffix>`.
 `make build` takes the README and its images from the build output, where only

@@ -406,6 +406,28 @@ def expand_variants(drivers_dir: Path) -> dict[str, list[str]]:
     return variant_map
 
 
+def packaged_driver_names(drivers_dir: Path, conditions: set[str]) -> list[str]:
+    """
+    The `.c4z` names a build packages: each driver's `driver.c4zproj`, its
+    directives resolved for this build, names its package in `<Driver name>`.
+
+    Args:
+        drivers_dir: The build's drivers directory, after variant expansion
+        conditions: Set of enabled conditions
+    """
+    names = []
+    for driver_dir in sorted(drivers_dir.iterdir()):
+        project = driver_dir / "driver.c4zproj"
+        if not project.is_file():
+            continue
+        process_file(project, conditions)
+        match = re.search(r'<Driver\b[^>]*\bname="([^"]+)"', project.read_text())
+        if not match:
+            raise ValueError(f"{project} names no <Driver name>")
+        names.append(match.group(1))
+    return sorted(names)
+
+
 def process_directory(
     build_dir: Path,
     conditions: set[str],
@@ -642,12 +664,7 @@ def main():
     # Expand template variants before processing conditionals
     variant_map = expand_variants(build_dir / "drivers")
 
-    # Each driver directory with a project file is packaged as <name>.c4z.
-    driver_names = sorted(
-        d.name
-        for d in (build_dir / "drivers").iterdir()
-        if (d / "driver.c4zproj").is_file()
-    )
+    driver_names = packaged_driver_names(build_dir / "drivers", conditions)
 
     # Copy and process src directory
     process_directory(build_dir, conditions, variant_map, driver_names)
