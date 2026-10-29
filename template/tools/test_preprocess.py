@@ -72,6 +72,12 @@ class DriverFilenamesDirectiveTest(unittest.TestCase):
         out = self._process("LIST = {\n  -- #driver-filenames\n}\n", None)
         self.assertEqual(out, "LIST = {\n  -- #driver-filenames\n}\n")
 
+    def test_a_leftover_variant_filenames_line_fails_the_build(self):
+        with self.assertRaisesRegex(ValueError, "lib.driver-filenames"):
+            self._process(
+                'LIST = {\n  "hub.c4z",\n  -- #variant-filenames hub_fan\n}\n', ["hub"]
+            )
+
     def test_dropped_with_a_branch_the_build_leaves_out(self):
         out = self._process(
             "--#ifdef DRIVERCENTRAL\nLIST = {\n  -- #driver-filenames\n}\n--#endif\n",

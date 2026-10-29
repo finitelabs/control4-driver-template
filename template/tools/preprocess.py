@@ -79,6 +79,8 @@ def process_file(
 
     # One "<driver>.c4z", line per packaged driver (Lua comment style)
     driver_filenames_pattern = re.compile(r"^(\s*)--\s*#driver-filenames\s*$")
+    # Retired: it fed a hand-written list the build now writes itself.
+    variant_filenames_pattern = re.compile(r"^\s*--\s*#variant-filenames\b")
 
     ifdef_patterns = [
         xml_ifdef_pattern,
@@ -204,6 +206,13 @@ def process_file(
             else:
                 including = parent_including if condition_stack else True
             continue
+
+        if including and variant_filenames_pattern.match(line):
+            raise ValueError(
+                f"{file_path}: #variant-filenames is retired; list the repo's"
+                ' drivers with require("lib.driver-filenames"), which the build'
+                " writes with every variant in it"
+            )
 
         # #driver-filenames: one line per driver the build packages
         if driver_filenames_match and including and driver_names is not None:
