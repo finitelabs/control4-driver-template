@@ -79,7 +79,7 @@ def process_file(
 
     # One "<driver>.c4z", line per packaged driver (Lua comment style)
     driver_filenames_pattern = re.compile(r"^(\s*)--\s*#driver-filenames\s*$")
-    # Retired: it fed a hand-written list the build now writes itself.
+    # Retired #variant-filenames (Lua comment style)
     variant_filenames_pattern = re.compile(r"^\s*--\s*#variant-filenames\b")
 
     ifdef_patterns = [
