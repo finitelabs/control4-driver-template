@@ -5,6 +5,7 @@
 
 require("drivers-common-public.global.handlers")
 require("lib.utils")
+local driverFilenames = require("lib.driver-filenames")
 
 --- @class UpdateSettings
 local UpdateSettings = {}
@@ -13,24 +14,19 @@ UpdateSettings.__index = UpdateSettings
 --- The settings an item takes from another.
 local SHARED = { ["Automatic Updates"] = true, ["Update Channel"] = true }
 
---- Every .c4z the repo builds, which `tools/preprocess.py` writes in.
---- @type string[]
-UpdateSettings.DRIVER_FILENAMES = {
-  -- #driver-filenames
-}
-
 --- Creates a new `UpdateSettings` instance.
 --- @return UpdateSettings updateSettings A new `UpdateSettings` instance.
 function UpdateSettings:new()
   return setmetatable({}, self)
 end
 
---- Sends a change made on this item to every other installed item of the repo's drivers, as `SET_UPDATE_SETTING`.
+--- Sends a change made on this item to every other installed item of `filenames`, as `SET_UPDATE_SETTING`.
 --- @param name string The setting.
 --- @param value string Its new value.
-function UpdateSettings:share(name, value)
+--- @param filenames? string[] The drivers that keep the setting the same: every driver the repo builds unless given.
+function UpdateSettings:share(name, value, filenames)
   local myId = C4:GetDeviceID()
-  for _, filename in ipairs(self.DRIVER_FILENAMES) do
+  for _, filename in ipairs(filenames or driverFilenames) do
     for id in pairs(C4:GetDevicesByC4iName(filename) or {}) do
       if tonumber(id) ~= myId then
         SendToDevice(tonumber(id), "SET_UPDATE_SETTING", { Name = name, Value = value })

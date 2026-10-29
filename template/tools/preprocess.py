@@ -16,7 +16,6 @@ from pathlib import Path
 def process_file(
     file_path: Path,
     conditions: set[str],
-    variant_map: dict[str, list[str]] = {},
     passthrough_unknown: bool = False,
     driver_names: list[str] | None = None,
 ) -> None:
@@ -26,7 +25,6 @@ def process_file(
     Args:
         file_path: Path to the file to process
         conditions: Set of conditions to check against, e.g., {"DRIVERCENTRAL"} or {"DRIVERCENTRAL", "DRIVERCENTRAL_DEV"}
-        variant_map: Dict mapping template names to generated variant names
         passthrough_unknown: If True, directives referencing conditions not in
             the conditions set are passed through unchanged (directive lines and
             content preserved). Used during variant expansion so that
@@ -79,8 +77,7 @@ def process_file(
     # pre-pass so directives inside the fragment are handled by the main loop.
     embed_pattern = re.compile(r"^\s*<!--\s*#embed\s+(\S+)\s*-->\s*$")
 
-    # Variant filenames pattern (Lua comment style)
-    variant_filenames_pattern = re.compile(r"^(\s*)--\s*#variant-filenames\s+(\w+)\s*$")
+    # One "<driver>.c4z", line per packaged driver (Lua comment style)
     driver_filenames_pattern = re.compile(r"^(\s*)--\s*#driver-filenames\s*$")
 
     ifdef_patterns = [
@@ -156,7 +153,6 @@ def process_file(
         endif_match = next(
             (m for pattern in endif_patterns if (m := pattern.match(line))), None
         )
-        variant_filenames_match = variant_filenames_pattern.match(line)
         driver_filenames_match = driver_filenames_pattern.match(line)
 
         # Check for #ifdef
@@ -207,20 +203,6 @@ def process_file(
                     output_lines.append(line)
             else:
                 including = parent_including if condition_stack else True
-            continue
-
-        # Check for #variant-filenames <template_name>
-        if variant_filenames_match and including:
-            indent = variant_filenames_match.group(1)
-            template_name = variant_filenames_match.group(2)
-            names = variant_map.get(template_name)
-            if names is None:
-                raise ValueError(
-                    f"Unknown variant template '{template_name}' in {file_path}. "
-                    f"Known templates: {list(variant_map.keys())}"
-                )
-            for name in names:
-                output_lines.append(f'{indent}"{name}.c4z",\n')
             continue
 
         # #driver-filenames: one line per driver the build packages
@@ -294,7 +276,7 @@ def compute_cross_product(dimensions: list[list[dict]]) -> list[dict]:
     return variants
 
 
-def expand_variants(drivers_dir: Path) -> dict[str, list[str]]:
+def expand_variants(drivers_dir: Path) -> None:
     """
     Expand driver template directories that contain a variants.json file.
 
@@ -309,12 +291,7 @@ def expand_variants(drivers_dir: Path) -> dict[str, list[str]]:
 
     Args:
         drivers_dir: Path to the drivers directory in the build output
-
-    Returns:
-        Dict mapping template driver names to lists of generated variant names.
-        e.g., {"esphome_fan": ["esphome_fan_1_speed", "esphome_fan_2_speed", ...]}
     """
-    variant_map = {}
 
     for driver_dir in sorted(drivers_dir.iterdir()):
         if not driver_dir.is_dir():
@@ -338,7 +315,6 @@ def expand_variants(drivers_dir: Path) -> dict[str, list[str]]:
 
         pdf_name = variants_config.get("pdf")
         driver_name = driver_dir.name
-        generated_names = []
         print(f"Expanding {len(variants)} variants for {driver_name}")
 
         # Separate empty-suffix variant from the rest. Non-empty suffixes must
@@ -358,7 +334,6 @@ def expand_variants(drivers_dir: Path) -> dict[str, list[str]]:
             conditions = set(variant.pop("conditions", []))
             variant_name = f"{driver_name}_{suffix}"
             variant_dir = drivers_dir / variant_name
-            generated_names.append(variant_name)
 
             # Copy the template directory to the variant directory
             shutil.copytree(driver_dir, variant_dir)
@@ -384,7 +359,6 @@ def expand_variants(drivers_dir: Path) -> dict[str, list[str]]:
         if empty_suffix_variant is not None:
             empty_suffix_variant.pop("suffix")
             conditions = set(empty_suffix_variant.pop("conditions", []))
-            generated_names.insert(0, driver_name)
             (driver_dir / "variants.json").unlink(missing_ok=True)
 
             for root, _, files in os.walk(driver_dir):
@@ -400,10 +374,6 @@ def expand_variants(drivers_dir: Path) -> dict[str, list[str]]:
             print(f"  Generated {driver_dir.name}")
         else:
             shutil.rmtree(driver_dir)
-
-        variant_map[driver_name] = generated_names
-
-    return variant_map
 
 
 def packaged_driver_names(drivers_dir: Path, conditions: set[str]) -> list[str]:
@@ -431,7 +401,6 @@ def packaged_driver_names(drivers_dir: Path, conditions: set[str]) -> list[str]:
 def process_directory(
     build_dir: Path,
     conditions: set[str],
-    variant_map: dict[str, list[str]] = {},
     driver_names: list[str] | None = None,
 ):
     """
@@ -440,7 +409,6 @@ def process_directory(
     Args:
         build_dir: Build directory
         conditions: Set of enabled conditions
-        variant_map: Dict mapping template names to generated variant names
         driver_names: Every driver the build packages, for `#driver-filenames`
     """
     # Copy and process all files and subdirectories
@@ -449,12 +417,10 @@ def process_directory(
 
         if build_item_path.is_dir():
             # Recursively copy and process subdirectories
-            process_directory(build_item_path, conditions, variant_map, driver_names)
+            process_directory(build_item_path, conditions, driver_names)
         else:
             # Process the file for conditional directives
-            process_file(
-                build_item_path, conditions, variant_map, driver_names=driver_names
-            )
+            process_file(build_item_path, conditions, driver_names=driver_names)
 
 
 def parse_env_file(path: Path) -> dict[str, str]:
@@ -662,12 +628,12 @@ def main():
         shutil.copytree(documentation_dir, build_dir / "documentation")
 
     # Expand template variants before processing conditionals
-    variant_map = expand_variants(build_dir / "drivers")
+    expand_variants(build_dir / "drivers")
 
     driver_names = packaged_driver_names(build_dir / "drivers", conditions)
 
     # Copy and process src directory
-    process_directory(build_dir, conditions, variant_map, driver_names)
+    process_directory(build_dir, conditions, driver_names)
 
     secrets = resolve_build_secrets(repo_root)
     if secrets and substitute_build_secrets(build_dir, secrets):

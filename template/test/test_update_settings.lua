@@ -8,11 +8,11 @@
 local T = require("testlib")
 
 require("c4_shim")
+package.loaded["lib.driver-filenames"] = { "a.c4z", "b.c4z", "c.c4z" } -- what the build writes in
 local updateSettings = require("lib.update-settings")
 
 -- Director's project: two items of one driver, one of another, and the repo's third driver not installed.
 local ITEMS = { ["a.c4z"] = { 601, 602 }, ["b.c4z"] = { 611 } }
-updateSettings.DRIVER_FILENAMES = { "a.c4z", "b.c4z", "c.c4z" } -- what the build writes in
 local me = 601
 function C4:GetDeviceID()
   return me
@@ -58,6 +58,13 @@ T.eq(
   "each other item is sent it, and this one is not",
   commands(),
   { "602 SET_UPDATE_SETTING Automatic Updates Off", "611 SET_UPDATE_SETTING Automatic Updates Off" }
+)
+sent = {}
+updateSettings:share("Automatic Updates", "Off", { "a.c4z" })
+T.eq(
+  "or of the drivers given, for a driver that stands alone",
+  sent,
+  { "602 SET_UPDATE_SETTING Automatic Updates Off" }
 )
 
 T.section("A setting another item sends is set, and goes no further")
