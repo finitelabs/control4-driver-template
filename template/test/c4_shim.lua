@@ -1929,13 +1929,19 @@ function C4:Hash(...)
   end
   options = options or {}
   local dataEncoding = string.upper(options.data_encoding or "")
-  if dataEncoding == "HEX" then
-    data = from_hex(data)
-  elseif dataEncoding == "BASE64" then
-    data = base64_decode_impl(data)
-  end
-  if data == nil then
-    return nil, 'Failed to decode the data: "Failed to decode"'
+  if dataEncoding == "HEX" or dataEncoding == "BASE64" then
+    if data == "" then
+      return nil, 'Failed to decode the data: "The specified encoded data was empty"'
+    end
+    if dataEncoding == "HEX" then
+      data = from_hex(data)
+    else
+      data = base64_decode_impl(data)
+    end
+    -- base64_decode_impl answers "" for bad input, as C4:Base64Decode does; Hash refuses it.
+    if data == nil or data == "" then
+      return nil, 'Failed to decode the data: "Failed to decode"'
+    end
   end
   local name = string.upper(algorithm)
   if not CONTROLLER_DIGESTS[name] then

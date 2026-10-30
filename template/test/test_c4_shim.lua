@@ -647,6 +647,26 @@ do
     { C4:Hash("SHA256", "zz", { data_encoding = "HEX" }) },
     { nil, 'Failed to decode the data: "Failed to decode"' }
   )
+  T.eq(
+    "odd-length HEX data is undecodable",
+    { C4:Hash("SHA256", "61626", { data_encoding = "HEX" }) },
+    { nil, 'Failed to decode the data: "Failed to decode"' }
+  )
+  -- C4:Base64Decode answers "" for these; Hash refuses them instead of hashing "".
+  for _, bad in ipairs({ "!!!!", "a!bc", "YWJ" }) do
+    T.eq(
+      "BASE64 data " .. bad .. " that decodes to nothing returns nil and the reason",
+      { C4:Hash("SHA256", bad, { data_encoding = "BASE64" }) },
+      { nil, 'Failed to decode the data: "Failed to decode"' }
+    )
+  end
+  for _, encoding in ipairs({ "HEX", "BASE64" }) do
+    T.eq(
+      "empty " .. encoding .. " data returns nil and its own reason",
+      { C4:Hash("SHA256", "", { data_encoding = encoding }) },
+      { nil, 'Failed to decode the data: "The specified encoded data was empty"' }
+    )
+  end
 
   if not C4.SHIM_HAS_CRYPTO then
     -- Same shape as the lib/values.lua skip above: visible, so it cannot read as
@@ -704,6 +724,14 @@ do
     T.eq("HEX data is decoded first", C4:Hash("SHA256", "616263", { data_encoding = "HEX" }), hex)
     T.eq("BASE64 data is decoded first", C4:Hash("SHA256", "YWJj", { data_encoding = "base64" }), hex)
     T.eq("an unknown data_encoding reads the data as is", C4:Hash("SHA256", "abc", { data_encoding = "FOO" }), hex)
+    T.eq("BASE64 data is trimmed", C4:Hash("SHA256", " YWJj ", { data_encoding = "BASE64" }), hex)
+    T.eq("a trailing partial BASE64 group is dropped", C4:Hash("SHA256", "YWJjZA", { data_encoding = "BASE64" }), hex)
+    T.eq("==== is one zero byte", C4:Hash("SHA256", "====", { data_encoding = "BASE64" }), C4:Hash("SHA256", "\0"))
+    T.eq(
+      "empty data with no decoding hashes the empty string",
+      C4:Hash("SHA256", "", { data_encoding = "NONE" }),
+      C4:Hash("SHA256", "")
+    )
 
     -- AES-128-CBC with PKCS7: 5 bytes pad up to one block, and the round trip
     -- recovers the plaintext exactly.
