@@ -620,13 +620,53 @@ end
 -- output, so a broken FFI binding fails instead of agreeing with itself.
 T.section("C4:Hash / C4:Encrypt / C4:Decrypt")
 do
-  -- Refusing an encoding is argument validation with no crypto in it, so it is
-  -- asserted outside the backend gate below, where it is the only part of the
-  -- contract a backend-less host can still observe. The one BASE64 hash caller
-  -- in the vendored tree is module/websocket.lua:605, which no test reaches.
-  local base64Digest, base64Err = C4:Hash("SHA1", "abc", { return_encoding = "BASE64" })
-  T.falsy("BASE64 is refused rather than returned as hex", base64Digest)
-  T.contains("and the reason names the encoding", base64Err, "BASE64")
+  -- Argument checks and the unknown-digest answer involve no crypto, so they are asserted outside
+  -- the backend gate below. Strings and raises are as a 4.3.0 controller gives them.
+  T.eq(
+    "an unknown digest returns nil and the controller's reason",
+    { C4:Hash("FOO", "abc") },
+    { nil, 'Failed to compute the hash: "The digest name argument specified an unknown message digest"' }
+  )
+  T.eq(
+    "an empty digest name returns nil and its own reason",
+    { C4:Hash("", "abc") },
+    { nil, 'The value of the "digest" parameter is invalid' }
+  )
+  T.raises("nil data raises", function()
+    C4:Hash("SHA256", nil)
+  end, "data should be a string")
+  T.raises("options that are not a table raise", function()
+    C4:Hash("SHA256", "abc", "HEX")
+  end, "options should be a table")
+  -- Omitting options is fine; passing nil for them raises on a controller.
+  T.raises("an explicit nil options argument raises", function()
+    C4:Hash("SHA256", "abc", nil)
+  end, "An unknown error occurred")
+  T.eq(
+    "undecodable HEX data returns nil and the reason",
+    { C4:Hash("SHA256", "zz", { data_encoding = "HEX" }) },
+    { nil, 'Failed to decode the data: "Failed to decode"' }
+  )
+  T.eq(
+    "odd-length HEX data is undecodable",
+    { C4:Hash("SHA256", "61626", { data_encoding = "HEX" }) },
+    { nil, 'Failed to decode the data: "Failed to decode"' }
+  )
+  -- C4:Base64Decode answers "" for these; Hash refuses them instead of hashing "".
+  for _, bad in ipairs({ "!!!!", "a!bc", "YWJ" }) do
+    T.eq(
+      "BASE64 data " .. bad .. " that decodes to nothing returns nil and the reason",
+      { C4:Hash("SHA256", bad, { data_encoding = "BASE64" }) },
+      { nil, 'Failed to decode the data: "Failed to decode"' }
+    )
+  end
+  for _, encoding in ipairs({ "HEX", "BASE64" }) do
+    T.eq(
+      "empty " .. encoding .. " data returns nil and its own reason",
+      { C4:Hash("SHA256", "", { data_encoding = encoding }) },
+      { nil, 'Failed to decode the data: "The specified encoded data was empty"' }
+    )
+  end
 
   if not C4.SHIM_HAS_CRYPTO then
     -- Same shape as the lib/values.lua skip above: visible, so it cannot read as
@@ -635,29 +675,63 @@ do
     -- the backend resolves, so the mock stays covered where it is developed.
     print("  skip no crypto backend on this host, digest and cipher assertions did not run")
   else
-    T.eq("MD5 of abc", C4:Hash("MD5", "abc"), "900150983CD24FB0D6963F7D28E17F72")
-    T.eq("SHA1 of abc", C4:Hash("SHA1", "abc"), "A9993E364706816ABA3E25717850C26C9CD0D89D")
-    T.eq("SHA256 of abc", C4:Hash("SHA256", "abc"), "BA7816BF8F01CFEA414140DE5DAE2223B00361A396177A9CB410FF61F20015AD")
+    T.eq("MD5 of abc", C4:Hash("MD5", "abc"), "900150983cd24fb0d6963f7d28e17f72")
+    T.eq("SHA1 of abc", C4:Hash("SHA1", "abc"), "a9993e364706816aba3e25717850c26c9cd0d89d")
+    T.eq("SHA224 of abc", C4:Hash("SHA224", "abc"), "23097d223405d8228642a477bda255b32aadbce4bda0b3f7e36c9da7")
+    T.eq("SHA256 of abc", C4:Hash("SHA256", "abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     T.eq(
       "SHA256 of the empty string",
       C4:Hash("SHA256", ""),
-      "E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855"
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    )
+    T.eq(
+      "SHA384 of abc",
+      C4:Hash("SHA384", "abc"),
+      "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605a43ff5bed8086072ba1e7cc2358baeca134c825a7"
+    )
+    T.eq(
+      "SHA512 of abc",
+      C4:Hash("SHA512", "abc"),
+      "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a"
+        .. "2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
     )
 
-    -- Hex is upper case and twice the digest length; drivers slice these by
-    -- byte offset, so the width is part of the contract.
-    T.check("hex is upper case", C4:Hash("SHA256", "abc"):upper() == C4:Hash("SHA256", "abc"))
-    T.check("SHA256 hex is 64 chars", #C4:Hash("SHA256", "abc") == 64)
+    -- A controller answers in lower-case hex, for HEX in any case and for an encoding it does not
+    -- know, and matches the digest name in any case.
+    local hex = C4:Hash("SHA256", "abc")
+    T.eq("HEX is the same hex", C4:Hash("SHA256", "abc", { return_encoding = "HEX" }), hex)
+    T.eq("so is hex", C4:Hash("SHA256", "abc", { return_encoding = "hex" }), hex)
+    T.eq("an unknown return_encoding gives hex", C4:Hash("SHA256", "abc", { return_encoding = "FOO" }), hex)
+    T.eq("empty options give hex", C4:Hash("SHA256", "abc", {}), hex)
+    T.eq("a lower-case digest name works", C4:Hash("sha256", "abc"), hex)
+    T.eq("a number is hashed as its string", C4:Hash("SHA256", 5), C4:Hash("SHA256", "5"))
 
     -- return_encoding NONE gives the raw digest, which is what lib/klap.lua
     -- slices for its keys. Hex would silently double every offset.
     local raw = C4:Hash("SHA256", "abc", { return_encoding = "NONE" })
     T.check("NONE returns 32 raw bytes", #raw == 32, #raw)
-    T.check("NONE is not the hex string", raw ~= C4:Hash("SHA256", "abc"))
-
-    -- An unsupported digest returns nil plus a reason rather than a wrong hash.
-    T.check("an unsupported algorithm returns nil", C4:Hash("SHA512", "abc") == nil)
-    T.contains("and says which one", select(2, C4:Hash("SHA512", "abc")), "SHA512")
+    T.eq("none in lower case is raw too", C4:Hash("SHA256", "abc", { return_encoding = "none" }), raw)
+    T.eq(
+      "BASE64 is the Base64 digest",
+      C4:Hash("SHA1", "abc", { return_encoding = "BASE64" }),
+      "qZk+NkcGgWq6PiVxeFDCbJzQ2J0="
+    )
+    T.eq(
+      "base64 in lower case too",
+      C4:Hash("SHA256", "abc", { return_encoding = "base64" }),
+      "ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0="
+    )
+    T.eq("HEX data is decoded first", C4:Hash("SHA256", "616263", { data_encoding = "HEX" }), hex)
+    T.eq("BASE64 data is decoded first", C4:Hash("SHA256", "YWJj", { data_encoding = "base64" }), hex)
+    T.eq("an unknown data_encoding reads the data as is", C4:Hash("SHA256", "abc", { data_encoding = "FOO" }), hex)
+    T.eq("BASE64 data is trimmed", C4:Hash("SHA256", " YWJj ", { data_encoding = "BASE64" }), hex)
+    T.eq("a trailing partial BASE64 group is dropped", C4:Hash("SHA256", "YWJjZA", { data_encoding = "BASE64" }), hex)
+    T.eq("==== is one zero byte", C4:Hash("SHA256", "====", { data_encoding = "BASE64" }), C4:Hash("SHA256", "\0"))
+    T.eq(
+      "empty data with no decoding hashes the empty string",
+      C4:Hash("SHA256", "", { data_encoding = "NONE" }),
+      C4:Hash("SHA256", "")
+    )
 
     -- AES-128-CBC with PKCS7: 5 bytes pad up to one block, and the round trip
     -- recovers the plaintext exactly.
