@@ -36,20 +36,27 @@ function Events:new()
   return instance
 end
 
---- Retrieves or adds an event. If the event does not exist, it creates a new one with a unique ID.
+--- Retrieves or adds an event. If the event does not exist, it creates a new one with a unique ID,
+--- or under `eventId` when one is given.
 --- An existing event whose name or description differs is updated under the same ID.
 --- @param namespace string The namespace of the event.
 --- @param key string The key of the event.
 --- @param name string The name of the event.
 --- @param description string The description of the event.
+--- @param eventId number? A fixed ID outside 10-999, where IDs are allocated: a driver.xml event
+--- made dynamic keeps its ID, and with it the programming bound to it.
 --- @return Event|nil event The event object or nil if the event could not be created.
-function Events:getOrAddEvent(namespace, key, name, description)
-  log:trace("Events:getOrAddEvent(%s, %s, %s, %s)", namespace, key, name, description)
+function Events:getOrAddEvent(namespace, key, name, description, eventId)
+  log:trace("Events:getOrAddEvent(%s, %s, %s, %s, %s)", namespace, key, name, description, eventId)
+  if eventId ~= nil and eventId >= EVENT_ID_START and eventId <= EVENT_ID_END then
+    log:error("Event %s/%s: fixed ID %s is in the allocated range", namespace, key, eventId)
+    return nil
+  end
   local events = self:getEvents()
   --- @type Event|nil
   local event = Select(events, namespace, key)
   if event == nil then
-    local eventId = self:_getNextEventId()
+    eventId = eventId or self:_getNextEventId()
     event = {
       eventId = eventId,
       name = name,
@@ -110,7 +117,8 @@ function Events:deleteEvent(namespace, key)
   self:_saveEvents(events)
 end
 
---- Restores all events from persistent storage. Ensures that all events are re-added and removes unknown events.
+--- Restores all events from persistent storage. Ensures that all events are re-added and removes unknown
+--- events from the allocated range; an ID outside it (driver.xml's, or a fixed one) is left alone.
 ---
 --- Call this from OnDriverLateInit: C4:AddEvent is unavailable earlier.
 function Events:restoreEvents()
