@@ -5,6 +5,9 @@
 require("drivers-common-public.global.handlers")
 require("drivers-common-public.global.timer")
 
+-- At Trace the dispatcher prints a property's value before its handler runs, and this property's value is the code.
+OPC.suppressDebug["Support Code"] = true
+
 --- @class SupportCode
 --- @field _secret string The build secret the day's code comes from.
 --- @field _open boolean Whether this code opened the Lua window.
@@ -39,12 +42,16 @@ end
 
 --- The code for a UTC day, without its dash.
 --- @param day string The day, `YYYY-MM-DD`.
---- @return string|nil code Ten Crockford Base32 characters, or nil when the secret is unset.
+--- @return string|nil code Ten Crockford Base32 characters, or nil when the secret is unset or C4:HMAC fails.
 function SupportCode:codeFor(day)
   if #self._secret < MIN_SECRET_LENGTH then
     return nil
   end
   local hex = C4:HMAC("SHA256", self._secret, "Support Code " .. day)
+  -- A raise would reach the dispatcher's error print, which shows the typed value.
+  if type(hex) ~= "string" then
+    return nil
+  end
   -- 13 hex digits are 52 bits, exact in a double; the code takes the low 50.
   local n = tonumber(hex:sub(1, 13), 16)
   local code = ""
