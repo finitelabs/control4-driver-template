@@ -156,11 +156,19 @@ T.contains("while the handler still ran", traced, "Support Code accepted")
 -- Measured on a 4.3.0 controller: a set through Director's API also arrives as this UIRequest, before the property
 -- changes.
 DEBUGPRINT = true
+local uirParams = { Name = "Support Code", Value = "VEAFA-RSBWM", iddevice = "726" }
 _, _, traced = T.capture(function()
-  UIRequest("UPDATE_PROPERTY", { Name = "Support Code", Value = "VEAFA-RSBWM", iddevice = "726" })
+  UIRequest("UPDATE_PROPERTY", uirParams)
+  ExecuteCommand("UPDATE_PROPERTY", { Name = "Support Code", Value = "VEAFA-RSBWM" })
+end)
+local _, _, otherTraced = T.capture(function()
+  UIRequest("UPDATE_PROPERTY", { Name = "Log Level", Value = "6 - Ultra", iddevice = "726" })
 end)
 DEBUGPRINT = false
-T.excludes("nor does the UIRequest the Director API sends with it", traced, "VEAFA")
+T.excludes("nor does the UIRequest the Director API sends with it, or the same command", traced, "VEAFA")
+T.contains("whose dump still names the property", traced, "Support Code")
+T.eq("and the handler is given the params as they came", uirParams.Value, "VEAFA-RSBWM")
+T.contains("another property's update still shows its value", otherTraced, "6 - Ultra")
 enter(sc, "VEAFA-RSBWM")
 local realHMAC = C4.HMAC
 C4.HMAC = function()

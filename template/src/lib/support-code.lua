@@ -5,10 +5,22 @@
 require("drivers-common-public.global.handlers")
 require("drivers-common-public.global.timer")
 
--- At Trace the dispatchers print a property's value, and this one is the code. A Director API set also arrives as an
--- unhandled UIRequest UPDATE_PROPERTY, whose dump can only be silenced for every property.
+-- At Trace the dispatchers print a property's value, and this one is the code.
 OPC.suppressDebug["Support Code"] = true
-UIR.suppressDebug["UPDATE_PROPERTY"] = true
+
+-- A Director API set also arrives as UIRequest UPDATE_PROPERTY, whose dump prints its params: mask this value there.
+local handlerDebug = HandlerDebug
+HandlerDebug = function(init, tParams, args)
+  if type(tParams) == "table" and tParams.Name == "Support Code" and tParams.Value ~= nil then
+    local masked = {}
+    for k, v in pairs(tParams) do
+      masked[k] = v
+    end
+    masked.Value = "****"
+    tParams = masked
+  end
+  return handlerDebug(init, tParams, args)
+end
 
 --- @class SupportCode
 --- @field _secret string The build secret the day's code comes from.
