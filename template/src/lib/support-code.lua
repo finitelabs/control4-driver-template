@@ -5,7 +5,7 @@
 require("drivers-common-public.global.handlers")
 require("drivers-common-public.global.timer")
 
--- At Trace the dispatchers print a property's value, and this one is the code.
+-- At 6 - Ultra with Print the dispatchers print a property's value, and this one is the code.
 OPC.suppressDebug["Support Code"] = true
 
 -- A Director API set also arrives as UIRequest UPDATE_PROPERTY, whose dump prints its params: mask this value there.

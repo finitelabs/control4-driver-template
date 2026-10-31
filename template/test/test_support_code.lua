@@ -153,8 +153,6 @@ end)
 DEBUGPRINT = false
 T.excludes("the dispatcher's Trace output leaves the value out", traced, "VEAFA")
 T.contains("while the handler still ran", traced, "Support Code accepted")
--- Measured on a 4.3.0 controller: a set through Director's API also arrives as this UIRequest, before the property
--- changes.
 DEBUGPRINT = true
 local uirParams = { Name = "Support Code", Value = "VEAFA-RSBWM", iddevice = "726" }
 _, _, traced = T.capture(function()
