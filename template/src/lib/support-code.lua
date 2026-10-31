@@ -78,6 +78,18 @@ function SupportCode:accepts(value)
   return false
 end
 
+--- Tells the driver's `onChange` callback, if any. A raise there would reach the dispatcher's error print, which shows
+--- the typed value, so it is caught and reported without it.
+--- @param open boolean Whether the window is now open.
+function SupportCode:_tell(open)
+  if self._onChange then
+    local ok, err = pcall(self._onChange, open)
+    if not ok then
+      print("The Support Code's onChange failed: " .. tostring(err))
+    end
+  end
+end
+
 --- Calls `callback(true)` each time the code opens the Lua window and `callback(false)` each time it closes, for a
 --- driver that shows more while it is open.
 --- @param callback fun(open: boolean)
@@ -107,9 +119,7 @@ function SupportCode:enter(value)
       self:close()
     end)
     print("Support Code accepted: the Lua window is open for an hour, or until the code is entered again")
-    if self._onChange then
-      self._onChange(true)
-    end
+    self:_tell(true)
   end
 end
 
@@ -119,9 +129,7 @@ function SupportCode:close()
   self._open = false
   C4:AllowExecute(false)
   print("The Lua window is closed")
-  if self._onChange then
-    self._onChange(false)
-  end
+  self:_tell(false)
 end
 
 return SupportCode:new()
