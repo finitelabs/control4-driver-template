@@ -12,6 +12,7 @@ JSON = require("JSON")
 
 local log = require("lib.logging")
 --#ifdef DRIVERCENTRAL
+local supportCode = require("lib.support-code")
 local updateSettings = require("lib.update-settings")
 --#endif
 
@@ -71,6 +72,11 @@ end
 function EC.SET_UPDATE_SETTING(params)
   log:trace("EC.SET_UPDATE_SETTING(%s)", params)
   updateSettings:take(params)
+end
+
+--- Not logged: the value is the code.
+function OPC.Support_Code(propertyValue)
+  supportCode:enter(propertyValue)
 end
 --#endif
 

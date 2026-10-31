@@ -114,6 +114,15 @@ Sets the logging mode. Default is `Off`.
 > `Log` and `Print and Log` write to the controller's log files. Set it back to
 > `Off` when you are done.
 
+<!-- #ifdef DRIVERCENTRAL -->
+
+#### Support Code
+
+Leave it blank unless Finite Labs support gives you a code: it opens Composer's
+Lua tab to this driver for an hour.
+
+<!-- #endif -->
+
 # <span style="color:#17BCF2">Support</span>
 
 If you have any questions or issues, you can file an issue on GitHub:

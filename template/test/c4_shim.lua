@@ -1963,6 +1963,81 @@ function C4:Hash(...)
   return to_hex(raw)
 end
 
+local HMAC_BLOCK_SIZES = { MD5 = 64, SHA1 = 64, SHA224 = 64, SHA256 = 64, SHA384 = 128, SHA512 = 128 }
+
+--- C4:HMAC as a 4.3.0 controller answers it: the result and a nil error, lower-case hex unless
+--- return_encoding is NONE or BASE64 (any case). An empty digest, key or data is refused before
+--- key_encoding or data_encoding (HEX or BASE64) decodes it; a number key or data is its string.
+function C4:HMAC(...)
+  local algorithm, key, data, options = ...
+  if type(key) == "number" then
+    key = tostring(key)
+  elseif type(key) ~= "string" then
+    error("key should be a string", 2)
+  end
+  if type(data) == "number" then
+    data = tostring(data)
+  elseif type(data) ~= "string" then
+    error("data should be a string", 2)
+  end
+  if options == nil and select("#", ...) >= 4 then
+    error("An unknown error occurred", 2)
+  elseif options ~= nil and type(options) ~= "table" then
+    error("options should be a table (or nil)", 2)
+  end
+  options = options or {}
+  if algorithm == "" then
+    return nil, 'The value of the "digest" parameter is invalid'
+  elseif key == "" then
+    return nil, 'The value of the "key" parameter is invalid'
+  elseif data == "" then
+    return nil, 'The value of the "data" parameter is invalid'
+  end
+  local decoded = { key = key, data = data }
+  for _, name in ipairs({ "key", "data" }) do
+    local encoding = string.upper(options[name .. "_encoding"] or "")
+    if encoding == "HEX" then
+      decoded[name] = from_hex(decoded[name])
+    elseif encoding == "BASE64" then
+      decoded[name] = base64_decode_impl(decoded[name])
+    end
+    if decoded[name] == nil or decoded[name] == "" then
+      return nil, "Failed to decode the " .. name .. ': "Failed to decode"'
+    end
+  end
+  local name = string.upper(algorithm)
+  if not CONTROLLER_DIGESTS[name] then
+    return nil, 'Failed to compute the HMAC: "The digest name argument specified an unknown message digest"'
+  end
+  if not crypto_backend then
+    return nil, "C4 shim: no crypto backend (requires LuaJIT + CommonCrypto/libcrypto)"
+  end
+  local blockSize = HMAC_BLOCK_SIZES[name]
+  if not blockSize then
+    return nil, "C4 shim: " .. algorithm .. " is a controller digest the shim does not compute"
+  end
+  local bit = require("bit")
+  key = decoded.key
+  if #key > blockSize then
+    key = crypto_backend.hash(name, key)
+  end
+  key = key .. string.rep("\0", blockSize - #key)
+  local inner, outer = {}, {}
+  for i = 1, blockSize do
+    inner[i] = string.char(bit.bxor(key:byte(i), 0x36))
+    outer[i] = string.char(bit.bxor(key:byte(i), 0x5c))
+  end
+  local raw =
+    crypto_backend.hash(name, table.concat(outer) .. crypto_backend.hash(name, table.concat(inner) .. decoded.data))
+  local returnEncoding = string.upper(options.return_encoding or "")
+  if returnEncoding == "NONE" then
+    return raw, nil
+  elseif returnEncoding == "BASE64" then
+    return base64_encode_impl(raw), nil
+  end
+  return to_hex(raw), nil
+end
+
 --- Decode an Encrypt/Decrypt argument by its *_encoding option: NONE (or absent)
 --- is raw bytes, BASE64 is decoded. Anything else is refused.
 local function decode_arg(value, encoding)
