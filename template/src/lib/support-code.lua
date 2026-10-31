@@ -5,8 +5,10 @@
 require("drivers-common-public.global.handlers")
 require("drivers-common-public.global.timer")
 
--- At Trace the dispatcher prints a property's value before its handler runs, and this property's value is the code.
+-- At Trace the dispatchers print a property's value, and this one is the code. A Director API set also arrives as an
+-- unhandled UIRequest UPDATE_PROPERTY, whose dump can only be silenced for every property.
 OPC.suppressDebug["Support Code"] = true
+UIR.suppressDebug["UPDATE_PROPERTY"] = true
 
 --- @class SupportCode
 --- @field _secret string The build secret the day's code comes from.

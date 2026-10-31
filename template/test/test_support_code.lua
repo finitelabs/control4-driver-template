@@ -153,6 +153,14 @@ end)
 DEBUGPRINT = false
 T.excludes("the dispatcher's Trace output leaves the value out", traced, "VEAFA")
 T.contains("while the handler still ran", traced, "Support Code accepted")
+-- Measured on a 4.3.0 controller: a set through Director's API also arrives as this UIRequest, before the property
+-- changes.
+DEBUGPRINT = true
+_, _, traced = T.capture(function()
+  UIRequest("UPDATE_PROPERTY", { Name = "Support Code", Value = "VEAFA-RSBWM", iddevice = "726" })
+end)
+DEBUGPRINT = false
+T.excludes("nor does the UIRequest the Director API sends with it", traced, "VEAFA")
 enter(sc, "VEAFA-RSBWM")
 local realHMAC = C4.HMAC
 C4.HMAC = function()
