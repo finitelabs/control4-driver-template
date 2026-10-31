@@ -537,6 +537,7 @@ end of its Driver Settings:
   <name>Support Code</name>
   <type>STRING</type>
   <default/>
+  <description>Enter only a code from Finite Labs support. It opens the Lua window for an hour.</description>
   <password>true</password>
 </property>
 <!-- #endif -->
@@ -556,4 +557,5 @@ end
 ```
 
 The library clears the property at once and prints its answer to the Lua output
-whatever Log Mode is.
+whatever Log Mode is. A driver that shows more while the window is open (extra
+properties or log levels) passes `supportCode:onChange(function(open) ... end)`.

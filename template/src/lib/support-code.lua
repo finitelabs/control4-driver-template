@@ -8,6 +8,7 @@ require("drivers-common-public.global.timer")
 --- @class SupportCode
 --- @field _secret string The build secret the day's code comes from.
 --- @field _open boolean Whether this code opened the Lua window.
+--- @field _onChange? fun(open: boolean) Called as the code opens and closes the window.
 local SupportCode = {}
 SupportCode.__index = SupportCode
 
@@ -70,6 +71,13 @@ function SupportCode:accepts(value)
   return false
 end
 
+--- Calls `callback(true)` each time the code opens the Lua window and `callback(false)` each time it closes, for a
+--- driver that shows more while it is open.
+--- @param callback fun(open: boolean)
+function SupportCode:onChange(callback)
+  self._onChange = callback
+end
+
 --- Takes what was typed into the Support Code property. The property is cleared at once, so the code is never left
 --- in the project. Today's code opens the Lua window for an hour, or closes it while open.
 --- @param value string The property's value.
@@ -92,6 +100,9 @@ function SupportCode:enter(value)
       self:close()
     end)
     print("Support Code accepted: the Lua window is open for an hour, or until the code is entered again")
+    if self._onChange then
+      self._onChange(true)
+    end
   end
 end
 
@@ -101,6 +112,9 @@ function SupportCode:close()
   self._open = false
   C4:AllowExecute(false)
   print("The Lua window is closed")
+  if self._onChange then
+    self._onChange(false)
+  end
 end
 
 return SupportCode:new()

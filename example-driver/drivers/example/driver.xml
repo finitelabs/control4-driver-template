@@ -88,6 +88,7 @@
         <name>Support Code</name>
         <type>STRING</type>
         <default/>
+        <description>Enter only a code from Finite Labs support. It opens the Lua window for an hour.</description>
         <password>true</password>
       </property>
       <!-- #endif -->

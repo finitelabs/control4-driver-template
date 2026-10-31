@@ -118,9 +118,8 @@ Sets the logging mode. Default is `Off`.
 
 #### Support Code
 
-Leave it blank. Finite Labs support may give you a code to enter here while
-helping with an issue: it lets Composer's Lua tab run code in this driver for an
-hour.
+Leave it blank unless Finite Labs support gives you a code: it opens Composer's
+Lua tab to this driver for an hour.
 
 <!-- #endif -->
 

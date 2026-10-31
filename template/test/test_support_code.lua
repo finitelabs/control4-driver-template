@@ -124,5 +124,21 @@ end
 output = enter(supportCode, "VEAFA-RSBWM")
 T.eq("nor does the library's own outside a DriverCentral build", allowed, {})
 
+T.section("A driver can follow the window")
+allowed = {}
+local told = {}
+sc:onChange(function(open)
+  told[#told + 1] = open
+end)
+enter(sc, "VEAFA-RSBWM")
+T.eq("it is told when the code opens it", told, { true })
+enter(sc, "VEAFA-RSBWM")
+T.eq("and when the code closes it", told, { true, false })
+enter(sc, "VEAFA-RSBWM")
+anHourOn()
+T.eq("and when the hour does", told, { true, false, true, false })
+enter(sc, "nonsense")
+T.eq("but not for a wrong code", told, { true, false, true, false })
+
 os.time = realTime -- luacheck: ignore
 T.finish()
