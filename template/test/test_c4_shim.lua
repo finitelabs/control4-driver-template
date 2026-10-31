@@ -813,6 +813,109 @@ do
 end
 
 --------------------------------------------------------------------------------
+-- Every answer here was measured on a 4.3.0 controller; the long-key vectors are
+-- also RFC 4231's test case 6.
+T.section("C4:HMAC")
+do
+  local fox = "The quick brown fox jumps over the lazy dog"
+  T.eq(
+    "an unknown digest returns nil and the controller's reason",
+    { C4:HMAC("NOPE", "key", "abc") },
+    { nil, 'Failed to compute the HMAC: "The digest name argument specified an unknown message digest"' }
+  )
+  T.eq(
+    "an empty digest is invalid",
+    { C4:HMAC("", "key", "abc") },
+    { nil, 'The value of the "digest" parameter is invalid' }
+  )
+  T.eq(
+    "an empty key is invalid",
+    { C4:HMAC("SHA256", "", "abc") },
+    { nil, 'The value of the "key" parameter is invalid' }
+  )
+  T.eq(
+    "empty data is invalid",
+    { C4:HMAC("SHA256", "key", "") },
+    { nil, 'The value of the "data" parameter is invalid' }
+  )
+  T.eq(
+    "even when it was to be decoded",
+    { C4:HMAC("SHA256", "key", "", { data_encoding = "HEX" }) },
+    { nil, 'The value of the "data" parameter is invalid' }
+  )
+  T.eq(
+    "an undecodable key returns nil and the reason",
+    { C4:HMAC("SHA256", "!!!!", "abc", { key_encoding = "BASE64" }) },
+    { nil, 'Failed to decode the key: "Failed to decode"' }
+  )
+  T.eq(
+    "so does undecodable data",
+    { C4:HMAC("SHA256", "key", "zz", { data_encoding = "HEX" }) },
+    { nil, 'Failed to decode the data: "Failed to decode"' }
+  )
+  T.raises("a nil key raises", function()
+    C4:HMAC("SHA256", nil, "abc")
+  end, "key should be a string")
+  T.raises("nil data raises", function()
+    C4:HMAC("SHA256", "key", nil)
+  end, "data should be a string")
+  T.raises("options that are not a table raise", function()
+    C4:HMAC("SHA256", "key", "abc", "x")
+  end, "options should be a table")
+  T.raises("an explicit nil options argument raises", function()
+    C4:HMAC("SHA256", "key", "abc", nil)
+  end, "An unknown error occurred")
+
+  if not C4.SHIM_HAS_CRYPTO then
+    print("  skip no crypto backend on this host, HMAC digests did not run")
+  else
+    local hex = "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
+    T.eq("SHA256 is lower-case hex and a nil error", { C4:HMAC("SHA256", "key", fox) }, { hex, nil })
+    T.eq("HEX is the same hex", C4:HMAC("SHA256", "key", fox, { return_encoding = "HEX" }), hex)
+    T.eq(
+      "base64 in any case is the Base64 digest",
+      C4:HMAC("sha256", "key", fox, { return_encoding = "base64" }),
+      "97yD9DBThCSxMpjmqm+xQ+9NWaFJRhdZl0edvC0aPNg="
+    )
+    local abc = "9c196e32dc0175f86f4b1cb89289d6619de6bee699e4c378e68309ed97a1a6ab"
+    T.eq("an unknown return_encoding gives hex", C4:HMAC("SHA256", "key", "abc", { return_encoding = "X" }), abc)
+    T.check("NONE returns 32 raw bytes", #C4:HMAC("SHA256", "key", "abc", { return_encoding = "NONE" }) == 32)
+    T.eq("a HEX key is decoded first", C4:HMAC("SHA256", "6b6579", "abc", { key_encoding = "HEX" }), abc)
+    T.eq("so is a BASE64 key", C4:HMAC("SHA256", "a2V5", "abc", { key_encoding = "BASE64" }), abc)
+    T.eq("and hex data", C4:HMAC("SHA256", "key", "616263", { data_encoding = "hex" }), abc)
+    T.eq(
+      "a number key is its string",
+      C4:HMAC("SHA256", 7, "abc"),
+      "49e7cff1c83779286a9758b5f6c1ea57fca1bcce7aad655cae005a75c61e6c66"
+    )
+    T.eq(
+      "and number data",
+      C4:HMAC("SHA256", "key", 5),
+      "ab20d8bbe394c193b6182ca459324966b8112064e0eb3dc53c1ac80321ffc712"
+    )
+    T.eq("SHA1", C4:HMAC("SHA1", "key", "abc"), "4fd0b215276ef12f2b3e4c8ecac2811498b656fc")
+    T.eq(
+      "SHA512",
+      C4:HMAC("SHA512", "key", "abc"),
+      "3926a207c8c42b0c41792cbd3e1a1aaaf5f7a25704f62dfc939c4987dd7ce060"
+        .. "009c5bb1c2447355b3216f10b537e9afa7b64a4e5391b0d631172d07939e087a"
+    )
+    local longKey, longData = string.rep("\170", 131), "Test Using Larger Than Block-Size Key - Hash Key First"
+    T.eq(
+      "a key longer than the block is hashed first",
+      C4:HMAC("SHA256", longKey, longData),
+      "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
+    )
+    T.eq(
+      "with SHA512's 128-byte block too",
+      C4:HMAC("SHA512", longKey, longData),
+      "80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f352"
+        .. "6b56d037e05f2598bd0fd2215d6a1e5295e64f73f63f0aec8b915a985d786598"
+    )
+  end
+end
+
+--------------------------------------------------------------------------------
 T.section("C4:GetTemperatureScale")
 --------------------------------------------------------------------------------
 

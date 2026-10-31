@@ -83,6 +83,14 @@
           <item>Print and Log</item>
         </items>
       </property>
+      <!-- #ifdef DRIVERCENTRAL -->
+      <property>
+        <name>Support Code</name>
+        <type>STRING</type>
+        <default/>
+        <password>true</password>
+      </property>
+      <!-- #endif -->
     </properties>
   </config>
   <capabilities/>
