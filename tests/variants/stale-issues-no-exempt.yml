@@ -1,0 +1,2 @@
+# stale.yml with no exempt authors, which has to render fromJSON('[]').
+stale_issues: true

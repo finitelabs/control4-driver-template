@@ -1,0 +1,2 @@
+# expect: is not a check name
+extra_required_checks: "build;rm"

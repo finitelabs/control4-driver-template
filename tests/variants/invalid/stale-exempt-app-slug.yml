@@ -1,0 +1,3 @@
+# expect: is not a GitHub login
+stale_issues: true
+stale_exempt_authors: app/ci-app

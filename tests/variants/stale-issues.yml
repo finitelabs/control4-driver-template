@@ -1,0 +1,5 @@
+# stale.yml with an exempt list, as JSON, and its own days.
+stale_issues: true
+stale_exempt_authors: octocat ci-app[bot]
+stale_days: 45
+stale_close_days: 10
