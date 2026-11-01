@@ -67,6 +67,7 @@ tools/github-setup
 tools/package.py
 tools/preprocess.py
 tools/support_code.py
+tools/test_package.py
 tools/test_preprocess.py
 tools/test_support_code.py
 vendor/JSON.lua
