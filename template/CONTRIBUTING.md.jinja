@@ -296,6 +296,9 @@ author, and the generated `README.md` too. CI fails the build if it finishes
 with a dirty tree, so build on a clean checkout and commit whatever the
 formatter changes.
 
+After the build CI runs `make verify-pdfs`, `make verify-version` (on a tag
+build) and `make verify-clean`, which run the same locally.
+
 ### Distributions
 
 Builds are configured for these distributions: `{{ distributions }}`

@@ -52,7 +52,7 @@ jobs:
         run: pip install copier
 
       - name: Every combination in tests/template-renders/invalid fails to render
-        run: python3 tests/template_renders.py invalid
+        run: make invalid-combinations
 
   render:
     name: render (${{ matrix.name }})
@@ -62,6 +62,9 @@ jobs:
       fail-fast: false
       matrix:
         name: ${{ fromJSON(needs.template-renders.outputs.names) }}
+    # make's NAME: the render the Makefile's targets make and check.
+    env:
+      NAME: ${{ matrix.name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -87,79 +90,24 @@ jobs:
       - name: Install copier
         run: pip install copier
 
-      # Without --vcs-ref HEAD copier renders the newest tag, not this checkout.
       - name: Render
-        env:
-          NAME: ${{ matrix.name }}
-        run: |
-          python3 tests/template_renders.py answers "$NAME" > "$RUNNER_TEMP/answers.yml"
-          copier copy --trust --defaults --vcs-ref HEAD --data-file "$RUNNER_TEMP/answers.yml" \
-            . "$RUNNER_TEMP/render"
+        run: make render
 
       - name: The render matches its snapshot
-        env:
-          NAME: ${{ matrix.name }}
-        run: python3 tests/template_renders.py check "$NAME" "$RUNNER_TEMP/render"
+        run: make render-snapshot
 
-      # make test only loads modules that call a drivers-common-public global.
       - name: Every rendered src/lib module loads
-        working-directory: ${{ runner.temp }}/render
-        run: |
-          LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
-          luajit -e '
-            require("c4_shim")
-            local failed = {}
-            local p = io.popen("ls src/lib")
-            for name in p:lines() do
-              local mod = name:match("^(.*)%.lua$")
-              if mod then
-                local ok, err = pcall(require, "lib." .. mod)
-                if not ok then
-                  failed[#failed + 1] = mod .. ": " .. tostring(err)
-                end
-              end
-            end
-            p:close()
-            if #failed > 0 then
-              io.stderr:write("modules that do not load:\n  " .. table.concat(failed, "\n  ") .. "\n")
-              os.exit(1)
-            end
-            print("every src/lib module loads")
-          '
+        run: make render-lib-loads
 
-      # test_c4_shim.lua skips its crypto assertions when no FFI backend loads,
-      # so on a runner without one `make test` would go green having tested
-      # nothing. The template is where that mock is developed, so require the
-      # backend here; driver repos keep the skip.
       - name: The FFI crypto backend resolves
-        working-directory: ${{ runner.temp }}/render
-        run: |
-          LUA_PATH="$PWD/test/?.lua;$PWD/src/?.lua;$PWD/src/?/init.lua;$PWD/vendor/?.lua;$PWD/vendor/?/init.lua;;" \
-          luajit -e '
-            require("c4_shim")
-            if not C4.SHIM_HAS_CRYPTO then
-              io.stderr:write("no FFI crypto backend: the c4_shim crypto assertions would have skipped\n")
-              os.exit(1)
-            end
-            print("FFI crypto backend resolved")
-          '
+        run: make render-crypto
 
       - name: make test
-        working-directory: ${{ runner.temp }}/render
-        run: make test
+        run: make in-render-test
 
       - name: Formatted
-        working-directory: ${{ runner.temp }}/render
-        run: |
-          stylua --check \
-            --indent-type Spaces --column-width 120 --line-endings Unix \
-            --indent-width 2 --quote-style AutoPreferDouble \
-            src test tools vendor
-          pipx run black --check tools
-          pipx run --spec 'mdformat' --spec 'mdformat-gfm' mdformat --check --wrap 80 *.md
+        run: make render-formatted
 
-  # A render has no driver, so `make build` would build nothing. example-driver/
-  # (repo root, outside template/, so copier never renders it) supplies one.
   build:
     name: build (${{ matrix.name }})
     needs: template-renders
@@ -168,6 +116,9 @@ jobs:
       fail-fast: false
       matrix:
         name: ${{ fromJSON(needs.template-renders.outputs.names) }}
+    # make's NAME: the render the Makefile's targets make and check.
+    env:
+      NAME: ${{ matrix.name }}
 
     steps:
       - uses: actions/checkout@v4
@@ -202,184 +153,28 @@ jobs:
         run: pip install copier
 
       - name: Render
-        env:
-          NAME: ${{ matrix.name }}
-        run: |
-          python3 tests/template_renders.py answers "$NAME" > "$RUNNER_TEMP/answers.yml"
-          copier copy --trust --defaults --vcs-ref HEAD --data-file "$RUNNER_TEMP/answers.yml" \
-            . "$RUNNER_TEMP/render"
+        run: make render
 
       - name: Add example driver
-        env:
-          NAME: ${{ matrix.name }}
-        run: |
-          cp -r example-driver/drivers "$RUNNER_TEMP/render/drivers"
-          variants="tests/template-renders/$NAME.example-variants.json"
-          if [ -f "$variants" ]; then
-            cp "$variants" "$RUNNER_TEMP/render/drivers/example/variants.json"
-          fi
+        run: make render-example
 
       - name: Initialize project (make init)
-        working-directory: ${{ runner.temp }}/render
-        run: make init
+        run: make in-render-init
 
       - name: Check formatting (make check)
-        working-directory: ${{ runner.temp }}/render
-        run: make check
+        run: make in-render-check
 
       - name: Test (make test)
-        working-directory: ${{ runner.temp }}/render
-        run: make test
+        run: make in-render-test
 
-      # Build, commit, build again: a dirty tree on the second build means
-      # `make build` is not idempotent.
       - name: Build is idempotent (make build)
-        working-directory: ${{ runner.temp }}/render
-        run: |
-          git init -q
-          git config user.email ci@example.com
-          git config user.name ci
-          make build
-          git add -A
-          git commit -q -m "first build"
-          make build
-          git diff --exit-code || {
-            echo "::error::make build is not idempotent (tracked files changed on rebuild)"
-            exit 1
-          }
-          UNTRACKED=$(git ls-files --others --exclude-standard)
-          if [ -n "$UNTRACKED" ]; then
-            echo "::error::Untracked files after rebuild:"
-            echo "$UNTRACKED"
-            exit 1
-          fi
+        run: make build-idempotent
 
-      # A README image that docs-readme failed to copy breaks nothing else in
-      # the build, so check every link resolves.
       - name: README images resolve
-        working-directory: ${{ runner.temp }}/render
-        run: |
-          refs=$(grep -oE '\./images/[^")[:space:]]+' README.md | sort -u)
-          if [ -z "$refs" ]; then
-            echo "::error::README.md links no images, so this check tests nothing"
-            exit 1
-          fi
-          missing=0
-          for ref in $refs; do
-            if [ ! -f "$ref" ]; then
-              echo "::error::README.md links $ref, which does not exist"
-              missing=1
-            fi
-          done
-          exit "$missing"
+        run: make build-readme-images
 
       - name: A build with secrets is encrypted
-        working-directory: ${{ runner.temp }}/render
-        run: |
-          set -euo pipefail
-          DISTRIBUTIONS=$(yq -r .distributions .copier-answers.yml)
-          printf '# CI probe\nEXAMPLE_SECRET=\n' > .env.default
-          printf '\nEXAMPLE_BUILD_SECRET = "__EXAMPLE_SECRET__"\n' >> drivers/example/driver.lua
-          EXAMPLE_SECRET=ci-secret-value make build-nodocs
-          for build in $DISTRIBUTIONS; do
-            for c4z in "dist/$build/c4z"/*.c4z; do
-              unzip -l "$c4z" | grep -q 'driver\.lua\.encrypted' \
-                || { echo "::error::$c4z has no driver.lua.encrypted"; exit 1; }
-              unzip -p "$c4z" driver.xml | grep -q 'encryption="2"' \
-                || { echo "::error::$c4z driver.xml does not ask for encryption"; exit 1; }
-              if unzip -p "$c4z" | grep -aq ci-secret-value; then
-                echo "::error::$c4z holds the secret in plain text"; exit 1
-              fi
-            done
-            if [ -e "dist/$build/source" ]; then
-              echo "::error::dist/$build/source was kept with a secret in it"; exit 1
-            fi
-          done
-          git checkout -- drivers/example/driver.lua
-          rm .env.default
+        run: make build-encrypted
 
-      # The wiring CONTRIBUTING.md gives, on the example driver, built with fake secrets.
       - name: Cloud Monitoring reaches only the DriverCentral build
-        working-directory: ${{ runner.temp }}/render
-        run: |
-          set -euo pipefail
-          if [ ! -f src/lib/diagnostics.lua ]; then echo "This render has no lib.diagnostics."; exit 0; fi
-          DISTRIBUTIONS=$(yq -r .distributions .copier-answers.yml)
-          printf '# CI probe\nINFLUXDB_URL=\nINFLUXDB_TOKEN=\nINFLUXDB_METRICS_DB=\nINFLUXDB_LOGS_DB=\n' > .env.default
-          python3 - <<'EOF'
-          from pathlib import Path
-          xml = Path("drivers/example/driver.xml")
-          s = xml.read_text()
-          s = s.replace("    <properties>\n", """    <properties>
-                <!-- #ifdef DRIVERCENTRAL -->
-                <property>
-                  <name>Cloud Monitoring</name>
-                  <type>LIST</type>
-                  <default>Enabled</default>
-                  <items>
-                    <item>Disabled</item>
-                    <item>Enabled</item>
-                  </items>
-                </property>
-                <!-- #endif -->
-          """, 1)
-          s = s.replace("    </properties>\n", """    </properties>
-              <!-- #ifdef DRIVERCENTRAL -->
-              <actions>
-                <action>
-                  <name>Diagnostics Snapshot</name>
-                  <command>DiagnosticsSnapshot</command>
-                </action>
-              </actions>
-              <!-- #endif -->
-          """, 1)
-          xml.write_text(s)
-          with open("drivers/example/driver.lua", "a") as lua:
-              lua.write("""
-          --#ifdef DRIVERCENTRAL
-          local diagnostics = require("lib.diagnostics")
-          function OPC.Cloud_Monitoring(propertyValue)
-            diagnostics:setEnabled(propertyValue == "Enabled")
-          end
-          function EC.DiagnosticsSnapshot()
-            diagnostics:dumpSnapshot()
-          end
-          --#endif
-          """)
-          EOF
-          INFLUXDB_URL=https://influx.example.test INFLUXDB_TOKEN=ci-token-value \
-            INFLUXDB_METRICS_DB=ci_metrics_db INFLUXDB_LOGS_DB=ci_logs_db make build-nodocs
-          # Unpacked rather than piped: grep -q exits at its first match, and under
-          # pipefail the unzip it cut off fails the step.
-          unpack() { rm -rf unpacked && mkdir unpacked && unzip -q "$1" -d unpacked; }
-          for build in $DISTRIBUTIONS; do
-            packages=(dist/"$build"/c4z/*.c4z)
-            [ -e "${packages[0]}" ] || { echo "::error::the $build build made no package"; exit 1; }
-            for c4z in "${packages[@]}"; do
-              unpack "$c4z"
-              case "$build" in
-                drivercentral*)
-                  [ -f unpacked/driver.lua.encrypted ] && [ ! -e unpacked/driver.lua ] \
-                    || { echo "::error::$c4z is not encrypted"; exit 1; }
-                  grep -q '<name>Cloud Monitoring</name>' unpacked/driver.xml \
-                    || { echo "::error::$c4z has no Cloud Monitoring property"; exit 1; }
-                  if grep -raqE 'ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
-                    echo "::error::$c4z holds a secret in plain text"; exit 1
-                  fi
-                  ;;
-                *)
-                  [ -f unpacked/driver.lua ] && [ ! -e unpacked/driver.lua.encrypted ] \
-                    || { echo "::error::$c4z is encrypted: a Cloud Monitoring secret reached the $build build"; exit 1; }
-                  if grep -raqE 'lib\.diagnostics|Cloud Monitoring|Diagnostics Snapshot|INFLUXDB_(URL|TOKEN|METRICS_DB|LOGS_DB)|influx\.example|ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
-                    echo "::error::$c4z carries Cloud Monitoring"; exit 1
-                  fi
-                  ;;
-              esac
-            done
-          done
-          grep -q 'local INFLUXDB_TOKEN = "ci-token-value"' build/drivercentral/src/lib/diagnostics.lua \
-            || { echo "::error::the DriverCentral build did not substitute the token"; exit 1; }
-          rm -rf unpacked
-          echo "Cloud Monitoring: DriverCentral encrypted with the values, OSS plain without it"
-          git checkout -- drivers/example
-          rm .env.default
+        run: make build-cloud-monitoring

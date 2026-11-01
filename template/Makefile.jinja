@@ -249,6 +249,30 @@ zip: $(VENV_STAMP) ## Zip the c4z/ and docs/ subfolders per distribution
 				"$(PROJECT_NAME).zip" c4z docs); \
 	done
 
+# ─── Verify ───────────────────────────────────────────────────────────────────
+# What CI checks once `make build` has run. On a tag build CI sets DRIVER_VERSION
+# from the tag (tools/package.py tag-version).
+
+.PHONY: verify-pdfs verify-version verify-clean
+verify-pdfs: ## After a build: fail unless every distribution made a PDF
+	@for build in $(DISTRIBUTIONS); do \
+		python3 tools/package.py check-pdfs "$$build" || exit 1; \
+	done
+
+verify-version: ## After a build: fail unless every .c4z is at DRIVER_VERSION
+	@for build in $(DISTRIBUTIONS); do \
+		python3 tools/package.py check-version "$$build" "$(DRIVER_VERSION)" || exit 1; \
+	done
+
+verify-clean: ## After a build: fail if it changed a tracked file or left an untracked one
+	@git diff --exit-code || { echo "::error::Uncommitted changes after build"; exit 1; }
+	@untracked=$$(git ls-files --others --exclude-standard); \
+	if [ -n "$$untracked" ]; then \
+		echo "::error::Untracked files after build:"; \
+		echo "$$untracked"; \
+		exit 1; \
+	fi
+
 # ─── Test ─────────────────────────────────────────────────────────────────────
 
 .PHONY: test

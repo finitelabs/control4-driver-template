@@ -19,6 +19,17 @@ Subcommands:
       driver.lua.encrypted and no driver.lua, with a driver.xml that asks for
       encryption="2". Checks a DriverCentral build, or any build preprocess.py
       encrypted (build/<build>/.encrypted); passes any other build unchecked.
+
+  package.py tag-version <tag>
+      Print DRIVER_VERSION=YYYYMMDD from a vYYYYMMDD or vYYYYMMDD-suffix tag,
+      for CI's $GITHUB_ENV. Exit 1 on any other tag.
+
+  package.py check-pdfs <build>
+      Exit 1 unless dist/<build>/docs holds at least one PDF.
+
+  package.py check-version <build> <version>
+      Exit 1 unless dist/<build>/c4z holds a .c4z and every one's driver.xml
+      says <version>.
 """
 
 import re
@@ -106,6 +117,60 @@ def check_encrypted(build: str) -> int:
     return 0
 
 
+TAG_VERSION = re.compile(
+    r"v([0-9]{4}(?:0[1-9]|1[0-2])(?:0[1-9]|[12][0-9]|3[01]))(?:-.+)?", re.S
+)
+
+
+def tag_version(tag: str) -> int:
+    match = TAG_VERSION.fullmatch(tag)
+    if not match:
+        print(
+            f"::error::Tag {tag} is not vYYYYMMDD or vYYYYMMDD-suffix, so it cannot give the driver version.",
+            file=sys.stderr,
+        )
+        return 1
+    print(f"DRIVER_VERSION={match.group(1)}")
+    print(f"Stamping driver version {match.group(1)} from tag {tag}.", file=sys.stderr)
+    return 0
+
+
+def check_pdfs(build: str) -> int:
+    docs = Path("dist") / build / "docs"
+    count = sum(1 for _ in docs.rglob("*.pdf"))
+    if count == 0:
+        print(f"::error::No PDF files found in {docs}")
+        if docs.is_dir():
+            for entry in sorted(docs.iterdir()):
+                print(f"  {entry.name}")
+        else:
+            print(f"  {docs} does not exist")
+        return 1
+    print(f"Found {count} PDF(s) in {docs}")
+    return 0
+
+
+def c4z_version(c4z: Path) -> str:
+    with zipfile.ZipFile(c4z) as zf:
+        xml = zf.read("driver.xml").decode()
+    match = re.search(r"<version>(.*?)</version>", xml, re.S)
+    return match.group(1) if match else ""
+
+
+def check_version(build: str, version: str) -> int:
+    packages = sorted((Path("dist") / build / "c4z").glob("*.c4z"))
+    if not packages:
+        print(f"::error::dist/{build}/c4z has no package to check")
+        return 1
+    for c4z in packages:
+        got = c4z_version(c4z)
+        if got != version:
+            print(f"::error::{c4z} has driver version '{got}', expected '{version}'")
+            return 1
+        print(f"{c4z}: {got}")
+    return 0
+
+
 def main() -> int:
     args = sys.argv[1:]
     cmd, rest = (args[0], args[1:]) if args else ("", [])
@@ -117,6 +182,12 @@ def main() -> int:
         make_zip(Path(rest[0]).resolve(), rest[1:])
     elif cmd == "check-encrypted" and len(rest) == 1:
         return check_encrypted(rest[0])
+    elif cmd == "tag-version" and len(rest) == 1:
+        return tag_version(rest[0])
+    elif cmd == "check-pdfs" and len(rest) == 1:
+        return check_pdfs(rest[0])
+    elif cmd == "check-version" and len(rest) == 2:
+        return check_version(rest[0], rest[1])
     else:
         print(__doc__, file=sys.stderr)
         return 1

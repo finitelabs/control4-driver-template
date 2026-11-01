@@ -8,7 +8,8 @@ Run with an interpreter that has copier (and so PyYAML), e.g. `uvx --from copier
     tests/template_renders.py                  make every template render and check it, and check every invalid one fails
     tests/template_renders.py update           rewrite every <name>.files from a fresh render (make snapshots)
     tests/template_renders.py matrix           the render names, as JSON, for CI's matrix
-    tests/template_renders.py answers NAME     the render's answers, fixtures included, for copier copy --data-file
+    tests/template_renders.py render NAME DIR  a fresh render of NAME in DIR, replacing an earlier render there
+    tests/template_renders.py example NAME DIR add the example driver, with NAME's example variants, to the render in DIR
     tests/template_renders.py check NAME DIR   check a render of NAME already in DIR
     tests/template_renders.py invalid          check every invalid combination fails
 """
@@ -26,6 +27,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
+EXAMPLE_DRIVERS = ROOT / "example-driver" / "drivers"
 RENDERS = ROOT / "tests" / "template-renders"
 INVALID = RENDERS / "invalid"
 FIXTURES = RENDERS / "fixtures.yml"
@@ -50,6 +52,31 @@ def render(data, dst):
     from copier import run_copy
 
     run_copy(str(ROOT), str(dst), data=data, defaults=True, vcs_ref="HEAD", unsafe=True, quiet=True)
+
+
+def known(name):
+    if name not in names():
+        sys.exit(f"no render {name!r}: tests/template-renders has {', '.join(names())}")
+
+
+def render_into(name, directory):
+    directory = Path(directory)
+    if directory.exists():
+        if not (directory / ".copier-answers.yml").exists():
+            sys.exit(f"{directory} is not a template render, so it is left alone")
+        shutil.rmtree(directory)
+    render(answers(RENDERS / f"{name}.yml"), directory)
+    print(f"rendered {name} in {directory}")
+
+
+def add_example(name, directory):
+    """A render has no driver to build; example-driver/, outside template/ so never rendered, is one."""
+    drivers = Path(directory) / "drivers"
+    shutil.copytree(EXAMPLE_DRIVERS, drivers)
+    variants = RENDERS / f"{name}.example-variants.json"
+    if variants.exists():
+        shutil.copy(variants, drivers / "example" / "variants.json")
+    print(f"added the example driver to {directory}")
 
 
 def file_list(directory):
@@ -234,8 +261,12 @@ def main(argv):
         update()
     elif command == "matrix":
         print(json.dumps(names()))
-    elif command == "answers" and len(argv) == 2:
-        print(yaml.safe_dump(answers(RENDERS / f"{argv[1]}.yml"), sort_keys=True), end="")
+    elif command == "render" and len(argv) == 3:
+        known(argv[1])
+        render_into(argv[1], argv[2])
+    elif command == "example" and len(argv) == 3:
+        known(argv[1])
+        add_example(argv[1], argv[2])
     elif command == "check" and len(argv) == 3:
         problems = check(argv[1], argv[2])
         for problem in problems:
