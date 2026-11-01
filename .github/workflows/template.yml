@@ -62,7 +62,6 @@ jobs:
       fail-fast: false
       matrix:
         name: ${{ fromJSON(needs.template-renders.outputs.names) }}
-    # make's NAME: the render the Makefile's targets make and check.
     env:
       NAME: ${{ matrix.name }}
 
@@ -116,7 +115,6 @@ jobs:
       fail-fast: false
       matrix:
         name: ${{ fromJSON(needs.template-renders.outputs.names) }}
-    # make's NAME: the render the Makefile's targets make and check.
     env:
       NAME: ${{ matrix.name }}
 
