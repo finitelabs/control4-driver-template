@@ -32,9 +32,11 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **http.lua**: HTTP client wrapper around C4:urlGet/urlPost/urlPut/urlDelete
 - **lru.lua**: LRU cache utility
 - **persist.lua**: persistent storage abstraction over C4 PersistData
+- **redact.lua**: masks credentials in log lines and diagnostics reports
 - **values.lua**: value parsing, coercion, and formatting utilities
 - **logging.lua** / **utils.lua**: structured logging and general utilities (always included)
 - **github-updater.lua**: GitHub Releases-based self-updater for non-DriverCentral (`oss`) builds
+- **diagnostics.lua**: Cloud Monitoring, a DriverCentral build's hourly memory and error reports to InfluxDB (only with `cloud_diagnostics`)
 
 ### Vendor Libraries (`vendor/`, some selected via `vendor_modules`)
 - **JSON.lua**: JSON encoder/decoder
@@ -133,6 +135,7 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
 | `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version oauth) | (empty) |
+| `cloud_diagnostics` | Ship `lib.diagnostics` (Cloud Monitoring), which reports a DriverCentral build's memory use and errors to InfluxDB; needs a `drivercentral` distribution and four build secrets | `false` |
 | `extra_required_checks` | Space-separated status checks a PR must pass besides `build`, each a job name from the repo's own workflows; `tools/github-setup` puts them in the branch ruleset | (empty) |
 | `stale_issues` | Ping inactive issues, then close them, unless an exempt author opened them | `false` |
 | `stale_exempt_authors` | Space-separated GitHub logins whose issues are left alone; a GitHub App is `name[bot]` (asked when `stale_issues` is true) | (empty) |

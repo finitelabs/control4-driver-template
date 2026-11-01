@@ -73,11 +73,12 @@ A template ticket is not done at merge; it is done when the drift is closed.
 
 `copier.yml`'s `_exclude` list drops files the answers did not select —
 `distributions` controls OSS versus DriverCentral, `vendor_modules` the optional
-vendored libraries, and `stale_issues` the stale-issue workflow. There is no
-module-to-module gating: every `src/lib/*.lua` renders unconditionally, and
-`gen-squishy` bundles only what a driver actually requires, so a
-rendered-but-unused module is zero bytes in the `.c4z`. A new `src/lib` file
-needs no `_exclude` entry.
+vendored libraries, `stale_issues` the stale-issue workflow, and
+`cloud_diagnostics` the Cloud Monitoring library and its tests, since a repo
+opts in to reporting. There is no other module-to-module gating: every other
+`src/lib/*.lua` renders unconditionally, and `gen-squishy` bundles only what a
+driver actually requires, so a rendered-but-unused module is zero bytes in the
+`.c4z`. A new `src/lib` file needs no `_exclude` entry.
 
 `github-updater.lua` and its tests are gated on `oss`, the distribution whose
 update mechanism they are.
