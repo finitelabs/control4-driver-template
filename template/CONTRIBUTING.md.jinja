@@ -553,11 +553,17 @@ end of its Driver Settings:
 <!-- #endif -->
 ```
 
+Its `driver.lua` takes the library next to its other requires:
+
 ```lua
 --#ifdef DRIVERCENTRAL
 local supportCode = require("lib.support-code")
 --#endif
+```
 
+and the property's handler with its other property handlers:
+
+```lua
 --#ifdef DRIVERCENTRAL
 --- Not logged: the value is the code.
 function OPC.Support_Code(propertyValue)
@@ -604,10 +610,13 @@ them in the Keychain for local builds. A build missing any of them never
 reports: enabling Cloud Monitoring only logs a warning. A tag build fails
 without them, as for any build secret.
 
-Each driver of a DriverCentral build takes a property and an action:
+Each driver of a DriverCentral build takes a property, an action, the library
+and two handlers. Each goes inside the `#ifdef DRIVERCENTRAL` block the Support
+Code already has, right after the Support Code's part, rather than in a block of
+its own: the property after the Support Code property, the require after
+`lib.support-code`'s, and the handlers after `OPC.Support_Code`.
 
 ```xml
-<!-- #ifdef DRIVERCENTRAL -->
 <property>
   <name>Cloud Monitoring</name>
   <type>LIST</type>
@@ -618,8 +627,10 @@ Each driver of a DriverCentral build takes a property and an action:
   </items>
   <description>Sends memory and error reports to Finite Labs so we can fix driver problems.</description>
 </property>
-<!-- #endif -->
 ```
+
+The action goes in `<actions>`, in an `#ifdef DRIVERCENTRAL` of its own unless
+the actions already end in one:
 
 ```xml
 <!-- #ifdef DRIVERCENTRAL -->
@@ -631,11 +642,10 @@ Each driver of a DriverCentral build takes a property and an action:
 ```
 
 ```lua
---#ifdef DRIVERCENTRAL
 local diagnostics = require("lib.diagnostics")
---#endif
+```
 
---#ifdef DRIVERCENTRAL
+```lua
 function OPC.Cloud_Monitoring(propertyValue)
   diagnostics:setEnabled(propertyValue == "Enabled")
 end
@@ -643,7 +653,6 @@ end
 function EC.DiagnosticsSnapshot()
   diagnostics:dumpSnapshot()
 end
---#endif
 ```
 
 Diagnostics Snapshot prints a report in the Lua output, and sends it only while
@@ -671,8 +680,8 @@ library's measurement names or one of the tags every point carries is left out
 with a warning. Say in the driver's documentation what the points hold, and
 never send a name, an address or a credential.
 
-Each driver's documentation says what is sent, under its Driver Settings and
-inside the DriverCentral `#ifdef`:
+Each driver's documentation says what is sent, right after the Support Code
+entry and inside its `#ifdef`:
 
 ```markdown
 ##### Cloud Monitoring \[ Disabled | **_Enabled_** \]
