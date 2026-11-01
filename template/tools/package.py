@@ -64,6 +64,15 @@ def make_zip(output_path: Path, inputs: list[str]) -> None:
                 raise FileNotFoundError(f"zip: no such file or directory: {item}")
 
 
+def asks_for_encryption(xml: bytes) -> bool:
+    """The packager's own test: a <config><script> with encryption="2"."""
+    try:
+        root = ElementTree.fromstring(xml)
+    except ElementTree.ParseError:
+        return False
+    return root.find('config/script[@encryption="2"]') is not None
+
+
 def must_be_encrypted(build: str) -> bool:
     return (
         build.startswith("drivercentral")
@@ -82,12 +91,12 @@ def check_encrypted(build: str) -> int:
     for c4z in packages:
         with zipfile.ZipFile(c4z) as zf:
             names = set(zf.namelist())
-            xml = zf.read("driver.xml").decode("utf-8") if "driver.xml" in names else ""
+            xml = zf.read("driver.xml") if "driver.xml" in names else b""
         if "driver.lua.encrypted" not in names:
             problems.append(f"{c4z} has no driver.lua.encrypted")
         if "driver.lua" in names:
             problems.append(f"{c4z} holds driver.lua in plain text")
-        if not re.search(r"""<script\b[^>]*\sencryption\s*=\s*["']2["']""", xml):
+        if not asks_for_encryption(xml):
             problems.append(f"{c4z}'s driver.xml does not ask for encryption")
     for problem in problems:
         print(f"Error: {problem}", file=sys.stderr)

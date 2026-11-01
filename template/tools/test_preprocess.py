@@ -9,12 +9,12 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from preprocess import (
+from preprocess import (  # noqa: E402
     ENCRYPTED_MARKER,
     finish_build,
     packaged_driver_names,
     process_file,
-)  # noqa: E402
+)
 
 
 class EmbedDirectiveTest(unittest.TestCase):

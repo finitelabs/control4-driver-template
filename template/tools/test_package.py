@@ -65,6 +65,13 @@ class CheckEncryptedTest(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertIn("does not ask for encryption", err)
 
+    def test_a_script_tag_inside_a_comment_does_not_count(self):
+        xml = '<devicedata><config><!-- <script encryption="2" file="driver.lua"/> --><script file="driver.lua"/></config></devicedata>'
+        self._package("drivercentral", {"driver.xml": xml, "driver.lua.encrypted": "x"})
+        code, err = self._check("drivercentral")
+        self.assertEqual(code, 1)
+        self.assertIn("does not ask for encryption", err)
+
     def test_a_driverCentral_build_with_no_package_fails(self):
         (Path("dist") / "drivercentral" / "c4z").mkdir(parents=True)
         code, err = self._check("drivercentral")
