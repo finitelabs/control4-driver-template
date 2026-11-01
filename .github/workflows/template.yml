@@ -14,9 +14,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Each tests/variants/<name>.yml is one render's non-default answers, on top of
-  # tests/variants/fixtures.yml. Both matrices below come from that folder, so a
-  # new variant is one file plus its snapshot (make snapshots).
   variants:
     name: variants
     runs-on: ubuntu-26.04
@@ -38,6 +35,21 @@ jobs:
       - name: List the variants
         id: list
         run: echo "names=$(python3 tests/variants.py matrix)" >> "$GITHUB_OUTPUT"
+
+  invalid:
+    name: invalid combinations
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Install copier
+        run: pip install copier
 
       - name: Every combination in tests/variants/invalid fails to render
         run: python3 tests/variants.py invalid
@@ -72,7 +84,6 @@ jobs:
         with:
           python-version: "3.x"
 
-      # Into setup-python's interpreter, so tests/variants.py has copier and PyYAML.
       - name: Install copier
         run: pip install copier
 
@@ -85,8 +96,6 @@ jobs:
           copier copy --trust --defaults --vcs-ref HEAD --data-file "$RUNNER_TEMP/answers.yml" \
             . "$RUNNER_TEMP/render"
 
-      # Its file list against tests/variants/<name>.files, and the content checks
-      # that depend on its answers.
       - name: The render matches its snapshot
         env:
           NAME: ${{ matrix.name }}
@@ -189,11 +198,9 @@ jobs:
             libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libgdk-pixbuf-2.0-0 \
             fonts-dejavu-core fonts-liberation fonts-noto-core fonts-symbola
 
-      # Into setup-python's interpreter, so tests/variants.py has copier and PyYAML.
       - name: Install copier
         run: pip install copier
 
-      # Without --vcs-ref HEAD copier renders the newest tag, not this checkout.
       - name: Render
         env:
           NAME: ${{ matrix.name }}
@@ -297,6 +304,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ ! -f src/lib/diagnostics.lua ]; then echo "This variant renders no lib.diagnostics."; exit 0; fi
+          DISTRIBUTIONS=$(yq -r .distributions .copier-answers.yml)
           printf '# CI probe\nINFLUXDB_URL=\nINFLUXDB_TOKEN=\nINFLUXDB_METRICS_DB=\nINFLUXDB_LOGS_DB=\n' > .env.default
           python3 - <<'EOF'
           from pathlib import Path
@@ -344,27 +352,33 @@ jobs:
           # Unpacked rather than piped: grep -q exits at its first match, and under
           # pipefail the unzip it cut off fails the step.
           unpack() { rm -rf unpacked && mkdir unpacked && unzip -q "$1" -d unpacked; }
-          for c4z in dist/drivercentral/c4z/*.c4z; do
-            unpack "$c4z"
-            [ -f unpacked/driver.lua.encrypted ] && [ ! -e unpacked/driver.lua ] \
-              || { echo "::error::$c4z is not encrypted"; exit 1; }
-            grep -q '<name>Cloud Monitoring</name>' unpacked/driver.xml \
-              || { echo "::error::$c4z has no Cloud Monitoring property"; exit 1; }
-            if grep -raqE 'ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
-              echo "::error::$c4z holds a secret in plain text"; exit 1
-            fi
+          for build in $DISTRIBUTIONS; do
+            packages=(dist/"$build"/c4z/*.c4z)
+            [ -e "${packages[0]}" ] || { echo "::error::the $build build made no package"; exit 1; }
+            for c4z in "${packages[@]}"; do
+              unpack "$c4z"
+              case "$build" in
+                drivercentral*)
+                  [ -f unpacked/driver.lua.encrypted ] && [ ! -e unpacked/driver.lua ] \
+                    || { echo "::error::$c4z is not encrypted"; exit 1; }
+                  grep -q '<name>Cloud Monitoring</name>' unpacked/driver.xml \
+                    || { echo "::error::$c4z has no Cloud Monitoring property"; exit 1; }
+                  if grep -raqE 'ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
+                    echo "::error::$c4z holds a secret in plain text"; exit 1
+                  fi
+                  ;;
+                *)
+                  [ -f unpacked/driver.lua ] && [ ! -e unpacked/driver.lua.encrypted ] \
+                    || { echo "::error::$c4z is encrypted: a Cloud Monitoring secret reached the $build build"; exit 1; }
+                  if grep -raqE 'lib\.diagnostics|Cloud Monitoring|Diagnostics Snapshot|INFLUXDB_(URL|TOKEN|METRICS_DB|LOGS_DB)|influx\.example|ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
+                    echo "::error::$c4z carries Cloud Monitoring"; exit 1
+                  fi
+                  ;;
+              esac
+            done
           done
           grep -q 'local INFLUXDB_TOKEN = "ci-token-value"' build/drivercentral/src/lib/diagnostics.lua \
             || { echo "::error::the DriverCentral build did not substitute the token"; exit 1; }
-          for c4z in dist/oss/c4z/*.c4z; do
-            [ -e "$c4z" ] || continue
-            unpack "$c4z"
-            [ -f unpacked/driver.lua ] && [ ! -e unpacked/driver.lua.encrypted ] \
-              || { echo "::error::$c4z is encrypted: a Cloud Monitoring secret reached the OSS build"; exit 1; }
-            if grep -raqE 'lib\.diagnostics|Cloud Monitoring|Diagnostics Snapshot|INFLUXDB_|influx\.example|ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
-              echo "::error::$c4z carries Cloud Monitoring"; exit 1
-            fi
-          done
           rm -rf unpacked
           echo "Cloud Monitoring: DriverCentral encrypted with the values, OSS plain without it"
           git checkout -- drivers/example
