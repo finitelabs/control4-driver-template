@@ -515,6 +515,11 @@ encrypted (`encryption="2"` on its `<script>`, set in the build copy of
 in the clear. Only `build/` keeps it, and that is gitignored and never uploaded.
 Keep placeholders out of documentation: a PDF is not encrypted.
 
+A DriverCentral build is packaged encrypted with or without a secret.
+`make package` then opens every package of an encrypted build and fails unless
+each holds `driver.lua.encrypted`, no `driver.lua`, and a `driver.xml` that asks
+for encryption.
+
 ### The Support Code
 
 A DriverCentral build calls `C4:AllowExecute(false)`, which closes Composer's
