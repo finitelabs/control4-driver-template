@@ -81,20 +81,8 @@ jobs:
       - name: Install copier
         run: pip install copier
 
-      - name: Render
-        run: make render
-
-      - name: The render matches its snapshot
-        run: make render-snapshot
-
-      - name: Every rendered src/lib module loads
-        run: make render-lib-loads
-
-      - name: The FFI crypto backend resolves
-        run: make render-crypto
-
-      - name: Test (make test)
-        run: make in-render-test
+      - name: Render and check it
+        run: make render-checks
 
   build:
     name: build (${{ matrix.name }})
@@ -139,29 +127,5 @@ jobs:
       - name: Install copier
         run: pip install copier
 
-      - name: Render
-        run: make render
-
-      - name: Add example driver
-        run: make render-example
-
-      - name: Initialize project (make init)
-        run: make in-render-init
-
-      - name: Check formatting (make check)
-        run: make in-render-check
-
-      - name: Test (make test)
-        run: make in-render-test
-
-      - name: Build is idempotent (make build)
-        run: make build-idempotent
-
-      - name: README images resolve
-        run: make build-readme-images
-
-      - name: A build with secrets is encrypted
-        run: make build-encrypted
-
-      - name: Cloud Monitoring reaches only the DriverCentral build
-        run: make build-cloud-monitoring
+      - name: Render, then build the example driver in it and check it
+        run: make build-checks

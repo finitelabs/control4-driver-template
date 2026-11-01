@@ -39,7 +39,7 @@ invalid-combinations: ## Check every combination in tests/template-renders/inval
 	$(PYTHON) tests/template_renders.py invalid
 
 # ─── Render leg ───────────────────────────────────────────────────────────────
-# Each target is one step of CI's render leg, on the render of NAME in RENDER.
+# CI's render leg is `make render-checks`; each of its steps is a target of its own.
 
 .PHONY: render render-snapshot render-lib-loads render-crypto render-checks
 render: ## Render NAME into RENDER, replacing an earlier render there
@@ -61,7 +61,7 @@ RENDER_LEG := render render-snapshot render-lib-loads render-crypto in-render-te
 render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME
 
 # ─── Build leg ────────────────────────────────────────────────────────────────
-# Each target is one step of CI's build leg: the example driver, built in the render.
+# CI's build leg is `make build-checks`: the example driver, built in the render.
 
 .PHONY: render-example build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-checks
 render-example: ## Add the example driver to the render

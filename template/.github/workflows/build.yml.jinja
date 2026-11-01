@@ -90,15 +90,8 @@ jobs:
         env:
           REQUIRE_SECRETS: {% raw %}${{ github.ref_type == 'tag' && '1' || '' }}{% endraw %}
 
-      - name: Verify PDFs were generated
-        run: make verify-pdfs
-
-      - name: Verify the c4z carries the tag version
-        if: github.ref_type == 'tag'
-        run: make verify-version
-
-      - name: Check for dirty tree
-        run: make verify-clean
+      - name: Verify the build
+        run: make verify
 {% for dist in distributions.split() %}
 
       # Tag builds are released and uploaded to Driver Central, so 14 days; main builds are for a quick look, 3; PR builds are for side-loading, 1.

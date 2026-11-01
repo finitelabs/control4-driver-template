@@ -250,21 +250,26 @@ zip: $(VENV_STAMP) ## Zip the c4z/ and docs/ subfolders per distribution
 	done
 
 # ─── Verify ───────────────────────────────────────────────────────────────────
-# What CI checks once `make build` has run. On a tag build CI sets DRIVER_VERSION
-# from the tag (tools/package.py tag-version).
+# What CI checks once `make build` has run. The version is checked only when
+# DRIVER_VERSION is given, as CI gives the tag's date on a tag build
+# (tools/package.py tag-version): today's date can turn over between two runs.
 
-.PHONY: verify-pdfs verify-version verify-clean
-verify-pdfs: $(VENV_STAMP) ## Check every distribution made a PDF
+VERIFY_VERSION := $(if $(filter environment command,$(origin DRIVER_VERSION)),verify-version)
+
+.PHONY: verify verify-pdfs verify-version verify-clean
+verify: verify-pdfs $(VERIFY_VERSION) verify-clean ## Check what the build made, as CI does
+
+verify-pdfs: $(VENV_STAMP)
 	@for build in $(DISTRIBUTIONS); do \
 		$(VENV_PY) tools/package.py check-pdfs "$$build" || exit 1; \
 	done
 
-verify-version: $(VENV_STAMP) ## Check every .c4z is at DRIVER_VERSION
+verify-version: $(VENV_STAMP)
 	@for build in $(DISTRIBUTIONS); do \
 		$(VENV_PY) tools/package.py check-version "$$build" "$(DRIVER_VERSION)" || exit 1; \
 	done
 
-verify-clean: ## Check the build changed no tracked file and left no untracked one
+verify-clean:
 	@git diff --exit-code || { echo "Error: the build changed tracked files" >&2; exit 1; }
 	@untracked=$$(git ls-files --others --exclude-standard); \
 	if [ -n "$$untracked" ]; then \

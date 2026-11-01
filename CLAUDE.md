@@ -37,10 +37,11 @@ render that exercises it and run `make snapshots`: the `.files` diff is what to
 review. `make template-renders` runs the snapshot and content checks for every
 render locally.
 
-Each CI step is a make target, so a leg runs the same locally:
+CI runs each leg as one make target, so a leg runs the same locally:
 `make render-checks NAME=<name>` is the render leg and `make build-checks
 NAME=<name>` the build leg, rendered into a temp folder (`RENDER=` to move it).
-The build leg's checks are `tests/build_checks.py`; `make help` lists the steps.
+Each step is a target of its own, which `make help` lists; the build leg's
+checks are `tests/build_checks.py`.
 
 ## Rendering, and the default that lies
 
