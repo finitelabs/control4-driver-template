@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""The template's test renders: tests/renders/<name>.yml holds one render's non-default answers, on top of
-tests/renders/fixtures.yml, and <name>.files is the list of files it renders. Every combination in
-tests/renders/invalid/ must fail to render; a "# expect: <text>" first line names the error it must fail with.
+"""The template renders: tests/template-renders/<name>.yml holds one render's non-default answers, on top of
+tests/template-renders/fixtures.yml, and <name>.files is the list of files it renders. Every combination in
+tests/template-renders/invalid/ must fail to render; a "# expect: <text>" first line names the error it must fail with.
 
-Run with an interpreter that has copier (and so PyYAML), e.g. `uvx --from copier python tests/renders.py`.
+Run with an interpreter that has copier (and so PyYAML), e.g. `uvx --from copier python tests/template_renders.py`.
 
-    tests/renders.py                  make every render and check it, and check every invalid one fails
-    tests/renders.py update           rewrite every <name>.files from a fresh render (make snapshots)
-    tests/renders.py matrix           the render names, as JSON, for CI's matrix
-    tests/renders.py answers NAME     the render's answers, fixtures included, for copier copy --data-file
-    tests/renders.py check NAME DIR   check a render of NAME already in DIR
-    tests/renders.py invalid          check every invalid combination fails
+    tests/template_renders.py                  make every template render and check it, and check every invalid one fails
+    tests/template_renders.py update           rewrite every <name>.files from a fresh render (make snapshots)
+    tests/template_renders.py matrix           the render names, as JSON, for CI's matrix
+    tests/template_renders.py answers NAME     the render's answers, fixtures included, for copier copy --data-file
+    tests/template_renders.py check NAME DIR   check a render of NAME already in DIR
+    tests/template_renders.py invalid          check every invalid combination fails
 """
 
 import json
@@ -26,7 +26,7 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-RENDERS = ROOT / "tests" / "renders"
+RENDERS = ROOT / "tests" / "template-renders"
 INVALID = RENDERS / "invalid"
 FIXTURES = RENDERS / "fixtures.yml"
 
@@ -181,7 +181,8 @@ CHECKS = [check_stale_workflow, check_github_setup, check_upload_retention, chec
 def check(name, directory):
     data = answers(RENDERS / f"{name}.yml")
     problems = [
-        f"file list differs from tests/renders/{name}.files (make snapshots): {line}" for line in drift(name, directory)
+        f"file list differs from tests/template-renders/{name}.files (make snapshots): {line}"
+        for line in drift(name, directory)
     ]
     for fn in CHECKS:
         problems += fn(data, directory)
@@ -213,7 +214,7 @@ class RendersTest(unittest.TestCase):
                 self.assertEqual(check(name, Path(tmp) / "render"), [])
 
     def test_every_invalid_combination_fails(self):
-        self.assertTrue(list(INVALID.glob("*.yml")), "tests/renders/invalid has no combinations")
+        self.assertTrue(list(INVALID.glob("*.yml")), "tests/template-renders/invalid has no combinations")
         self.assertEqual(invalid_failures(), [])
 
 
@@ -222,7 +223,7 @@ def update():
         with tempfile.TemporaryDirectory() as tmp:
             render(answers(RENDERS / f"{name}.yml"), Path(tmp) / "render")
             snapshot(name).write_text("\n".join(file_list(Path(tmp) / "render")) + "\n", encoding="utf-8")
-        print(f"wrote tests/renders/{name}.files")
+        print(f"wrote tests/template-renders/{name}.files")
 
 
 def main(argv):

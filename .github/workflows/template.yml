@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  renders:
-    name: renders
+  template-renders:
+    name: template renders
     runs-on: ubuntu-26.04
     outputs:
       names: ${{ steps.list.outputs.names }}
@@ -28,13 +28,13 @@ jobs:
         with:
           python-version: "3.x"
 
-      # Into setup-python's interpreter, so tests/renders.py has copier and PyYAML.
+      # Into setup-python's interpreter, so tests/template_renders.py has copier and PyYAML.
       - name: Install copier
         run: pip install copier
 
-      - name: List the renders
+      - name: List the template renders
         id: list
-        run: echo "names=$(python3 tests/renders.py matrix)" >> "$GITHUB_OUTPUT"
+        run: echo "names=$(python3 tests/template_renders.py matrix)" >> "$GITHUB_OUTPUT"
 
   invalid:
     name: invalid combinations
@@ -51,17 +51,17 @@ jobs:
       - name: Install copier
         run: pip install copier
 
-      - name: Every combination in tests/renders/invalid fails to render
-        run: python3 tests/renders.py invalid
+      - name: Every combination in tests/template-renders/invalid fails to render
+        run: python3 tests/template_renders.py invalid
 
   render:
     name: render (${{ matrix.name }})
-    needs: renders
+    needs: template-renders
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
-        name: ${{ fromJSON(needs.renders.outputs.names) }}
+        name: ${{ fromJSON(needs.template-renders.outputs.names) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -92,14 +92,14 @@ jobs:
         env:
           NAME: ${{ matrix.name }}
         run: |
-          python3 tests/renders.py answers "$NAME" > "$RUNNER_TEMP/answers.yml"
+          python3 tests/template_renders.py answers "$NAME" > "$RUNNER_TEMP/answers.yml"
           copier copy --trust --defaults --vcs-ref HEAD --data-file "$RUNNER_TEMP/answers.yml" \
             . "$RUNNER_TEMP/render"
 
       - name: The render matches its snapshot
         env:
           NAME: ${{ matrix.name }}
-        run: python3 tests/renders.py check "$NAME" "$RUNNER_TEMP/render"
+        run: python3 tests/template_renders.py check "$NAME" "$RUNNER_TEMP/render"
 
       # make test only loads modules that call a drivers-common-public global.
       - name: Every rendered src/lib module loads
@@ -162,12 +162,12 @@ jobs:
   # (repo root, outside template/, so copier never renders it) supplies one.
   build:
     name: build (${{ matrix.name }})
-    needs: renders
+    needs: template-renders
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
-        name: ${{ fromJSON(needs.renders.outputs.names) }}
+        name: ${{ fromJSON(needs.template-renders.outputs.names) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -205,7 +205,7 @@ jobs:
         env:
           NAME: ${{ matrix.name }}
         run: |
-          python3 tests/renders.py answers "$NAME" > "$RUNNER_TEMP/answers.yml"
+          python3 tests/template_renders.py answers "$NAME" > "$RUNNER_TEMP/answers.yml"
           copier copy --trust --defaults --vcs-ref HEAD --data-file "$RUNNER_TEMP/answers.yml" \
             . "$RUNNER_TEMP/render"
 
@@ -214,7 +214,7 @@ jobs:
           NAME: ${{ matrix.name }}
         run: |
           cp -r example-driver/drivers "$RUNNER_TEMP/render/drivers"
-          variants="tests/renders/$NAME.example-variants.json"
+          variants="tests/template-renders/$NAME.example-variants.json"
           if [ -f "$variants" ]; then
             cp "$variants" "$RUNNER_TEMP/render/drivers/example/variants.json"
           fi
