@@ -343,7 +343,7 @@ for name in pipe:lines() do
         table.remove(open)
       elseif line:find("^function OnDriverLateInit%(") then
         defined, wrapped = true, false
-      elseif defined and line:find("^OnDriverLateInit = diagnostics:wrapLateInit%(OnDriverLateInit%)%s*$") then
+      elseif defined and line:find("^OnDriverLateInit = .+:wrapLateInit%(OnDriverLateInit%)%s*$") then
         local inDc = false
         for _, level in ipairs(open) do
           if level.dc == false then
