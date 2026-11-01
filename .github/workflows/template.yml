@@ -47,6 +47,12 @@ jobs:
             distributions: drivercentral oss
             readme_build: oss
             vendor_modules: oauth
+          # lib.diagnostics renders only with cloud_diagnostics; every other leg checks it is absent.
+          - name: diagnostics
+            distributions: drivercentral oss
+            readme_build: oss
+            vendor_modules: ""
+            cloud_diagnostics: true
           # stale.yml renders only with stale_issues; every other leg checks it is absent.
           - name: stale-issues
             distributions: drivercentral oss
@@ -83,6 +89,7 @@ jobs:
           DISTRIBUTIONS: ${{ matrix.distributions }}
           README_BUILD: ${{ matrix.readme_build }}
           VENDOR_MODULES: ${{ matrix.vendor_modules }}
+          CLOUD_DIAGNOSTICS: ${{ matrix.cloud_diagnostics || false }}
           STALE_ISSUES: ${{ matrix.stale_issues }}
           STALE_EXEMPT_AUTHORS: ${{ matrix.stale_exempt_authors }}
           STALE_DAYS: ${{ matrix.stale_days }}
@@ -103,6 +110,7 @@ jobs:
             --data distributions="$DISTRIBUTIONS" \
             --data readme_build="$README_BUILD" \
             --data vendor_modules="$VENDOR_MODULES" \
+            --data cloud_diagnostics="$CLOUD_DIAGNOSTICS" \
             "${stale[@]}" \
             . "$RUNNER_TEMP/render"
 
@@ -141,6 +149,33 @@ jobs:
             --data stale_issues=true \
             "$GITHUB_WORKSPACE" "$RUNNER_TEMP/render-empty"
           check "$RUNNER_TEMP/render-empty/$f" '[]'
+
+      - name: lib.diagnostics renders only when asked
+        working-directory: ${{ runner.temp }}/render
+        env:
+          CLOUD_DIAGNOSTICS: ${{ matrix.cloud_diagnostics || false }}
+        run: |
+          for f in src/lib/diagnostics.lua test/test_diagnostics_reporting.lua test/test_diagnostics_scrub.lua; do
+            if [ "$CLOUD_DIAGNOSTICS" = true ] && [ ! -e "$f" ]; then
+              echo "::error::$f is missing with cloud_diagnostics on"; exit 1
+            elif [ "$CLOUD_DIAGNOSTICS" != true ] && [ -e "$f" ]; then
+              echo "::error::$f rendered with cloud_diagnostics off"; exit 1
+            fi
+          done
+          if grep -q '^### Cloud Monitoring' CONTRIBUTING.md; then has=true; else has=false; fi
+          [ "$has" = "$CLOUD_DIAGNOSTICS" ] \
+            || { echo "::error::CONTRIBUTING.md's Cloud Monitoring section does not follow cloud_diagnostics"; exit 1; }
+          if [ "$CLOUD_DIAGNOSTICS" = true ]; then
+            if copier copy --trust --defaults --vcs-ref HEAD \
+              --data project_name=ci-render \
+              --data github_org=finitelabs \
+              --data readme_driver_slug=ci \
+              --data distributions=oss \
+              --data cloud_diagnostics=true \
+              "$GITHUB_WORKSPACE" "$RUNNER_TEMP/render-oss-diagnostics" > /dev/null 2>&1; then
+              echo "::error::cloud_diagnostics rendered for a repo with no DriverCentral build"; exit 1
+            fi
+          fi
 
       - name: tools/github-setup is rendered and executable
         working-directory: ${{ runner.temp }}/render
@@ -268,6 +303,12 @@ jobs:
             vendor_modules: oauth
             readme_driver_slug: example
             variants: ""
+          - name: diagnostics
+            distributions: drivercentral oss
+            vendor_modules: ""
+            readme_driver_slug: example
+            variants: ""
+            cloud_diagnostics: true
           # The README driver is a generated variant: build/ has
           # drivers/example_variant, and drivers/ has no such folder.
           - name: variant-readme
@@ -313,6 +354,7 @@ jobs:
           DISTRIBUTIONS: ${{ matrix.distributions }}
           VENDOR_MODULES: ${{ matrix.vendor_modules }}
           README_DRIVER_SLUG: ${{ matrix.readme_driver_slug }}
+          CLOUD_DIAGNOSTICS: ${{ matrix.cloud_diagnostics || false }}
         run: |
           copier copy --trust --defaults --vcs-ref HEAD \
             --data project_name=ci-render \
@@ -322,6 +364,7 @@ jobs:
             --data distributions="$DISTRIBUTIONS" \
             --data readme_build=oss \
             --data vendor_modules="$VENDOR_MODULES" \
+            --data cloud_diagnostics="$CLOUD_DIAGNOSTICS" \
             . "$RUNNER_TEMP/render"
 
       - name: Add example driver
@@ -412,4 +455,82 @@ jobs:
             fi
           done
           git checkout -- drivers/example/driver.lua
+          rm .env.default
+
+      # The wiring CONTRIBUTING.md gives, on the example driver, built with fake secrets.
+      - name: Cloud Monitoring reaches only the DriverCentral build
+        if: matrix.name == 'diagnostics'
+        working-directory: ${{ runner.temp }}/render
+        run: |
+          set -euo pipefail
+          printf '# CI probe\nINFLUXDB_URL=\nINFLUXDB_TOKEN=\nINFLUXDB_METRICS_DB=\nINFLUXDB_LOGS_DB=\n' > .env.default
+          python3 - <<'EOF'
+          from pathlib import Path
+          xml = Path("drivers/example/driver.xml")
+          s = xml.read_text()
+          s = s.replace("    <properties>\n", """    <properties>
+                <!-- #ifdef DRIVERCENTRAL -->
+                <property>
+                  <name>Cloud Monitoring</name>
+                  <type>LIST</type>
+                  <default>Enabled</default>
+                  <items>
+                    <item>Disabled</item>
+                    <item>Enabled</item>
+                  </items>
+                </property>
+                <!-- #endif -->
+          """, 1)
+          s = s.replace("    </properties>\n", """    </properties>
+              <!-- #ifdef DRIVERCENTRAL -->
+              <actions>
+                <action>
+                  <name>Diagnostics Snapshot</name>
+                  <command>DiagnosticsSnapshot</command>
+                </action>
+              </actions>
+              <!-- #endif -->
+          """, 1)
+          xml.write_text(s)
+          with open("drivers/example/driver.lua", "a") as lua:
+              lua.write("""
+          --#ifdef DRIVERCENTRAL
+          local diagnostics = require("lib.diagnostics")
+          function OPC.Cloud_Monitoring(propertyValue)
+            diagnostics:setEnabled(propertyValue == "Enabled")
+          end
+          function EC.DiagnosticsSnapshot()
+            diagnostics:dumpSnapshot()
+          end
+          --#endif
+          """)
+          EOF
+          INFLUXDB_URL=https://influx.example.test INFLUXDB_TOKEN=ci-token-value \
+            INFLUXDB_METRICS_DB=ci_metrics_db INFLUXDB_LOGS_DB=ci_logs_db make build-nodocs
+          # Unpacked rather than piped: grep -q exits at its first match, and under
+          # pipefail the unzip it cut off fails the step.
+          unpack() { rm -rf unpacked && mkdir unpacked && unzip -q "$1" -d unpacked; }
+          for c4z in dist/drivercentral/c4z/*.c4z; do
+            unpack "$c4z"
+            [ -f unpacked/driver.lua.encrypted ] && [ ! -e unpacked/driver.lua ] \
+              || { echo "::error::$c4z is not encrypted"; exit 1; }
+            grep -q '<name>Cloud Monitoring</name>' unpacked/driver.xml \
+              || { echo "::error::$c4z has no Cloud Monitoring property"; exit 1; }
+            if grep -raqE 'ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
+              echo "::error::$c4z holds a secret in plain text"; exit 1
+            fi
+          done
+          grep -q 'local INFLUXDB_TOKEN = "ci-token-value"' build/drivercentral/src/lib/diagnostics.lua \
+            || { echo "::error::the DriverCentral build did not substitute the token"; exit 1; }
+          for c4z in dist/oss/c4z/*.c4z; do
+            unpack "$c4z"
+            [ -f unpacked/driver.lua ] && [ ! -e unpacked/driver.lua.encrypted ] \
+              || { echo "::error::$c4z is encrypted: a Cloud Monitoring secret reached the OSS build"; exit 1; }
+            if grep -raqE 'lib\.diagnostics|Cloud Monitoring|Diagnostics Snapshot|INFLUXDB_|influx\.example|ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
+              echo "::error::$c4z carries Cloud Monitoring"; exit 1
+            fi
+          done
+          rm -rf unpacked
+          echo "Cloud Monitoring: DriverCentral encrypted with the values, OSS plain without it"
+          git checkout -- drivers/example
           rm .env.default

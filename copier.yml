@@ -32,6 +32,9 @@ _exclude:
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_one_at_a_time.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_self_last.lua{% endif %}"
   - "{% if 'oss' not in distributions.split() %}test/test_github_updater_write.lua{% endif %}"
+  - "{% if not cloud_diagnostics %}src/lib/diagnostics.lua{% endif %}"
+  - "{% if not cloud_diagnostics %}test/test_diagnostics_reporting.lua{% endif %}"
+  - "{% if not cloud_diagnostics %}test/test_diagnostics_scrub.lua{% endif %}"
 
 project_name:
   type: str
@@ -69,6 +72,13 @@ vendor_modules:
   type: str
   help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf version oauth). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless. oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua)."
   default: ""
+
+cloud_diagnostics:
+  type: bool
+  help: "Ship lib.diagnostics (Cloud Monitoring): a DriverCentral build reports its memory use and errors to InfluxDB. Needs the INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_METRICS_DB and INFLUXDB_LOGS_DB build secrets."
+  default: false
+  validator: >-
+    {% if cloud_diagnostics and 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}Cloud Monitoring reports only from a DriverCentral build, and distributions has none.{% endif %}
 
 extra_required_checks:
   type: str
