@@ -40,7 +40,7 @@ CLOUD_MONITORING_SECRETS = {
     "INFLUXDB_LOGS_DB": "ci_logs_db",
 }
 
-# The property, action and handlers CONTRIBUTING.md's Cloud Monitoring section gives, each in an #ifdef.
+# The property, action, handlers and late-init wrap CONTRIBUTING.md's Cloud Monitoring section gives, in #ifdefs.
 CLOUD_MONITORING_PROPERTY_XML = f"""
 <!-- #ifdef DRIVERCENTRAL -->
 <property>
@@ -76,6 +76,8 @@ end
 function EC.DiagnosticsSnapshot()
   diagnostics:dumpSnapshot()
 end
+
+OnDriverLateInit = diagnostics:wrapLateInit(OnDriverLateInit)
 --#endif
 """
 
