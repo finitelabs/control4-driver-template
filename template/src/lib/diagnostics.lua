@@ -635,13 +635,24 @@ local function maskIpv4(text)
   return "<ip>"
 end
 
+--- JSON.lua's decode errors that end with the whole text after a colon, with no byte position to cut at.
+--- @type string[]
+local JSON_QUOTING_ERRORS = {
+  "HTML passed to JSON:decode%(%)",
+  "JSON package groks only UTF%-8, sorry",
+  "unexpected end of string",
+}
+
 --- Removes from an error message, or a traceback, what could be a credential, an address or an ID.
 --- @param text string
 --- @param max number
 --- @return string
 local function scrub(text, max)
   -- JSON.lua's decode errors end with the whole text that failed to decode.
-  text = text:gsub("( at byte %d+) of: .*$", "%1"):gsub("(passed to JSON:decode%(%)): .*$", "%1")
+  text = text:gsub("( at byte %d+) of: .*$", "%1")
+  for _, message in ipairs(JSON_QUOTING_ERRORS) do
+    text = text:gsub("(" .. message .. "): .*$", "%1")
+  end
   text = redact.value(text)
   text = text:gsub("%a[%w+.-]*://[^%s'\"<>]+", "<url>")
   text = text:gsub("[%w._%%+-]+@[%w-]+%.[%w.-]+", "<email>")

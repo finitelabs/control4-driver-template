@@ -35,6 +35,12 @@ T.eq(
   scrub("HTML passed to JSON:decode(): <html><body>Sign in as owner@example.com</body></html>", 200),
   "HTML passed to JSON:decode()"
 )
+T.eq(
+  "text that is not UTF-8",
+  scrub('lib/example.lua:5: JSON package groks only UTF-8, sorry: \0{"pin":"1234"}', 200),
+  "lib/example.lua:5: JSON package groks only UTF-8, sorry"
+)
+T.eq("text that ends too soon", scrub("unexpected end of string: " .. TOKEN, 200), "unexpected end of string")
 
 T.section("Credentials, addresses and IDs are removed")
 local cases = {
