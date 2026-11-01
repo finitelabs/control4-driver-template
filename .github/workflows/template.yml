@@ -14,54 +14,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  template-renders:
+    name: template renders
+    runs-on: ubuntu-26.04
+    outputs:
+      names: ${{ steps.list.outputs.names }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      # Into setup-python's interpreter, so tests/template_renders.py has copier and PyYAML.
+      - name: Install copier
+        run: pip install copier
+
+      - name: List the template renders
+        id: list
+        run: echo "names=$(python3 tests/template_renders.py matrix)" >> "$GITHUB_OUTPUT"
+
+  invalid:
+    name: invalid combinations
+    runs-on: ubuntu-26.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
+      - name: Install copier
+        run: pip install copier
+
+      - name: Every combination in tests/template-renders/invalid fails to render
+        run: python3 tests/template_renders.py invalid
+
   render:
     name: render (${{ matrix.name }})
+    needs: template-renders
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: default
-            distributions: drivercentral oss
-            readme_build: oss
-            vendor_modules: ""
-          - name: oss-only
-            distributions: oss
-            readme_build: oss
-            vendor_modules: ""
-          # No github-updater, version, or release workflow; has cloud-client-byte.
-          - name: drivercentral-only
-            distributions: drivercentral
-            readme_build: drivercentral
-            vendor_modules: ""
-          # version.lua ships on a non-oss build only when named.
-          - name: version-token
-            distributions: drivercentral
-            readme_build: drivercentral
-            vendor_modules: version
-          - name: crypto-bundles
-            distributions: drivercentral oss
-            readme_build: oss
-            vendor_modules: bitn crypto noiseprotocol protobuf bthome
-          - name: oauth
-            distributions: drivercentral oss
-            readme_build: oss
-            vendor_modules: oauth
-          # lib.diagnostics renders only with cloud_diagnostics; every other leg checks it is absent.
-          - name: diagnostics
-            distributions: drivercentral oss
-            readme_build: oss
-            vendor_modules: ""
-            cloud_diagnostics: true
-          # stale.yml renders only with stale_issues; every other leg checks it is absent.
-          - name: stale-issues
-            distributions: drivercentral oss
-            readme_build: oss
-            vendor_modules: ""
-            stale_issues: true
-            stale_exempt_authors: octocat ci-app[bot]
-            stale_days: 45
-            stale_close_days: 10
+        name: ${{ fromJSON(needs.template-renders.outputs.names) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -80,123 +80,26 @@ jobs:
           echo "$RUNNER_TEMP/stylua" >> "$GITHUB_PATH"
           "$RUNNER_TEMP/stylua/stylua" --version
 
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.x"
+
       - name: Install copier
-        run: pipx install copier
+        run: pip install copier
 
       # Without --vcs-ref HEAD copier renders the newest tag, not this checkout.
       - name: Render
         env:
-          DISTRIBUTIONS: ${{ matrix.distributions }}
-          README_BUILD: ${{ matrix.readme_build }}
-          VENDOR_MODULES: ${{ matrix.vendor_modules }}
-          CLOUD_DIAGNOSTICS: ${{ matrix.cloud_diagnostics || false }}
-          STALE_ISSUES: ${{ matrix.stale_issues }}
-          STALE_EXEMPT_AUTHORS: ${{ matrix.stale_exempt_authors }}
-          STALE_DAYS: ${{ matrix.stale_days }}
-          STALE_CLOSE_DAYS: ${{ matrix.stale_close_days }}
+          NAME: ${{ matrix.name }}
         run: |
-          stale=()
-          if [ "$STALE_ISSUES" = true ]; then
-            stale=(--data stale_issues=true
-              --data stale_exempt_authors="$STALE_EXEMPT_AUTHORS"
-              --data stale_days="$STALE_DAYS"
-              --data stale_close_days="$STALE_CLOSE_DAYS")
-          fi
-          copier copy --trust --defaults --vcs-ref HEAD \
-            --data project_name=ci-render \
-            --data project_description="Template CI render" \
-            --data github_org=finitelabs \
-            --data readme_driver_slug=ci \
-            --data distributions="$DISTRIBUTIONS" \
-            --data readme_build="$README_BUILD" \
-            --data vendor_modules="$VENDOR_MODULES" \
-            --data cloud_diagnostics="$CLOUD_DIAGNOSTICS" \
-            "${stale[@]}" \
+          python3 tests/template_renders.py answers "$NAME" > "$RUNNER_TEMP/answers.yml"
+          copier copy --trust --defaults --vcs-ref HEAD --data-file "$RUNNER_TEMP/answers.yml" \
             . "$RUNNER_TEMP/render"
 
-      # An empty exempt list has to render fromJSON('[]'), so it gets a render of its own.
-      - name: stale.yml renders only when asked, with the exempt list as JSON
-        working-directory: ${{ runner.temp }}/render
+      - name: The render matches its snapshot
         env:
-          STALE_ISSUES: ${{ matrix.stale_issues }}
-          STALE_EXEMPT_AUTHORS: ${{ matrix.stale_exempt_authors }}
-          STALE_DAYS: ${{ matrix.stale_days }}
-          STALE_CLOSE_DAYS: ${{ matrix.stale_close_days }}
-        run: |
-          f=.github/workflows/stale.yml
-          if [ "$STALE_ISSUES" != true ]; then
-            if [ -e "$f" ]; then echo "::error::$f rendered with stale_issues off"; exit 1; fi
-            echo "no $f, as stale_issues is off"
-            exit 0
-          fi
-          check() {
-            local cond list got
-            cond=$(yq -e '.jobs["label-external"].if' "$1") \
-              || { echo "::error::$1 is not YAML with a label-external if"; exit 1; }
-            list=$(sed -n "s/.*fromJSON('\(.*\)').*/\1/p" <<<"$cond")
-            got=$(jq -c . <<<"$list") || { echo "::error::$1 exempt list $list is not JSON"; exit 1; }
-            [ "$got" = "$2" ] || { echo "::error::$1 exempts $got, want $2"; exit 1; }
-            if grep -nE '\{%|\{#|(^|[^$])\{\{' "$1"; then echo "::error::$1 has unrendered Jinja"; exit 1; fi
-            echo "$1 exempts $got"
-          }
-          check "$f" "$(jq -cn --arg s "$STALE_EXEMPT_AUTHORS" '$s | split(" ")')"
-          yq -e '.jobs.stale.steps[0].with."days-before-issue-stale" == env(STALE_DAYS) and .jobs.stale.steps[0].with."days-before-issue-close" == env(STALE_CLOSE_DAYS)' "$f" > /dev/null \
-            || { echo "::error::$f does not use stale_days $STALE_DAYS and stale_close_days $STALE_CLOSE_DAYS"; exit 1; }
-          copier copy --trust --defaults --vcs-ref HEAD \
-            --data project_name=ci-render \
-            --data github_org=finitelabs \
-            --data readme_driver_slug=ci \
-            --data stale_issues=true \
-            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/render-empty"
-          check "$RUNNER_TEMP/render-empty/$f" '[]'
-
-      - name: lib.diagnostics renders only when asked
-        working-directory: ${{ runner.temp }}/render
-        env:
-          CLOUD_DIAGNOSTICS: ${{ matrix.cloud_diagnostics || false }}
-        run: |
-          for f in src/lib/diagnostics.lua test/test_diagnostics_reporting.lua test/test_diagnostics_scrub.lua; do
-            if [ "$CLOUD_DIAGNOSTICS" = true ] && [ ! -e "$f" ]; then
-              echo "::error::$f is missing with cloud_diagnostics on"; exit 1
-            elif [ "$CLOUD_DIAGNOSTICS" != true ] && [ -e "$f" ]; then
-              echo "::error::$f rendered with cloud_diagnostics off"; exit 1
-            fi
-          done
-          if grep -q '^### Cloud Monitoring' CONTRIBUTING.md; then has=true; else has=false; fi
-          [ "$has" = "$CLOUD_DIAGNOSTICS" ] \
-            || { echo "::error::CONTRIBUTING.md's Cloud Monitoring section does not follow cloud_diagnostics"; exit 1; }
-          if [ "$CLOUD_DIAGNOSTICS" = true ]; then
-            if copier copy --trust --defaults --vcs-ref HEAD \
-              --data project_name=ci-render \
-              --data github_org=finitelabs \
-              --data readme_driver_slug=ci \
-              --data distributions=oss \
-              --data cloud_diagnostics=true \
-              "$GITHUB_WORKSPACE" "$RUNNER_TEMP/render-oss-diagnostics" > /dev/null 2>&1; then
-              echo "::error::cloud_diagnostics rendered for a repo with no DriverCentral build"; exit 1
-            fi
-          fi
-
-      - name: tools/github-setup is rendered and executable
-        working-directory: ${{ runner.temp }}/render
-        run: test -x tools/github-setup && grep -qx 'NAME=ci-render' tools/github-setup
-
-      - name: Rendered uploads expire
-        working-directory: ${{ runner.temp }}/render
-        run: |
-          f=.github/workflows/build.yml
-          uploads=$(grep -c 'uses: actions/upload-artifact' "$f" || true)
-          expiring=$(grep -c 'retention-days:' "$f" || true)
-          tag=$(grep 'retention-days:' "$f" | grep -cF "github.ref_type == 'tag' && 14" || true)
-          pr=$(grep 'retention-days:' "$f" | grep -cF "github.event_name == 'pull_request' && 1" || true)
-          other=$(grep 'retention-days:' "$f" | grep -cF '|| 3 }}' || true)
-          echo "upload steps: $uploads, retention-days: $expiring, naming tag: $tag, pull request: $pr, otherwise: $other"
-          for n in "$expiring" "$tag" "$pr" "$other"; do
-            if [ "$uploads" -eq 0 ] || [ "$n" -ne "$uploads" ]; then
-              echo "::error::every actions/upload-artifact step in build.yml needs retention-days naming the tag, pull request and otherwise cases"
-              exit 1
-            fi
-          done
+          NAME: ${{ matrix.name }}
+        run: python3 tests/template_renders.py check "$NAME" "$RUNNER_TEMP/render"
 
       # make test only loads modules that call a drivers-common-public global.
       - name: Every rendered src/lib module loads
@@ -245,30 +148,6 @@ jobs:
         working-directory: ${{ runner.temp }}/render
         run: make test
 
-      - name: Build secrets are substituted
-        if: matrix.name == 'default'
-        working-directory: ${{ runner.temp }}/render
-        run: |
-          set -euo pipefail
-          mkdir -p drivers/probe
-          printf 'A="__CI_SECRET_A__" B="__CI_SECRET_B__" D="__CI_SECRET_D__"\n' > drivers/probe/driver.lua
-          printf '# CI probe\nCI_SECRET_A=\nCI_SECRET_B=\nCI_SECRET_D=\n' > .env.default
-          printf 'CI_SECRET_A=from-dotenv\n' > .env
-          SECRETS_JSON='{"CI_SECRET_B":"from-dotenv","GITHUB_TOKEN":"not-declared"}' \
-            python3 tools/preprocess.py --write-dotenv
-          if grep -q GITHUB_TOKEN .env; then echo "::error::an undeclared secret reached .env"; exit 1; fi
-          out=$(CI_SECRET_A=from-env python3 tools/preprocess.py --oss)
-          got=$(cat build/oss/drivers/probe/driver.lua)
-          want='A="from-env" B="from-dotenv" D=""'
-          [ "$got" = "$want" ] || { echo "::error::got $got, want $want"; exit 1; }
-          if grep -q 'from-' <<<"$out"; then echo "::error::a value was printed"; exit 1; fi
-          grep -q 'CI_SECRET_D is not set' <<<"$out"
-          if REQUIRE_SECRETS=1 python3 tools/preprocess.py --oss >/dev/null 2>&1; then
-            echo "::error::REQUIRE_SECRETS passed with CI_SECRET_D missing"; exit 1
-          fi
-          grep -qx '/.env' .gitignore
-          rm -rf drivers/probe build .env .env.default
-
       - name: Formatted
         working-directory: ${{ runner.temp }}/render
         run: |
@@ -283,39 +162,12 @@ jobs:
   # (repo root, outside template/, so copier never renders it) supplies one.
   build:
     name: build (${{ matrix.name }})
+    needs: template-renders
     runs-on: ubuntu-26.04
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - name: default
-            distributions: drivercentral oss
-            vendor_modules: ""
-            readme_driver_slug: example
-            variants: ""
-          - name: crypto-bundles
-            distributions: drivercentral oss
-            vendor_modules: bitn crypto noiseprotocol protobuf bthome
-            readme_driver_slug: example
-            variants: ""
-          - name: oauth
-            distributions: drivercentral oss
-            vendor_modules: oauth
-            readme_driver_slug: example
-            variants: ""
-          - name: diagnostics
-            distributions: drivercentral oss
-            vendor_modules: ""
-            readme_driver_slug: example
-            variants: ""
-            cloud_diagnostics: true
-          # The README driver is a generated variant: build/ has
-          # drivers/example_variant, and drivers/ has no such folder.
-          - name: variant-readme
-            distributions: drivercentral oss
-            vendor_modules: ""
-            readme_driver_slug: example_variant
-            variants: '{"variants": [{"suffix": "variant"}]}'
+        name: ${{ fromJSON(needs.template-renders.outputs.names) }}
 
     steps:
       - uses: actions/checkout@v4
@@ -347,33 +199,24 @@ jobs:
             fonts-dejavu-core fonts-liberation fonts-noto-core fonts-symbola
 
       - name: Install copier
-        run: pipx install copier
+        run: pip install copier
 
       - name: Render
         env:
-          DISTRIBUTIONS: ${{ matrix.distributions }}
-          VENDOR_MODULES: ${{ matrix.vendor_modules }}
-          README_DRIVER_SLUG: ${{ matrix.readme_driver_slug }}
-          CLOUD_DIAGNOSTICS: ${{ matrix.cloud_diagnostics || false }}
+          NAME: ${{ matrix.name }}
         run: |
-          copier copy --trust --defaults --vcs-ref HEAD \
-            --data project_name=ci-render \
-            --data project_description="Template CI render" \
-            --data github_org=finitelabs \
-            --data readme_driver_slug="$README_DRIVER_SLUG" \
-            --data distributions="$DISTRIBUTIONS" \
-            --data readme_build=oss \
-            --data vendor_modules="$VENDOR_MODULES" \
-            --data cloud_diagnostics="$CLOUD_DIAGNOSTICS" \
+          python3 tests/template_renders.py answers "$NAME" > "$RUNNER_TEMP/answers.yml"
+          copier copy --trust --defaults --vcs-ref HEAD --data-file "$RUNNER_TEMP/answers.yml" \
             . "$RUNNER_TEMP/render"
 
       - name: Add example driver
         env:
-          VARIANTS: ${{ matrix.variants }}
+          NAME: ${{ matrix.name }}
         run: |
           cp -r example-driver/drivers "$RUNNER_TEMP/render/drivers"
-          if [ -n "$VARIANTS" ]; then
-            printf '%s\n' "$VARIANTS" > "$RUNNER_TEMP/render/drivers/example/variants.json"
+          variants="tests/template-renders/$NAME.example-variants.json"
+          if [ -f "$variants" ]; then
+            cp "$variants" "$RUNNER_TEMP/render/drivers/example/variants.json"
           fi
 
       - name: Initialize project (make init)
@@ -431,12 +274,10 @@ jobs:
           exit "$missing"
 
       - name: A build with secrets is encrypted
-        if: matrix.name == 'oauth'
         working-directory: ${{ runner.temp }}/render
-        env:
-          DISTRIBUTIONS: ${{ matrix.distributions }}
         run: |
           set -euo pipefail
+          DISTRIBUTIONS=$(yq -r .distributions .copier-answers.yml)
           printf '# CI probe\nEXAMPLE_SECRET=\n' > .env.default
           printf '\nEXAMPLE_BUILD_SECRET = "__EXAMPLE_SECRET__"\n' >> drivers/example/driver.lua
           EXAMPLE_SECRET=ci-secret-value make build-nodocs
@@ -459,10 +300,11 @@ jobs:
 
       # The wiring CONTRIBUTING.md gives, on the example driver, built with fake secrets.
       - name: Cloud Monitoring reaches only the DriverCentral build
-        if: matrix.name == 'diagnostics'
         working-directory: ${{ runner.temp }}/render
         run: |
           set -euo pipefail
+          if [ ! -f src/lib/diagnostics.lua ]; then echo "This render has no lib.diagnostics."; exit 0; fi
+          DISTRIBUTIONS=$(yq -r .distributions .copier-answers.yml)
           printf '# CI probe\nINFLUXDB_URL=\nINFLUXDB_TOKEN=\nINFLUXDB_METRICS_DB=\nINFLUXDB_LOGS_DB=\n' > .env.default
           python3 - <<'EOF'
           from pathlib import Path
@@ -510,26 +352,33 @@ jobs:
           # Unpacked rather than piped: grep -q exits at its first match, and under
           # pipefail the unzip it cut off fails the step.
           unpack() { rm -rf unpacked && mkdir unpacked && unzip -q "$1" -d unpacked; }
-          for c4z in dist/drivercentral/c4z/*.c4z; do
-            unpack "$c4z"
-            [ -f unpacked/driver.lua.encrypted ] && [ ! -e unpacked/driver.lua ] \
-              || { echo "::error::$c4z is not encrypted"; exit 1; }
-            grep -q '<name>Cloud Monitoring</name>' unpacked/driver.xml \
-              || { echo "::error::$c4z has no Cloud Monitoring property"; exit 1; }
-            if grep -raqE 'ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
-              echo "::error::$c4z holds a secret in plain text"; exit 1
-            fi
+          for build in $DISTRIBUTIONS; do
+            packages=(dist/"$build"/c4z/*.c4z)
+            [ -e "${packages[0]}" ] || { echo "::error::the $build build made no package"; exit 1; }
+            for c4z in "${packages[@]}"; do
+              unpack "$c4z"
+              case "$build" in
+                drivercentral*)
+                  [ -f unpacked/driver.lua.encrypted ] && [ ! -e unpacked/driver.lua ] \
+                    || { echo "::error::$c4z is not encrypted"; exit 1; }
+                  grep -q '<name>Cloud Monitoring</name>' unpacked/driver.xml \
+                    || { echo "::error::$c4z has no Cloud Monitoring property"; exit 1; }
+                  if grep -raqE 'ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
+                    echo "::error::$c4z holds a secret in plain text"; exit 1
+                  fi
+                  ;;
+                *)
+                  [ -f unpacked/driver.lua ] && [ ! -e unpacked/driver.lua.encrypted ] \
+                    || { echo "::error::$c4z is encrypted: a Cloud Monitoring secret reached the $build build"; exit 1; }
+                  if grep -raqE 'lib\.diagnostics|Cloud Monitoring|Diagnostics Snapshot|INFLUXDB_(URL|TOKEN|METRICS_DB|LOGS_DB)|influx\.example|ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
+                    echo "::error::$c4z carries Cloud Monitoring"; exit 1
+                  fi
+                  ;;
+              esac
+            done
           done
           grep -q 'local INFLUXDB_TOKEN = "ci-token-value"' build/drivercentral/src/lib/diagnostics.lua \
             || { echo "::error::the DriverCentral build did not substitute the token"; exit 1; }
-          for c4z in dist/oss/c4z/*.c4z; do
-            unpack "$c4z"
-            [ -f unpacked/driver.lua ] && [ ! -e unpacked/driver.lua.encrypted ] \
-              || { echo "::error::$c4z is encrypted: a Cloud Monitoring secret reached the OSS build"; exit 1; }
-            if grep -raqE 'lib\.diagnostics|Cloud Monitoring|Diagnostics Snapshot|INFLUXDB_|influx\.example|ci-token-value|ci_metrics_db|ci_logs_db' unpacked; then
-              echo "::error::$c4z carries Cloud Monitoring"; exit 1
-            fi
-          done
           rm -rf unpacked
           echo "Cloud Monitoring: DriverCentral encrypted with the values, OSS plain without it"
           git checkout -- drivers/example

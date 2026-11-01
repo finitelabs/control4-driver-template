@@ -18,14 +18,23 @@ below. That is what this file is for.
 
 ## CI renders the template rather than running it
 
-`.github/workflows/template.yml` renders several answer sets and runs each
-render's tests and format checks. Not to be confused with
-`template/.github/workflows/`, which renders *into* driver repos and never runs
-here.
+`.github/workflows/template.yml` renders every answer set in `tests/template-renders/`
+and runs each render's tests and format checks, and builds the example driver in
+each. Not to be confused with `template/.github/workflows/`, which renders
+*into* driver repos and never runs here.
+
+Each `tests/template-renders/<name>.yml` holds one render's non-default answers, on top
+of `tests/template-renders/fixtures.yml`, and `<name>.files` lists the files it renders.
+`tests/template_renders.py` checks each render against its list, and checks the content
+that depends on the answers: stale.yml's exempt list and days, CONTRIBUTING's
+Cloud Monitoring section, build-secret substitution. Every combination in
+`tests/template-renders/invalid/` must fail to render, with the error its `# expect:`
+line names.
 
 Every gating defect so far passed a default render and appeared only under a
-non-default one, so when you add an `_exclude` entry, add the leg that exercises
-it — and check that leg is distinct with `diff -r`.
+non-default one, so when you add an `_exclude` entry or a question, add a
+render that exercises it and run `make snapshots`: the `.files` diff is what to
+review. `make template-renders` runs the whole check locally.
 
 ## Rendering, and the default that lies
 

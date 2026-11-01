@@ -1,0 +1,2 @@
+# The core crypto bundles, with bitn they need on the path.
+vendor_modules: bitn crypto noiseprotocol protobuf bthome

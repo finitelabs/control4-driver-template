@@ -1,0 +1,3 @@
+# expect: Cloud Monitoring reports only from a DriverCentral build
+distributions: oss
+cloud_diagnostics: true

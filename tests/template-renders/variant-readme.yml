@@ -1,0 +1,4 @@
+# The README driver is a generated variant: build/ has drivers/example_variant,
+# and drivers/ has no such folder. The build job gives the example driver
+# variant-readme.example-variants.json as its variants.json.
+readme_driver_slug: example_variant

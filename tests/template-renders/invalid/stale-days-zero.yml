@@ -1,0 +1,3 @@
+# expect: Must be at least 1
+stale_issues: true
+stale_days: 0

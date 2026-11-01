@@ -1,0 +1,3 @@
+# No github-updater, version.lua or release workflow; has cloud-client-byte.
+distributions: drivercentral
+readme_build: drivercentral
