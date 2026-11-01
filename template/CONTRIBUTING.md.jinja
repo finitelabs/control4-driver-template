@@ -610,10 +610,10 @@ them in the Keychain for local builds. A build missing any of them never
 reports: enabling Cloud Monitoring only logs a warning. A tag build fails
 without them, as for any build secret.
 
-Each driver of a DriverCentral build takes a property, an action, the library
-and two handlers. Each goes inside the `#ifdef DRIVERCENTRAL` block the Support
-Code already has, right after the Support Code's part, rather than in a block of
-its own: the property after the Support Code property, the require after
+Each driver of a DriverCentral build takes a property, the library and two
+handlers, each inside the `#ifdef DRIVERCENTRAL` block the Support Code already
+has, right after the Support Code's part, rather than in a block of its own: the
+property after the Support Code property, the require after
 `lib.support-code`'s, and the handlers after `OPC.Support_Code`.
 
 ```xml
