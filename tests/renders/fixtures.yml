@@ -1,4 +1,4 @@
-# Answers every variant shares: the ones copier.yml has no default for.
+# Answers every render shares: the ones copier.yml has no default for.
 project_name: ci-render
 project_description: Template CI render
 github_org: finitelabs

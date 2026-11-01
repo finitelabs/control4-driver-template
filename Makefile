@@ -3,13 +3,13 @@
 # An interpreter with copier, and so PyYAML, in it.
 PYTHON ?= uvx --from copier python
 
-.PHONY: help snapshots variants
+.PHONY: help renders snapshots
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed 's/:.*## /\t/'
 
-snapshots: ## Rewrite tests/variants/*.files from fresh renders of the working tree
-	$(PYTHON) tests/variants.py update
+snapshots: ## Rewrite tests/renders/*.files from fresh renders of the working tree
+	$(PYTHON) tests/renders.py update
 
-variants: ## Render and check every variant, and check every invalid combination fails
-	$(PYTHON) tests/variants.py
+renders: ## Make and check every test render, and check every invalid combination fails
+	$(PYTHON) tests/renders.py

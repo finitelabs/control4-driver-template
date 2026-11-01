@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""The template's render variants: tests/variants/<name>.yml holds one variant's non-default answers, on top of
-tests/variants/fixtures.yml, and <name>.files is the list of files that variant renders. Every combination in
-tests/variants/invalid/ must fail to render; a "# expect: <text>" first line names the error it must fail with.
+"""The template's test renders: tests/renders/<name>.yml holds one render's non-default answers, on top of
+tests/renders/fixtures.yml, and <name>.files is the list of files it renders. Every combination in
+tests/renders/invalid/ must fail to render; a "# expect: <text>" first line names the error it must fail with.
 
-Run with an interpreter that has copier (and so PyYAML), e.g. `uvx --from copier python tests/variants.py`.
+Run with an interpreter that has copier (and so PyYAML), e.g. `uvx --from copier python tests/renders.py`.
 
-    tests/variants.py                  render every variant and check it, and check every invalid one fails
-    tests/variants.py update           rewrite every <name>.files from a fresh render (make snapshots)
-    tests/variants.py matrix           the variant names, as JSON, for CI's matrix
-    tests/variants.py answers NAME     the variant's answers, fixtures included, for copier copy --data-file
-    tests/variants.py check NAME DIR   check a render of NAME already in DIR
-    tests/variants.py invalid          check every invalid combination fails
+    tests/renders.py                  make every render and check it, and check every invalid one fails
+    tests/renders.py update           rewrite every <name>.files from a fresh render (make snapshots)
+    tests/renders.py matrix           the render names, as JSON, for CI's matrix
+    tests/renders.py answers NAME     the render's answers, fixtures included, for copier copy --data-file
+    tests/renders.py check NAME DIR   check a render of NAME already in DIR
+    tests/renders.py invalid          check every invalid combination fails
 """
 
 import json
@@ -26,13 +26,13 @@ from pathlib import Path
 import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
-VARIANTS = ROOT / "tests" / "variants"
-INVALID = VARIANTS / "invalid"
-FIXTURES = VARIANTS / "fixtures.yml"
+RENDERS = ROOT / "tests" / "renders"
+INVALID = RENDERS / "invalid"
+FIXTURES = RENDERS / "fixtures.yml"
 
 
 def names():
-    return sorted(p.stem for p in VARIANTS.glob("*.yml") if p != FIXTURES)
+    return sorted(p.stem for p in RENDERS.glob("*.yml") if p != FIXTURES)
 
 
 def load(path):
@@ -62,7 +62,7 @@ def file_list(directory):
 
 
 def snapshot(name):
-    return VARIANTS / f"{name}.files"
+    return RENDERS / f"{name}.files"
 
 
 def drift(name, directory):
@@ -73,7 +73,7 @@ def drift(name, directory):
     return [f"+ {f}" for f in got if f not in want] + [f"- {f}" for f in want if f not in got]
 
 
-# Content checks. Each looks at the render and the answers it came from, never at a variant's name.
+# Content checks. Each looks at the render and the answers it came from, never at a render's name.
 
 
 def check_stale_workflow(data, directory):
@@ -179,10 +179,9 @@ CHECKS = [check_stale_workflow, check_github_setup, check_upload_retention, chec
 
 
 def check(name, directory):
-    data = answers(VARIANTS / f"{name}.yml")
+    data = answers(RENDERS / f"{name}.yml")
     problems = [
-        f"file list differs from tests/variants/{name}.files (make snapshots): {line}"
-        for line in drift(name, directory)
+        f"file list differs from tests/renders/{name}.files (make snapshots): {line}" for line in drift(name, directory)
     ]
     for fn in CHECKS:
         problems += fn(data, directory)
@@ -206,24 +205,24 @@ def invalid_failures():
     return problems
 
 
-class VariantsTest(unittest.TestCase):
-    def test_every_variant_renders_as_its_snapshot_and_checks(self):
+class RendersTest(unittest.TestCase):
+    def test_every_render_matches_its_snapshot_and_checks(self):
         for name in names():
-            with self.subTest(variant=name), tempfile.TemporaryDirectory() as tmp:
-                render(answers(VARIANTS / f"{name}.yml"), Path(tmp) / "render")
+            with self.subTest(render=name), tempfile.TemporaryDirectory() as tmp:
+                render(answers(RENDERS / f"{name}.yml"), Path(tmp) / "render")
                 self.assertEqual(check(name, Path(tmp) / "render"), [])
 
     def test_every_invalid_combination_fails(self):
-        self.assertTrue(list(INVALID.glob("*.yml")), "tests/variants/invalid has no combinations")
+        self.assertTrue(list(INVALID.glob("*.yml")), "tests/renders/invalid has no combinations")
         self.assertEqual(invalid_failures(), [])
 
 
 def update():
     for name in names():
         with tempfile.TemporaryDirectory() as tmp:
-            render(answers(VARIANTS / f"{name}.yml"), Path(tmp) / "render")
+            render(answers(RENDERS / f"{name}.yml"), Path(tmp) / "render")
             snapshot(name).write_text("\n".join(file_list(Path(tmp) / "render")) + "\n", encoding="utf-8")
-        print(f"wrote tests/variants/{name}.files")
+        print(f"wrote tests/renders/{name}.files")
 
 
 def main(argv):
@@ -235,7 +234,7 @@ def main(argv):
     elif command == "matrix":
         print(json.dumps(names()))
     elif command == "answers" and len(argv) == 2:
-        print(yaml.safe_dump(answers(VARIANTS / f"{argv[1]}.yml"), sort_keys=True), end="")
+        print(yaml.safe_dump(answers(RENDERS / f"{argv[1]}.yml"), sort_keys=True), end="")
     elif command == "check" and len(argv) == 3:
         problems = check(argv[1], argv[2])
         for problem in problems:
