@@ -16,7 +16,8 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
   the environment, CI's `SECRETS_JSON` or a gitignored `.env` (see the rendered CONTRIBUTING.md).
 - **docs.py**: documentation generation, Markdown -> HTML (markdown-it-py + Pygments) -> PDF
   (WeasyPrint, a CSS Paged Media engine, no browser), plus the repo README.
-- **package.py**: packaging helpers for driver.xml version/modified stamping and zip bundling (stdlib).
+- **package.py**: packaging helpers for driver.xml version/modified stamping and zip bundling, and the
+  package checks `make package` and CI run (stdlib).
 - **deps.py**: build preflight, checks the `.venv` against `requirements.txt` and names what is
   missing instead of failing later with a bare `ImportError` (stdlib).
 - **gen-squishy.lua**: auto-generates squishy files for squish (Lua module bundler) from driver.c4zproj.
@@ -57,7 +58,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **run_test.sh**: test runner script with LuaJIT
 
 ### Project Files
-- **Makefile**: build, format, docs, package, and clean targets
+- **Makefile**: build, format, docs, package, verify, and clean targets
 - **CONTRIBUTING.md**: explains how the template system works
 - **.gitignore**, **LICENSE**, **CHANGELOG.md**, **README.md**
 

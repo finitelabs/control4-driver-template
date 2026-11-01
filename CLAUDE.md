@@ -34,7 +34,14 @@ line names.
 Every gating defect so far passed a default render and appeared only under a
 non-default one, so when you add an `_exclude` entry or a question, add a
 render that exercises it and run `make snapshots`: the `.files` diff is what to
-review. `make template-renders` runs the whole check locally.
+review. `make template-renders` runs the snapshot and content checks for every
+render locally.
+
+CI runs each leg as one make target, so a leg runs the same locally:
+`make render-checks NAME=<name>` is the render leg and `make build-checks
+NAME=<name>` the build leg, rendered into a temp folder (`RENDER=` to move it).
+Each step is a target of its own, which `make help` lists; the build leg's
+checks are `tests/build_checks.py`.
 
 ## Rendering, and the default that lies
 
