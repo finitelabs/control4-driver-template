@@ -648,6 +648,18 @@ function EC.DiagnosticsSnapshot()
 end
 ```
 
+Each driver's `OnDriverLateInit` goes through `diagnostics:wrapLateInit`, right
+after the function, in an `#ifdef DRIVERCENTRAL` of its own unless one is next
+to it. It turns Cloud Monitoring on from the property before the late init runs,
+so an error anywhere in the late init is reported, and `make test` fails a
+driver without it:
+
+```lua
+--#ifdef DRIVERCENTRAL
+OnDriverLateInit = diagnostics:wrapLateInit(OnDriverLateInit)
+--#endif
+```
+
 While enabled, the library owns `ON_HANDLER_ERROR`, `ON_TIMER_ERROR` and
 `ON_UNHANDLED_REJECTION`, so a driver sets none of them. A callback no
 dispatcher runs, such as `OnZigbeePacketIn`, a TCP client's callbacks or a raw
