@@ -27,7 +27,7 @@ PLAIN_XML = (
 )
 
 
-class CheckEncryptedTest(unittest.TestCase):
+class InTempDir(unittest.TestCase):
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
@@ -42,11 +42,17 @@ class CheckEncryptedTest(unittest.TestCase):
             for member, text in members.items():
                 zf.writestr(member, text)
 
+    def _run(self, fn, *args):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = fn(*args)
+        return code, out.getvalue(), err.getvalue()
+
+
+class CheckEncryptedTest(InTempDir):
     def _check(self, build):
-        err = io.StringIO()
-        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
-            code = check_encrypted(build)
-        return code, err.getvalue()
+        code, _, err = self._run(check_encrypted, build)
+        return code, err
 
     def test_an_encrypted_driverCentral_package_passes(self):
         self._package(
@@ -97,21 +103,6 @@ class CheckEncryptedTest(unittest.TestCase):
         self.assertEqual(self._check("oss"), (0, ""))
 
 
-class InTempDir(unittest.TestCase):
-    def setUp(self):
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        cwd = os.getcwd()
-        os.chdir(tmp.name)
-        self.addCleanup(os.chdir, cwd)
-
-    def _run(self, fn, *args):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = fn(*args)
-        return code, out.getvalue(), err.getvalue()
-
-
 class TagVersionTest(InTempDir):
     def test_a_date_tag_gives_its_date(self):
         self.assertEqual(
@@ -153,35 +144,38 @@ class CheckPdfsTest(InTempDir):
         docs = Path("dist") / "oss" / "docs"
         docs.mkdir(parents=True)
         (docs / "index.html").write_text("")
-        code, out, _ = self._run(check_pdfs, "oss")
+        code, _, err = self._run(check_pdfs, "oss")
         self.assertEqual(code, 1)
-        self.assertIn("No PDF files found in dist/oss/docs", out)
+        self.assertIn("dist/oss/docs has no PDF", err)
 
     def test_no_docs_folder_fails(self):
         self.assertEqual(self._run(check_pdfs, "oss")[0], 1)
 
 
-class CheckVersionTest(InTempDir):
-    def _package(self, name, xml):
-        c4z = Path("dist") / "oss" / "c4z"
-        c4z.mkdir(parents=True, exist_ok=True)
-        with zipfile.ZipFile(c4z / name, "w") as zf:
-            zf.writestr("driver.xml", xml)
+def version_xml(version):
+    return f"<devicedata><version>{version}</version></devicedata>"
 
+
+class CheckVersionTest(InTempDir):
     def test_every_package_at_the_version_passes(self):
-        self._package("a.c4z", "<devicedata><version>20261101</version></devicedata>")
-        self._package("b.c4z", "<devicedata><version>20261101</version></devicedata>")
+        self._package("oss", {"driver.xml": version_xml("20261101")}, "a.c4z")
+        self._package("oss", {"driver.xml": version_xml("20261101")}, "b.c4z")
         self.assertEqual(self._run(check_version, "oss", "20261101")[0], 0)
 
     def test_a_package_at_another_version_fails(self):
-        self._package("a.c4z", "<devicedata><version>20261101</version></devicedata>")
-        self._package("b.c4z", "<devicedata><version>20261031</version></devicedata>")
-        code, out, _ = self._run(check_version, "oss", "20261101")
+        self._package("oss", {"driver.xml": version_xml("20261101")}, "a.c4z")
+        self._package("oss", {"driver.xml": version_xml("20261031")}, "b.c4z")
+        code, _, err = self._run(check_version, "oss", "20261101")
         self.assertEqual(code, 1)
-        self.assertIn("b.c4z has driver version '20261031', expected '20261101'", out)
+        self.assertIn("b.c4z has driver version '20261031', expected '20261101'", err)
+        self.assertNotIn("a.c4z", err)
 
     def test_a_package_with_no_version_fails(self):
-        self._package("a.c4z", "<devicedata><version/></devicedata>")
+        self._package("oss", {"driver.xml": "<devicedata><version/></devicedata>"})
+        self.assertEqual(self._run(check_version, "oss", "20261101")[0], 1)
+
+    def test_a_package_with_no_driver_xml_fails(self):
+        self._package("oss", {"driver.lua": "print(1)"})
         self.assertEqual(self._run(check_version, "oss", "20261101")[0], 1)
 
     def test_no_package_fails(self):

@@ -126,48 +126,49 @@ def tag_version(tag: str) -> int:
     match = TAG_VERSION.fullmatch(tag)
     if not match:
         print(
-            f"::error::Tag {tag} is not vYYYYMMDD or vYYYYMMDD-suffix, so it cannot give the driver version.",
+            f"Error: tag {tag} is not vYYYYMMDD or vYYYYMMDD-suffix, so it cannot give the driver version",
             file=sys.stderr,
         )
         return 1
     print(f"DRIVER_VERSION={match.group(1)}")
-    print(f"Stamping driver version {match.group(1)} from tag {tag}.", file=sys.stderr)
+    print(f"Stamping driver version {match.group(1)} from tag {tag}", file=sys.stderr)
     return 0
 
 
 def check_pdfs(build: str) -> int:
     docs = Path("dist") / build / "docs"
-    count = sum(1 for _ in docs.rglob("*.pdf"))
-    if count == 0:
-        print(f"::error::No PDF files found in {docs}")
-        if docs.is_dir():
-            for entry in sorted(docs.iterdir()):
-                print(f"  {entry.name}")
-        else:
-            print(f"  {docs} does not exist")
+    pdfs = list(docs.rglob("*.pdf"))
+    if not pdfs:
+        print(f"Error: {docs} has no PDF", file=sys.stderr)
         return 1
-    print(f"Found {count} PDF(s) in {docs}")
+    print(f"{build}: {len(pdfs)} PDFs")
     return 0
 
 
 def c4z_version(c4z: Path) -> str:
     with zipfile.ZipFile(c4z) as zf:
-        xml = zf.read("driver.xml").decode()
-    match = re.search(r"<version>(.*?)</version>", xml, re.S)
-    return match.group(1) if match else ""
+        xml = zf.read("driver.xml") if "driver.xml" in zf.namelist() else b""
+    try:
+        return ElementTree.fromstring(xml).findtext("version") or ""
+    except ElementTree.ParseError:
+        return ""
 
 
 def check_version(build: str, version: str) -> int:
     packages = sorted((Path("dist") / build / "c4z").glob("*.c4z"))
     if not packages:
-        print(f"::error::dist/{build}/c4z has no package to check")
+        print(f"Error: dist/{build}/c4z has no package to check", file=sys.stderr)
         return 1
+    problems = []
     for c4z in packages:
         got = c4z_version(c4z)
         if got != version:
-            print(f"::error::{c4z} has driver version '{got}', expected '{version}'")
-            return 1
-        print(f"{c4z}: {got}")
+            problems.append(f"{c4z} has driver version {got!r}, expected {version!r}")
+    for problem in problems:
+        print(f"Error: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+    print(f"{build}: {len(packages)} packages, each at version {version}")
     return 0
 
 

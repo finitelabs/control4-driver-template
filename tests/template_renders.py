@@ -5,13 +5,13 @@ tests/template-renders/invalid/ must fail to render; a "# expect: <text>" first 
 
 Run with an interpreter that has copier (and so PyYAML), e.g. `uvx --from copier python tests/template_renders.py`.
 
-    tests/template_renders.py                  make every template render and check it, and check every invalid one fails
-    tests/template_renders.py update           rewrite every <name>.files from a fresh render (make snapshots)
-    tests/template_renders.py matrix           the render names, as JSON, for CI's matrix
-    tests/template_renders.py render NAME DIR  a fresh render of NAME in DIR, replacing an earlier render there
-    tests/template_renders.py example NAME DIR add the example driver, with NAME's example variants, to the render in DIR
-    tests/template_renders.py check NAME DIR   check a render of NAME already in DIR
-    tests/template_renders.py invalid          check every invalid combination fails
+    tests/template_renders.py                   make and check every template render, and check every invalid one fails
+    tests/template_renders.py update            rewrite every <name>.files from a fresh render (make snapshots)
+    tests/template_renders.py matrix            the render names, as JSON, for CI's matrix
+    tests/template_renders.py render NAME DIR   a fresh render of NAME in DIR, replacing an earlier render there
+    tests/template_renders.py example NAME DIR  add the example driver, with NAME's variants, to the render in DIR
+    tests/template_renders.py check NAME DIR    check a render of NAME already in DIR
+    tests/template_renders.py invalid           check every invalid combination fails
 """
 
 import json

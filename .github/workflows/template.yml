@@ -101,7 +101,7 @@ jobs:
       - name: The FFI crypto backend resolves
         run: make render-crypto
 
-      - name: make test
+      - name: Test (make test)
         run: make in-render-test
 
       - name: Formatted

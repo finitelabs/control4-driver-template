@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""The checks CI's build leg runs in a template render that holds the example driver and has
-had `make init` (make render render-example in-render-init). Run with an interpreter that has
-PyYAML, e.g. `uvx --from copier python tests/build_checks.py CHECK DIR`.
+"""The checks CI's build leg runs in a template render that holds the example driver and has had
+`make init` (make render render-example in-render-init). Run with an interpreter that has PyYAML,
+e.g. `uvx --from copier python tests/build_checks.py CHECK DIR`.
 
     tests/build_checks.py idempotent DIR        make build, commit, make build: the second build changes nothing
     tests/build_checks.py readme-images DIR     README.md links an image, and every ./images/ link resolves
     tests/build_checks.py encrypted DIR         a build that substitutes a secret packages every distribution encrypted
-    tests/build_checks.py cloud-monitoring DIR  Cloud Monitoring, wired as CONTRIBUTING.md says, reaches only DriverCentral
+    tests/build_checks.py cloud-monitoring DIR  Cloud Monitoring as CONTRIBUTING.md wires it reaches only DriverCentral
 
-encrypted and cloud-monitoring each run `make build-nodocs` with probe edits and fake secrets,
-and put the files they edit back afterwards.
+encrypted and cloud-monitoring each wire a probe into the example driver, run `make build-nodocs` with fake
+secrets, and put the files they edit back afterwards. Neither depends on how those files are formatted.
 """
 
 import contextlib
@@ -17,64 +17,67 @@ import os
 import re
 import subprocess
 import sys
-import tempfile
 import zipfile
 from pathlib import Path
+from xml.etree import ElementTree
 
 import yaml
 
 EXAMPLE = Path("drivers") / "example"
+DIAGNOSTICS = Path("src") / "lib" / "diagnostics.lua"
 
-CLOUD_MONITORING_PROPERTY = """\
-    <properties>
-      <!-- #ifdef DRIVERCENTRAL -->
-      <property>
-        <name>Cloud Monitoring</name>
-        <type>LIST</type>
-        <default>Enabled</default>
-        <items>
-          <item>Disabled</item>
-          <item>Enabled</item>
-        </items>
-      </property>
-      <!-- #endif -->
-"""
+EXAMPLE_SECRET = "EXAMPLE_SECRET"
+EXAMPLE_SECRET_VALUE = "ci-secret-value"
 
-CLOUD_MONITORING_ACTION = """\
-    </properties>
-    <!-- #ifdef DRIVERCENTRAL -->
-    <actions>
-      <action>
-        <name>Diagnostics Snapshot</name>
-        <command>DiagnosticsSnapshot</command>
-      </action>
-    </actions>
-    <!-- #endif -->
-"""
+CLOUD_MONITORING_PROPERTY = "Cloud Monitoring"
+CLOUD_MONITORING_ACTION = "Diagnostics Snapshot"
 
-CLOUD_MONITORING_LUA = """
---#ifdef DRIVERCENTRAL
-local diagnostics = require("lib.diagnostics")
-function OPC.Cloud_Monitoring(propertyValue)
-  diagnostics:setEnabled(propertyValue == "Enabled")
-end
-function EC.DiagnosticsSnapshot()
-  diagnostics:dumpSnapshot()
-end
---#endif
-"""
-
+# The build secrets CONTRIBUTING.md tells a driver to declare, each with a fake value nothing else in a build holds.
 CLOUD_MONITORING_SECRETS = {
     "INFLUXDB_URL": "https://influx.example.test",
     "INFLUXDB_TOKEN": "ci-token-value",
     "INFLUXDB_METRICS_DB": "ci_metrics_db",
     "INFLUXDB_LOGS_DB": "ci_logs_db",
 }
-SECRET_VALUES = rb"ci-token-value|ci_metrics_db|ci_logs_db"
-CLOUD_MONITORING_TRACES = (
-    rb"lib\.diagnostics|Cloud Monitoring|Diagnostics Snapshot|INFLUXDB_(URL|TOKEN|METRICS_DB|LOGS_DB)"
-    rb"|influx\.example|ci-token-value|ci_metrics_db|ci_logs_db"
-)
+
+# The property, action and handlers CONTRIBUTING.md's Cloud Monitoring section gives, each in an #ifdef.
+CLOUD_MONITORING_PROPERTY_XML = f"""
+<!-- #ifdef DRIVERCENTRAL -->
+<property>
+  <name>{CLOUD_MONITORING_PROPERTY}</name>
+  <type>LIST</type>
+  <default>Enabled</default>
+  <items>
+    <item>Disabled</item>
+    <item>Enabled</item>
+  </items>
+  <description>Sends memory and error reports to Finite Labs so we can fix driver problems.</description>
+</property>
+<!-- #endif -->"""
+
+CLOUD_MONITORING_ACTIONS_XML = f"""
+<!-- #ifdef DRIVERCENTRAL -->
+<actions>
+  <action>
+    <name>{CLOUD_MONITORING_ACTION}</name>
+    <command>DiagnosticsSnapshot</command>
+  </action>
+</actions>
+<!-- #endif -->"""
+
+CLOUD_MONITORING_LUA = """
+--#ifdef DRIVERCENTRAL
+local diagnostics = require("lib.diagnostics")
+
+function OPC.Cloud_Monitoring(propertyValue)
+  diagnostics:setEnabled(propertyValue == "Enabled")
+end
+
+function EC.DiagnosticsSnapshot()
+  diagnostics:dumpSnapshot()
+end
+--#endif
+"""
 
 
 def run(args, render, **env):
@@ -95,9 +98,55 @@ def packages(render, build):
     return sorted(p.relative_to(render) for p in (render / "dist" / build / "c4z").glob("*.c4z"))
 
 
-def contains(directory, pattern):
-    """grep -raqE: does any file under directory match pattern."""
-    return any(p.is_file() and re.search(pattern, p.read_bytes()) for p in directory.rglob("*"))
+def members(render, c4z):
+    """Each file in the package, by name."""
+    with zipfile.ZipFile(render / c4z) as zf:
+        return {name: zf.read(name) for name in zf.namelist() if not name.endswith("/")}
+
+
+def parse(xml):
+    try:
+        return ElementTree.fromstring(xml)
+    except ElementTree.ParseError:
+        return None
+
+
+def encryption_problems(c4z, files):
+    """What keeps the package from holding its Lua encrypted, as the packager encrypts it."""
+    root = parse(files.get("driver.xml", b""))
+    problems = []
+    if "driver.lua.encrypted" not in files:
+        problems.append(f"{c4z} has no driver.lua.encrypted")
+    if "driver.lua" in files:
+        problems.append(f"{c4z} holds driver.lua in plain text")
+    if root is None or root.find('config/script[@encryption="2"]') is None:
+        problems.append(f"{c4z} driver.xml does not ask for encryption")
+    return problems
+
+
+def property_names(xml):
+    root = parse(xml)
+    return [] if root is None else [(p.findtext("name") or "").strip() for p in root.iter("property")]
+
+
+def holds(files, pattern):
+    return any(re.search(pattern, data) for data in files.values())
+
+
+def alternatives(*words):
+    return "|".join(re.escape(word) for word in words).encode()
+
+
+def env_default(names):
+    return "# CI probe\n" + "".join(f"{name}=\n" for name in names)
+
+
+def insert_after(text, tag, snippet, path):
+    """Put snippet right after the file's one tag, whatever its indentation or line breaks."""
+    found = list(re.finditer(tag, text))
+    if len(found) != 1:
+        sys.exit(f"::error::the probe needs exactly one {tag} in {path}, which has {len(found)}")
+    return text[: found[0].end()] + snippet + text[found[0].end() :]
 
 
 @contextlib.contextmanager
@@ -132,8 +181,7 @@ def idempotent(render):
     run(["git", "commit", "-q", "-m", "first build"], render)
     run(["make", "build"], render)
     if subprocess.run(["make", "verify-clean"], cwd=render).returncode != 0:
-        print("::error::make build is not idempotent: the second build changed the tree")
-        return 1
+        return report(["make build is not idempotent: the second build changed the tree"], "")
     print("make build is idempotent")
     return 0
 
@@ -153,68 +201,70 @@ def readme_images(render):
 def encrypted(render):
     problems = []
     with restored(render, Path(".env.default"), EXAMPLE / "driver.lua"):
-        (render / ".env.default").write_text("# CI probe\nEXAMPLE_SECRET=\n")
+        (render / ".env.default").write_text(env_default([EXAMPLE_SECRET]))
         with open(render / EXAMPLE / "driver.lua", "a") as lua:
-            lua.write('\nEXAMPLE_BUILD_SECRET = "__EXAMPLE_SECRET__"\n')
-        run(["make", "build-nodocs"], render, EXAMPLE_SECRET="ci-secret-value")
+            lua.write(f'\nEXAMPLE_BUILD_SECRET = "__{EXAMPLE_SECRET}__"\n')
+        run(["make", "build-nodocs"], render, **{EXAMPLE_SECRET: EXAMPLE_SECRET_VALUE})
         for build in distributions(render):
             if not packages(render, build):
                 problems.append(f"the {build} build made no package")
             for c4z in packages(render, build):
-                with zipfile.ZipFile(render / c4z) as zf:
-                    names = zf.namelist()
-                    if not any("driver.lua.encrypted" in name for name in names):
-                        problems.append(f"{c4z} has no driver.lua.encrypted")
-                    if "driver.xml" not in names or b'encryption="2"' not in zf.read("driver.xml"):
-                        problems.append(f"{c4z} driver.xml does not ask for encryption")
-                    if any(b"ci-secret-value" in zf.read(name) for name in names):
-                        problems.append(f"{c4z} holds the secret in plain text")
+                files = members(render, c4z)
+                problems += encryption_problems(c4z, files)
+                if holds(files, alternatives(EXAMPLE_SECRET_VALUE)):
+                    problems.append(f"{c4z} holds the secret in plain text")
             if (render / "dist" / build / "source").exists():
                 problems.append(f"dist/{build}/source was kept with a secret in it")
     return report(problems, "A build with a secret is encrypted in every distribution")
 
 
 def cloud_monitoring(render):
-    if not (render / "src" / "lib" / "diagnostics.lua").is_file():
+    if not (render / DIAGNOSTICS).is_file():
         print("This render has no lib.diagnostics.")
         return 0
+    secrets = CLOUD_MONITORING_SECRETS
+    values = alternatives(*secrets.values())
+    traces = alternatives(
+        "lib.diagnostics", CLOUD_MONITORING_PROPERTY, CLOUD_MONITORING_ACTION, *secrets, *secrets.values()
+    )
     problems = []
     with restored(render, Path(".env.default"), EXAMPLE / "driver.xml", EXAMPLE / "driver.lua"):
-        (render / ".env.default").write_text(
-            "# CI probe\nINFLUXDB_URL=\nINFLUXDB_TOKEN=\nINFLUXDB_METRICS_DB=\nINFLUXDB_LOGS_DB=\n"
-        )
-        xml = render / EXAMPLE / "driver.xml"
-        s = xml.read_text()
-        s = s.replace("    <properties>\n", CLOUD_MONITORING_PROPERTY, 1)
-        s = s.replace("    </properties>\n", CLOUD_MONITORING_ACTION, 1)
-        xml.write_text(s)
+        (render / ".env.default").write_text(env_default(secrets))
+        xml_path = render / EXAMPLE / "driver.xml"
+        xml = xml_path.read_text(encoding="utf-8")
+        if re.search(r"<actions[\s>/]", xml):
+            sys.exit(f"::error::the probe adds <actions>, and {EXAMPLE / 'driver.xml'} already has one")
+        xml = insert_after(xml, r"<properties\s*>", CLOUD_MONITORING_PROPERTY_XML, EXAMPLE / "driver.xml")
+        xml = insert_after(xml, r"</properties\s*>", CLOUD_MONITORING_ACTIONS_XML, EXAMPLE / "driver.xml")
+        xml_path.write_text(xml, encoding="utf-8")
         with open(render / EXAMPLE / "driver.lua", "a") as lua:
             lua.write(CLOUD_MONITORING_LUA)
-        run(["make", "build-nodocs"], render, **CLOUD_MONITORING_SECRETS)
+        run(["make", "build-nodocs"], render, **secrets)
         for build in distributions(render):
             if not packages(render, build):
                 problems.append(f"the {build} build made no package")
             for c4z in packages(render, build):
-                with tempfile.TemporaryDirectory() as tmp:
-                    unpacked = Path(tmp)
-                    with zipfile.ZipFile(render / c4z) as zf:
-                        zf.extractall(unpacked)
-                    if build.startswith("drivercentral"):
-                        if not (unpacked / "driver.lua.encrypted").is_file() or (unpacked / "driver.lua").exists():
-                            problems.append(f"{c4z} is not encrypted")
-                        driver_xml = unpacked / "driver.xml"
-                        if not driver_xml.is_file() or b"<name>Cloud Monitoring</name>" not in driver_xml.read_bytes():
-                            problems.append(f"{c4z} has no Cloud Monitoring property")
-                        if contains(unpacked, SECRET_VALUES):
-                            problems.append(f"{c4z} holds a secret in plain text")
-                    else:
-                        if not (unpacked / "driver.lua").is_file() or (unpacked / "driver.lua.encrypted").exists():
-                            problems.append(f"{c4z} is encrypted: a Cloud Monitoring secret reached the {build} build")
-                        if contains(unpacked, CLOUD_MONITORING_TRACES):
-                            problems.append(f"{c4z} carries Cloud Monitoring")
-        diagnostics = render / "build" / "drivercentral" / "src" / "lib" / "diagnostics.lua"
-        if not diagnostics.is_file() or b'local INFLUXDB_TOKEN = "ci-token-value"' not in diagnostics.read_bytes():
-            problems.append("the DriverCentral build did not substitute the token")
+                files = members(render, c4z)
+                if build.startswith("drivercentral"):
+                    problems += encryption_problems(c4z, files)
+                    if CLOUD_MONITORING_PROPERTY not in property_names(files.get("driver.xml", b"")):
+                        problems.append(f"{c4z} has no {CLOUD_MONITORING_PROPERTY} property")
+                    if holds(files, values):
+                        problems.append(f"{c4z} holds a secret in plain text")
+                else:
+                    if "driver.lua" not in files or "driver.lua.encrypted" in files:
+                        problems.append(f"{c4z} is encrypted: a Cloud Monitoring secret reached the {build} build")
+                    if holds(files, traces):
+                        problems.append(f"{c4z} carries Cloud Monitoring")
+            built = render / "build" / build / DIAGNOSTICS
+            if build.startswith("drivercentral"):
+                text = built.read_text(encoding="utf-8") if built.is_file() else ""
+                for name, value in secrets.items():
+                    if value not in text:
+                        problems.append(f"the {build} build did not substitute {name} into {DIAGNOSTICS}")
+                # A placeholder no declared secret replaced: the library and CONTRIBUTING.md disagree.
+                for left in sorted(set(re.findall(r"__[A-Z][A-Z0-9_]*__", text))):
+                    problems.append(f"the {build} build left {left} in {DIAGNOSTICS}")
     return report(problems, "Cloud Monitoring: DriverCentral encrypted with the values, OSS plain without it")
 
 

@@ -108,7 +108,7 @@ fmt-md: $(VENV_STAMP)
 	done; \
 	[ -z "$$files" ] || $(VENV_PY) tools/docs.py fmt --wrap 80 $$files
 
-# ─── Check ──────────────────────────────────────────────────────────────────
+# ─── Check ────────────────────────────────────────────────────────────────────
 # Assert-only mirror of fmt (--check, no rewrite); this is what CI runs.
 
 .PHONY: check check-lua check-py check-md
@@ -254,22 +254,22 @@ zip: $(VENV_STAMP) ## Zip the c4z/ and docs/ subfolders per distribution
 # from the tag (tools/package.py tag-version).
 
 .PHONY: verify-pdfs verify-version verify-clean
-verify-pdfs: ## After a build: fail unless every distribution made a PDF
+verify-pdfs: $(VENV_STAMP) ## Check every distribution made a PDF
 	@for build in $(DISTRIBUTIONS); do \
-		python3 tools/package.py check-pdfs "$$build" || exit 1; \
+		$(VENV_PY) tools/package.py check-pdfs "$$build" || exit 1; \
 	done
 
-verify-version: ## After a build: fail unless every .c4z is at DRIVER_VERSION
+verify-version: $(VENV_STAMP) ## Check every .c4z is at DRIVER_VERSION
 	@for build in $(DISTRIBUTIONS); do \
-		python3 tools/package.py check-version "$$build" "$(DRIVER_VERSION)" || exit 1; \
+		$(VENV_PY) tools/package.py check-version "$$build" "$(DRIVER_VERSION)" || exit 1; \
 	done
 
-verify-clean: ## After a build: fail if it changed a tracked file or left an untracked one
-	@git diff --exit-code || { echo "::error::Uncommitted changes after build"; exit 1; }
+verify-clean: ## Check the build changed no tracked file and left no untracked one
+	@git diff --exit-code || { echo "Error: the build changed tracked files" >&2; exit 1; }
 	@untracked=$$(git ls-files --others --exclude-standard); \
 	if [ -n "$$untracked" ]; then \
-		echo "::error::Untracked files after build:"; \
-		echo "$$untracked"; \
+		echo "Error: the build left untracked files:" >&2; \
+		echo "$$untracked" >&2; \
 		exit 1; \
 	fi
 
