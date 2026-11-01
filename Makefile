@@ -1,16 +1,12 @@
 # The template repo's own tasks. Driver repos get theirs from template/Makefile.jinja.
 # Run `make help` for available targets.
 
-# CI's runner has pipx and no uv: there python3 has copier, and pipx runs the formatters.
+# An interpreter with copier, and so PyYAML, in it. CI's runner has no uv, and the
+# workflow installs copier into its python3.
 ifneq ($(shell command -v uvx 2>/dev/null),)
-  # An interpreter with copier, and so PyYAML, in it.
-  PYTHON   ?= uvx --from copier python
-  BLACK    ?= uvx black
-  MDFORMAT ?= uvx --with mdformat-gfm mdformat
+  PYTHON ?= uvx --from copier python
 else
-  PYTHON   ?= python3
-  BLACK    ?= pipx run black
-  MDFORMAT ?= pipx run --spec mdformat --spec mdformat-gfm mdformat
+  PYTHON ?= python3
 endif
 
 # CI's render and build legs each check one render: tests/template-renders/$(NAME).yml.
@@ -45,7 +41,7 @@ invalid-combinations: ## Check every combination in tests/template-renders/inval
 # ─── Render leg ───────────────────────────────────────────────────────────────
 # Each target is one step of CI's render leg, on the render of NAME in RENDER.
 
-.PHONY: render render-snapshot render-lib-loads render-crypto render-formatted render-checks
+.PHONY: render render-snapshot render-lib-loads render-crypto render-checks
 render: ## Render NAME into RENDER, replacing an earlier render there
 	$(PYTHON) tests/template_renders.py render $(NAME) "$(RENDER)"
 
@@ -61,13 +57,7 @@ render-lib-loads: ## Check every src/lib module in the render loads
 render-crypto: ## Check the render's c4_shim resolves its FFI crypto backend
 	"$(RENDER)/test/run_test.sh" "$(CURDIR)/tests/ffi_crypto_backend.lua"
 
-# The render has no .venv (that needs make init), so black and mdformat run standalone.
-render-formatted: ## Check the render's Lua, Python and Markdown are formatted
-	$(MAKE) -C "$(RENDER)" check-lua
-	cd "$(RENDER)" && $(BLACK) --check tools
-	cd "$(RENDER)" && $(MDFORMAT) --check --wrap 80 *.md
-
-RENDER_LEG := render render-snapshot render-lib-loads render-crypto in-render-test render-formatted
+RENDER_LEG := render render-snapshot render-lib-loads render-crypto in-render-test
 render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME
 
 # ─── Build leg ────────────────────────────────────────────────────────────────

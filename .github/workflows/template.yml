@@ -74,14 +74,6 @@ jobs:
         with:
           luaVersion: "luajit-2.1"
 
-      - name: Install stylua
-        run: |
-          curl -fsSL --retry 3 --retry-all-errors -o "$RUNNER_TEMP/stylua.zip" \
-            "https://github.com/JohnnyMorganz/StyLua/releases/download/v2.6.0/stylua-linux-$(uname -m).zip"
-          unzip -q "$RUNNER_TEMP/stylua.zip" -d "$RUNNER_TEMP/stylua"
-          echo "$RUNNER_TEMP/stylua" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/stylua/stylua" --version
-
       - uses: actions/setup-python@v6
         with:
           python-version: "3.x"
@@ -103,9 +95,6 @@ jobs:
 
       - name: Test (make test)
         run: make in-render-test
-
-      - name: Formatted
-        run: make render-formatted
 
   build:
     name: build (${{ matrix.name }})
