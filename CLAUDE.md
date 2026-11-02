@@ -108,20 +108,6 @@ build secrets it passes) without clobbering what a driver has since added. A rep
 without `resources/Driver Icons.sketch` gets the template's on its next `copier
 update`, even when it keeps its own icons under another name.
 
-## The icon template is built, not edited
-
-`template/resources/Driver Icons.sketch` comes from Control4's OS 3 icon template:
-`make icon-template` downloads their file (pinned to a commit and a sha256) and
-runs the scripts in `icon-template/steps/` against it through Sketch's MCP
-server. Sketch must be running with the server started. Change a step and
-rebuild rather than editing the file in Sketch, so the next rebuild keeps the
-change; when Control4 changes their file, move the pin and rebuild.
-
-The steps find Control4's layers by ID, and `tools/icons.py` exports the two icon
-artboards by ID, because both artboards share one name. Every driver's icon file
-descends from Control4's, so it shares those IDs and Control4's document ID too:
-with two of them open, a Sketch MCP call can reach the wrong one.
-
 ## Jinja
 
 **Only `.jinja` files have their contents rendered**, with the suffix stripped on

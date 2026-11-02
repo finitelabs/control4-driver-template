@@ -82,9 +82,3 @@ build-cloud-monitoring: ## Check Cloud Monitoring reaches only the DriverCentral
 BUILD_LEG := render render-example in-render-init in-render-check in-render-test \
   build-idempotent build-readme-images build-encrypted build-cloud-monitoring
 build-checks: $(BUILD_LEG) ## Run CI's build leg for NAME
-
-# ─── Driver icons ─────────────────────────────────────────────────────────────
-
-.PHONY: icon-template
-icon-template: ## Rebuild template/resources/Driver Icons.sketch from Control4's file (needs Sketch's MCP server)
-	python3 icon-template/build.py
