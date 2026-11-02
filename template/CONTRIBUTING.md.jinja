@@ -400,6 +400,14 @@ into the driver itself calls `ShimPersistLand()` where one call ends and the
 next begins, such as before a reload, and before it reads what was stored. A
 suite that needs a write read back at once calls `ShimPersistLater(false)`.
 
+### The late init
+
+A late init wired through Cloud Monitoring's `diagnostics:wrapLateInit` reports
+an error and carries on, as a controller needs, so a suite that calls
+`OnDriverLateInit()` itself never sees the error. A suite runs the late init
+with `ShimLateInit()` instead, which fails on any error the wrap reported.
+Without `lib.diagnostics` it just calls the late init.
+
 ### Driver-local test support
 
 Support code specific to this driver stays in this repo. Two files mirror the
