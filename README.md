@@ -67,8 +67,8 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
   the Finite Labs logo. Copied once when a project is created; `copier update` never touches it
   after that.
 - **documentation/images/**: images every driver's docs share, such as `check-drivers.png` (the
-  DriverCentral Cloud driver's Check Drivers action). `preprocess.py` copies one into a built doc's
-  `images/` when the doc links it and has no copy of its own.
+  DriverCentral Cloud driver's Check Drivers action). `preprocess.py` copies one into a built
+  driver doc's `images/` when the doc links it and has no copy of its own.
 
 ### Project Files
 - **Makefile**: build, format, docs, package, verify, and clean targets
