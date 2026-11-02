@@ -226,6 +226,14 @@ def check_named_secrets(data, directory):
     return problems
 
 
+def check_icon_style(data, directory):
+    want = data.get("icon_style", "shaped")
+    lines = (Path(directory) / "Makefile").read_text(encoding="utf-8").splitlines()
+    if f"ICON_STYLE ?= {want}" not in lines:
+        return [f"the Makefile does not set ICON_STYLE ?= {want}"]
+    return []
+
+
 CHECKS = [
     check_stale_workflow,
     check_github_setup,
@@ -233,6 +241,7 @@ CHECKS = [
     check_contributing,
     check_build_secrets,
     check_named_secrets,
+    check_icon_style,
 ]
 
 

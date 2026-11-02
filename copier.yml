@@ -72,6 +72,14 @@ primary_color:
   help: "Primary hex color for documentation headings (e.g., '#17BCF2')"
   default: "#109EFF"
 
+icon_style:
+  type: str
+  help: "Control4 icon artboard `make icons` exports from resources/Driver Icons.sketch"
+  choices:
+    Shadow Shaped: shaped
+    Shadow Square: square
+  default: shaped
+
 vendor_modules:
   type: str
   help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf version oauth). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless. oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua)."
