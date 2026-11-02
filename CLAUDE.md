@@ -27,7 +27,8 @@ Each `tests/template-renders/<name>.yml` holds one render's non-default answers,
 of `tests/template-renders/fixtures.yml`, and `<name>.files` lists the files it renders.
 `tests/template_renders.py` checks each render against its list, and checks the content
 that depends on the answers: stale.yml's exempt list and days, CONTRIBUTING's
-Cloud Monitoring section, build-secret substitution. Every combination in
+Cloud Monitoring section, build-secret substitution, and the build secrets
+build.yml passes by name. Every combination in
 `tests/template-renders/invalid/` must fail to render, with the error its `# expect:`
 line names.
 
@@ -99,13 +100,13 @@ driver actually requires, so a rendered-but-unused module is zero bytes in the
 `github-updater.lua` and its tests are gated on `oss`, the distribution whose
 update mechanism they are.
 
-`_skip_if_exists` holds `CHANGELOG.md`, `src/constants.lua` and
+`_skip_if_exists` holds `CHANGELOG.md`, `src/constants.lua`, `.env.default` and
 `resources/Driver Icons.sketch`, so existing repos never receive changes to them;
 only newly created ones do. This is why the template can seed `src/constants.lua`
-(with the property-visibility keys its lib requires) without clobbering the
-constants a driver has since added. A repo without a file at that path gets the
-template's on its next `copier update`, even when it keeps its own icons under
-another name.
+(with the property-visibility keys its lib requires) and `.env.default` (with the
+build secrets it passes) without clobbering what a driver has since added. A repo
+without `resources/Driver Icons.sketch` gets the template's on its next `copier
+update`, even when it keeps its own icons under another name.
 
 ## The icon template is built, not edited
 
@@ -124,8 +125,9 @@ with two of them open, a Sketch MCP call can reach the wrong one.
 ## Jinja
 
 **Only `.jinja` files have their contents rendered**, with the suffix stripped on
-the way out — currently `Makefile`, `CONTRIBUTING.md`, `CHANGELOG.md`, the build
-and stale workflows, `tools/github-setup`, and the answers file. Everything else
+the way out — currently `Makefile`, `CONTRIBUTING.md`, `CHANGELOG.md`,
+`.env.default`, the build and stale workflows, `tools/github-setup`, and the
+answers file. Everything else
 is copied byte for byte, so `{{` in a `.lua` or `.py` file passes straight
 through and is not a template error. In `tools/github-setup.jinja` a bash
 `${#var}` would open a Jinja comment.

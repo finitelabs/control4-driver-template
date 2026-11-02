@@ -1,2 +1,4 @@
 # Control4's OAuth authorization-code grant and its short-link helper.
 vendor_modules: oauth
+# Its API keys are the driver's own build secrets, which build.yml passes by name.
+extra_build_secrets: C4_OAUTH_API_KEY C4_LINK_API_KEY
