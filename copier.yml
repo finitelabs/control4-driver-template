@@ -9,6 +9,8 @@ _skip_if_exists:
   - "CHANGELOG.md"
   # Seeded with the keys the template lib needs; drivers extend it.
   - "src/constants.lua"
+  # The icon template, copied once; each driver makes it its own.
+  - "resources/Driver Icons.sketch"
 
 # Conditionally exclude files based on answers
 _exclude:

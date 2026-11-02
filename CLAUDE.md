@@ -99,10 +99,27 @@ driver actually requires, so a rendered-but-unused module is zero bytes in the
 `github-updater.lua` and its tests are gated on `oss`, the distribution whose
 update mechanism they are.
 
-`_skip_if_exists` holds `CHANGELOG.md` and `src/constants.lua`, so existing repos
-never receive changes to them — only newly created ones do. This is why the
-template can seed `src/constants.lua` (with the property-visibility keys its lib
-requires) without clobbering the constants a driver has since added.
+`_skip_if_exists` holds `CHANGELOG.md`, `src/constants.lua` and
+`resources/Driver Icons.sketch`, so existing repos never receive changes to them —
+only newly created ones do. This is why the template can seed `src/constants.lua`
+(with the property-visibility keys its lib requires) without clobbering the
+constants a driver has since added. A repo without a file at that path gets the
+template's on its next `copier update`, even when it keeps its own icons under
+another name.
+
+## The icon template is built, not edited
+
+`template/resources/Driver Icons.sketch` comes from Control4's OS 3 icon template:
+`make icon-template` downloads their file (pinned to a commit and a sha256) and
+runs the scripts in `icon-template/steps/` against it through Sketch's MCP
+server. Sketch must be running with the server started. Change a step and
+rebuild rather than editing the file in Sketch, so the next rebuild keeps the
+change; when Control4 changes their file, move the pin and rebuild.
+
+The steps find Control4's layers by ID, and `tools/icons.py` exports the two icon
+artboards by ID, because both artboards share one name. Every driver's icon file
+descends from Control4's, so it shares those IDs and Control4's document ID too:
+with two of them open, a Sketch MCP call can reach the wrong one.
 
 ## Jinja
 
