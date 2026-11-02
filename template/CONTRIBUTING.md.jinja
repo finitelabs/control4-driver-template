@@ -148,6 +148,12 @@ and the PDF all show them as GitHub does. The marker goes alone on its line, and
 the quote must not sit inside a list or another quote; otherwise it stays a
 plain quote that shows the marker.
 
+Images that every driver's docs share, such as `check-drivers.png` (the
+DriverCentral Cloud driver's Check Drivers action), ship with the template in
+`resources/documentation/images/`. A doc that links `./images/<name>` and has no
+copy of its own gets the template's at build time, so a driver's `images/` holds
+only its own.
+
 ## Updating Shared Code
 
 Copier is only needed for this occasional sync. It is **not** a build dependency

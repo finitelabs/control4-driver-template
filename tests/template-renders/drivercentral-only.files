@@ -8,6 +8,7 @@ LICENSE
 Makefile
 requirements.txt
 resources/Driver Icons.sketch
+resources/documentation/images/check-drivers.png
 src/constants.lua
 src/lib/bindings.lua
 src/lib/conditionals.lua

@@ -639,6 +639,29 @@ def encrypt_drivers(drivers_dir: Path, why: str) -> None:
         print(f"Encrypting {xml_path.parent.name}: {why}")
 
 
+def add_shared_doc_images(build_dir: Path, shared_dir: Path) -> None:
+    """
+    Copy each image in shared_dir into every driver doc's images/ that links it
+    and has no copy of its own, so a driver's docs need not carry the template's
+    images. A top-level documentation/ doc is left out: its README takes images
+    from the source tree, not the build.
+
+    Args:
+        build_dir: Build directory, after its directives are processed
+        shared_dir: The template's shared documentation images
+    """
+    if not shared_dir.is_dir():
+        return
+    images = sorted(shared_dir.glob("*.png"))
+    for doc in build_dir.glob("drivers/*/www/documentation/*.md"):
+        text = doc.read_text(encoding="utf-8")
+        for image in images:
+            dest = doc.parent / "images" / image.name
+            if f"images/{image.name}" in text and not dest.exists():
+                dest.parent.mkdir(exist_ok=True)
+                shutil.copyfile(image, dest)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Build the project with conditional directives."
@@ -710,6 +733,10 @@ def main():
 
     # Copy and process src directory
     process_directory(build_dir, conditions, driver_names)
+
+    add_shared_doc_images(
+        build_dir, repo_root / "resources" / "documentation" / "images"
+    )
 
     finish_build(build_dir, conditions, resolve_build_secrets(repo_root))
 

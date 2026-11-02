@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Tests for tools/preprocess.py: its directives, the encryption a build ends
-with, and the check that the Build workflow passes the declared build secrets.
+"""Tests for tools/preprocess.py: its directives, the shared doc images, the
+encryption a build ends with, and the check that the Build workflow passes the
+declared build secrets.
 """
 
 import contextlib
@@ -13,6 +14,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from preprocess import (  # noqa: E402
     ENCRYPTED_MARKER,
+    add_shared_doc_images,
     check_build_secrets,
     finish_build,
     packaged_driver_names,
@@ -131,6 +133,39 @@ class PackagedDriverNamesTest(unittest.TestCase):
         d = self._drivers({"hc": '<Driver type="c4z">\n</Driver>\n'})
         with self.assertRaises(ValueError):
             packaged_driver_names(d, {"OSS"})
+
+
+class SharedDocImagesTest(unittest.TestCase):
+    def test_a_doc_that_links_a_shared_image_without_its_own_gets_it(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        d = Path(tmp.name)
+        shared = d / "shared"
+        shared.mkdir()
+        (shared / "check-drivers.png").write_bytes(b"shared")
+        link = '<img src="./images/check-drivers.png"/>\n'
+        for driver, doc in {
+            "linked": link,
+            "own": link,
+            "unlinked": "# Docs\n",
+        }.items():
+            (d / "drivers" / driver / "www" / "documentation").mkdir(parents=True)
+            (d / "drivers" / driver / "www" / "documentation" / "index.md").write_text(
+                doc, encoding="utf-8"
+            )
+        own = d / "drivers" / "own" / "www" / "documentation" / "images"
+        own.mkdir()
+        (own / "check-drivers.png").write_bytes(b"own")
+
+        add_shared_doc_images(d, shared)
+
+        def image(driver):
+            path = d / "drivers" / driver / "www/documentation/images/check-drivers.png"
+            return path.read_bytes() if path.exists() else None
+
+        self.assertEqual(image("linked"), b"shared")
+        self.assertEqual(image("own"), b"own")
+        self.assertIsNone(image("unlinked"))
 
 
 class FinishBuildTest(unittest.TestCase):
