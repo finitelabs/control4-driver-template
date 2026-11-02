@@ -13,6 +13,7 @@ Makefile
 requirements.txt
 resources/Driver Icons.sketch
 resources/documentation/images/check-drivers.png
+resources/documentation/images/finite-labs-logo.png
 src/constants.lua
 src/lib/bindings.lua
 src/lib/conditionals.lua

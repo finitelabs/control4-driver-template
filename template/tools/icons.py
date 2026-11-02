@@ -26,7 +26,6 @@ ICON_ARTBOARDS = {
 
 FRAMES = {
     "Documentation Header": "www/documentation/images/header.png",
-    "Finite Labs Logo": "www/documentation/images/finite-labs-logo.png",
     "Driver Central Driver Card": "cards/Driver Central Driver Card.png",
     "Website Card - Light": "cards/Website Card - Light.png",
     "Website Card - Dark": "cards/Website Card - Dark.png",
