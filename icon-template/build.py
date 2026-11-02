@@ -6,7 +6,6 @@ Control4's file. Sketch must be running with its MCP server started.
 """
 
 import argparse
-import base64
 import hashlib
 import json
 import pathlib
@@ -116,35 +115,6 @@ def close(sketch, path):
     )
 
 
-def screenshots(sketch, doc_id, folder):
-    clash = sketch.run(
-        "Count documents sharing the ID",
-        "const sketch = require('sketch');\n"
-        "var n = sketch.getDocuments().filter(function (d) {\n"
-        f"  return String(d.id) === {json.dumps(doc_id)};\n"
-        "}).length;\n"
-        "console.log(JSON.stringify({ ok: n === 1, open: n }));",
-    )
-    print(f"documents with this ID: {clash['open']}")
-    folder.mkdir(parents=True, exist_ok=True)
-    info = json.loads(
-        sketch.tool("get_document_info", {"targetDocumentID": doc_id})[0]["text"]
-    )
-    for page in info["pages"]:
-        for frame in page["frames"]:
-            content = sketch.tool(
-                "get_screenshot", {"targetDocumentID": doc_id, "layerID": frame["id"]}
-            )
-            name = frame["name"].replace("/", "").strip() or "frame"
-            path = folder / f"{page['name'].strip()} - {name} - {frame['id'][:8]}.png"
-            for c in content:
-                if c["type"] == "image":
-                    path.write_bytes(base64.b64decode(c["data"]))
-                elif c["type"] == "text" and c["text"].strip().startswith("/"):
-                    shutil.copyfile(c["text"].strip(), path)
-            print(f"shot: {path.name}")
-
-
 def untrim_icon_artboards(path):
     tmp = path.with_name(path.name + ".tmp")
     found = set()
@@ -182,9 +152,6 @@ def main():
         help="Control4's .sketch file (default: download it)",
     )
     parser.add_argument("--output", type=pathlib.Path, default=OUTPUT)
-    parser.add_argument(
-        "--shots", type=pathlib.Path, help="save a PNG of each frame here"
-    )
     args = parser.parse_args()
 
     output = args.output.resolve()
@@ -200,18 +167,14 @@ def main():
         "__DOCUMENT__": json.dumps(str(output)),
         "__FINITE_LABS_LOGO_SVG__": json.dumps(LOGO.read_text()),
     }
-    doc_id = None
     for step in sorted(STEPS.glob("*.js")):
         script = step.read_text()
         for token, value in context.items():
             script = script.replace(token, value)
         title = step.stem.split("-", 1)[1].replace("-", " ").capitalize()
         report = sketch.run(title, script)
-        doc_id = report.get("docId", doc_id)
         print(f"{step.name}: {json.dumps(report)}")
 
-    if args.shots:
-        screenshots(sketch, doc_id, args.shots)
     close(sketch, output)
     untrim_icon_artboards(output)
     print(f"wrote {output}")
