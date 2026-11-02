@@ -24,9 +24,6 @@ ICON_ARTBOARDS = {
     "square": "6F1BF787-D38E-4F93-A465-ACE3C57FFE75",
 }
 
-# The Finite Labs logo is not exported: a re-export of its frame differs from the fleet's
-# file byte for byte, so the template ships that file and preprocess.py copies it into each
-# driver's docs.
 FRAMES = {
     "Documentation Header": "www/documentation/images/header.png",
     "Driver Central Driver Card": "cards/Driver Central Driver Card.png",
