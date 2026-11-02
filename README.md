@@ -66,9 +66,9 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
   frames: the documentation header, the DriverCentral card, the light and dark website cards and
   the Finite Labs logo. Copied once when a project is created; `copier update` never touches it
   after that.
-- **documentation/images/**: images every driver's docs share, such as `check-drivers.png` (the
-  DriverCentral Cloud driver's Check Drivers action). `preprocess.py` copies one into a built
-  driver doc's `images/` when the doc links it and has no copy of its own.
+- **documentation/images/**: images every driver's docs share: `finite-labs-logo.png` and
+  `check-drivers.png` (the DriverCentral Cloud driver's Check Drivers action). `preprocess.py` copies
+  one into a built driver doc's `images/` when the doc links it and has no copy of its own.
 
 ### Project Files
 - **Makefile**: build, format, docs, package, verify, and clean targets
@@ -140,7 +140,8 @@ Then `make icons` exports everything to `dist/icons/`:
 
 - `www/icons/`: Control4's Shadow Shaped or Shadow Square icon, as `icon_style` picks, at the 18
   sizes the drivers ship
-- `www/documentation/images/`: `header.png` and `finite-labs-logo.png`
+- `www/documentation/images/`: `header.png`. The Finite Labs logo is not exported: the template ships the
+  fleet's `finite-labs-logo.png`, and the build copies it into each driver doc that links it
 - `cards/`: the DriverCentral card and the light and dark website cards
 
 It also refreshes each of those files a driver already has under `drivers/*/www/`. For a new
