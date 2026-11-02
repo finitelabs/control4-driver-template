@@ -123,8 +123,9 @@ endpoint, so it cannot be scripted from the GitHub side.
 
 In `resources/Driver Icons.sketch`:
 
-1. Set the `Brand/Accent` and `Brand/Accent Dark` color variables. The accent tiles fade from one
-   to the other, so make Dark about 15% darker.
+1. Set the `Brand/Accent` color variable to the repo's `primary_color` (in `.copier-answers.yml`),
+   so the icons match the docs' headings. The accent tiles fade from it to `Brand/Accent Dark`, so
+   make that about 15% darker.
 2. Replace the circle in the `Icon` and `Icon White` symbols with the brand's icon mark, taken
    from its official SVG kit.
 3. In `Documentation Header`, replace `Brand Logo` with the brand's logo and set the driver name.

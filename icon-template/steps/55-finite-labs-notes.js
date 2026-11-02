@@ -5,7 +5,7 @@ if (!doc) {
 } else {
   var text = [
     'Finite Labs driver icons',
-    '1. Set the Brand/Accent and Brand/Accent Dark color variables.',
+    '1. Set the Brand/Accent color variable to the repo\'s primary_color (in .copier-answers.yml), and Brand/Accent Dark about 15% darker.',
     '2. Replace the circle in the Icon and Icon White symbols with the brand\'s mark, from its official SVG kit.',
     '3. Replace Brand Logo in Documentation Header with the brand\'s logo, and set the driver name.',
     '4. Leave the grids hidden. Export with make icons, or select a frame and use Export.',
