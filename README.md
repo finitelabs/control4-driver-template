@@ -13,7 +13,8 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **preprocess.py**: C preprocessor-style `#ifdef`/`#ifndef` for Lua, XML, and Markdown. Supports
   variant expansion for generating multiple driver configurations from a single source.
   Also substitutes build secrets: `__NAME__` placeholders for the names `.env.default` declares, from
-  the environment, CI's `SECRETS_JSON` or a gitignored `.env` (see the rendered CONTRIBUTING.md).
+  the environment, a gitignored `.env` or the macOS Keychain. `--check-secrets`, run by `make check`, checks
+  the Build workflow passes each of them by name (see the rendered CONTRIBUTING.md).
 - **docs.py**: documentation generation, Markdown -> HTML (markdown-it-py + Pygments) -> PDF
   (WeasyPrint, a CSS Paged Media engine, no browser), plus the repo README.
 - **package.py**: packaging helpers for driver.xml version/modified stamping and zip bundling, and the
@@ -24,7 +25,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **github-markdown.css**: vendored stylesheet for the rendered documentation.
 - **github-setup**: checks the GitHub repository against the standard settings and prints the
   drift; with `--apply` it creates the repository if needed and fixes the drift.
-- **test_preprocess.py**: tests for preprocess.py's `#embed` directive, run by `make test`.
+- **test_preprocess.py**: tests for preprocess.py's directives, build encryption and secrets check, run by `make test`.
 
 ### Common Libraries (`src/lib/`)
 - **bindings.lua**: binding management (add/remove/query Control4 driver bindings)
@@ -137,6 +138,7 @@ Copier will show diffs for any files that changed in the template and let you re
 | `primary_color` | Accent color for generated docs | `#109EFF` |
 | `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version oauth) | (empty) |
 | `cloud_diagnostics` | Ship `lib.diagnostics` (Cloud Monitoring), which reports a DriverCentral build's memory use and errors to InfluxDB; needs a `drivercentral` distribution and four build secrets | `false` |
+| `extra_build_secrets` | Space-separated build secrets `.env.default` declares besides the template's own (`SUPPORT_CODE_SECRET` with DriverCentral, the four `INFLUXDB_*` with `cloud_diagnostics`); the Build workflow passes each by name | (empty) |
 | `extra_required_checks` | Space-separated status checks a PR must pass besides `build`, each a job name from the repo's own workflows; `tools/github-setup` puts them in the branch ruleset | (empty) |
 | `stale_issues` | Ping inactive issues, then close them, unless an exempt author opened them | `false` |
 | `stale_exempt_authors` | Space-separated GitHub logins whose issues are left alone; a GitHub App is `name[bot]` (asked when `stale_issues` is true) | (empty) |

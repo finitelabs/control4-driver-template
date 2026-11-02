@@ -1,4 +1,5 @@
 .copier-answers.yml
+.env.default
 .github/workflows/build.yml
 .gitignore
 CHANGELOG.md

@@ -1,4 +1,5 @@
 .copier-answers.yml
+.env.default
 .github/release.yml
 .github/workflows/build.yml
 .github/workflows/label-release-pr.yml

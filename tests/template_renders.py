@@ -174,7 +174,7 @@ def check_build_secrets(data, directory):
         probe.mkdir(parents=True, exist_ok=True)
         (probe / "driver.lua").write_text('A="__CI_SECRET_A__" B="__CI_SECRET_B__" D="__CI_SECRET_D__"\n')
         (render_copy / ".env.default").write_text("# CI probe\nCI_SECRET_A=\nCI_SECRET_B=\nCI_SECRET_D=\n")
-        (render_copy / ".env").write_text("CI_SECRET_A=from-dotenv\n")
+        (render_copy / ".env").write_text("CI_SECRET_A=from-dotenv\nCI_SECRET_B=from-dotenv\n")
         env = {k: v for k, v in os.environ.items() if not k.startswith("CI_SECRET_") and k != "REQUIRE_SECRETS"}
         preprocess = [sys.executable, "tools/preprocess.py"]
 
@@ -184,9 +184,6 @@ def check_build_secrets(data, directory):
             )
 
         problems = []
-        run(["--write-dotenv"], SECRETS_JSON='{"CI_SECRET_B":"from-dotenv","GITHUB_TOKEN":"not-declared"}')
-        if "GITHUB_TOKEN" in (render_copy / ".env").read_text():
-            problems.append("an undeclared secret reached .env")
         out = run(["--oss"], CI_SECRET_A="from-env")
         got = (render_copy / "build" / "oss" / "drivers" / "probe" / "driver.lua").read_text().strip()
         if got != 'A="from-env" B="from-dotenv" D=""':
@@ -202,7 +199,41 @@ def check_build_secrets(data, directory):
         return problems
 
 
-CHECKS = [check_stale_workflow, check_github_setup, check_upload_retention, check_contributing, check_build_secrets]
+def check_named_secrets(data, directory):
+    """build.yml passes each build secret by name, exactly the ones .env.default declares, and never toJSON(secrets)."""
+    distributions = str(data.get("distributions", "drivercentral oss")).split()
+    want = (["SUPPORT_CODE_SECRET"] if {"drivercentral", "drivercentral-dev"} & set(distributions) else []) + (
+        ["INFLUXDB_URL", "INFLUXDB_TOKEN", "INFLUXDB_METRICS_DB", "INFLUXDB_LOGS_DB"]
+        if data.get("cloud_diagnostics")
+        else []
+    )
+    want += [name for name in str(data.get("extra_build_secrets", "")).split() if name not in want]
+    workflow = (Path(directory) / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
+    passed = re.findall(r"\$\{\{\s*secrets\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}", workflow)
+    declared = re.findall(r"^([A-Z_][A-Z0-9_]*)=", (Path(directory) / ".env.default").read_text(encoding="utf-8"), re.M)
+    problems = []
+    if "toJSON(secrets)" in workflow:
+        problems.append("build.yml hands toJSON(secrets) to a step")
+    if sorted(passed) != sorted(want):
+        problems.append(f"build.yml passes {sorted(passed)}, want {sorted(want)}")
+    if sorted(declared) != sorted(want):
+        problems.append(f".env.default declares {sorted(declared)}, want {sorted(want)}")
+    check = subprocess.run(
+        [sys.executable, "tools/preprocess.py", "--check-secrets"], cwd=directory, capture_output=True, text=True
+    )
+    if check.returncode != 0:
+        problems.append(f"preprocess.py --check-secrets fails on the render: {check.stderr.strip()}")
+    return problems
+
+
+CHECKS = [
+    check_stale_workflow,
+    check_github_setup,
+    check_upload_retention,
+    check_contributing,
+    check_build_secrets,
+    check_named_secrets,
+]
 
 
 def check(name, directory):
