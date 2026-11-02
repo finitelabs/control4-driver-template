@@ -100,7 +100,7 @@ driver actually requires, so a rendered-but-unused module is zero bytes in the
 update mechanism they are.
 
 `_skip_if_exists` holds `CHANGELOG.md`, `src/constants.lua` and
-`resources/Driver Icons.sketch`, so existing repos never receive changes to them —
+`resources/Driver Icons.sketch`, so existing repos never receive changes to them;
 only newly created ones do. This is why the template can seed `src/constants.lua`
 (with the property-visibility keys its lib requires) without clobbering the
 constants a driver has since added. A repo without a file at that path gets the
