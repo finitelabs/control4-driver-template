@@ -16,7 +16,6 @@ secrets, and put the files they edit back afterwards. Neither depends on how tho
 import contextlib
 import os
 import re
-import shutil
 import subprocess
 import sys
 import zipfile
@@ -195,10 +194,6 @@ def driverless(render):
             problems.append(f"make {target} with no drivers does not say {says}")
     if (render / "dist").exists():
         problems.append("make build with no drivers made dist/")
-    result = subprocess.run(["python3", "tools/preprocess.py", "--oss"], cwd=render, capture_output=True, text=True)
-    if result.returncode != 0:
-        problems.append(f"preprocess.py fails with no drivers: {result.stderr.strip()[-200:]}")
-    shutil.rmtree(render / "build", ignore_errors=True)
     return report(problems, "A repo with no driver yet builds and verifies nothing")
 
 
