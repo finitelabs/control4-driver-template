@@ -11,6 +11,8 @@ _skip_if_exists:
   - "src/constants.lua"
   # Seeded with the build secrets the template passes; drivers add their own.
   - ".env.default"
+  # The icon template, copied once; each driver makes it its own.
+  - "resources/Driver Icons.sketch"
 
 # Conditionally exclude files based on answers
 _exclude:
@@ -69,6 +71,14 @@ primary_color:
   type: str
   help: "Primary hex color for documentation headings (e.g., '#17BCF2')"
   default: "#109EFF"
+
+icon_style:
+  type: str
+  help: "Control4 icon artboard `make icons` exports from resources/Driver Icons.sketch"
+  choices:
+    Shadow Shaped: shaped
+    Shadow Square: square
+  default: shaped
 
 vendor_modules:
   type: str

@@ -25,6 +25,8 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **github-markdown.css**: vendored stylesheet for the rendered documentation.
 - **github-setup**: checks the GitHub repository against the standard settings and prints the
   drift; with `--apply` it creates the repository if needed and fixes the drift.
+- **icons.py**: `make icons`, which exports the icons and doc images from
+  `resources/Driver Icons.sketch` with Sketch's `sketchtool`. Needs Sketch; no build runs it.
 - **test_preprocess.py**: tests for preprocess.py's directives, build encryption and secrets check, run by `make test`.
 
 ### Common Libraries (`src/lib/`)
@@ -57,6 +59,12 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 ### Test Support (`test/`)
 - **c4_shim.lua**: shim layer replacing C4 API calls with native Lua equivalents for local testing
 - **run_test.sh**: test runner script with LuaJIT
+
+### Driver Icons (`resources/`)
+- **Driver Icons.sketch**: Control4's OS 3 device and service icon template, plus the Finite Labs
+  frames: the documentation header, the DriverCentral card, the light and dark website cards and
+  the Finite Labs logo. Copied once when a project is created; `copier update` never touches it
+  after that.
 
 ### Project Files
 - **Makefile**: build, format, docs, package, verify, and clean targets
@@ -112,6 +120,28 @@ One step stays manual: add the repository to the project's VCS integration in
 YouTrack so the webhook gets installed. YouTrack generates the webhook
 endpoint, so it cannot be scripted from the GitHub side.
 
+### Make the Driver's Icons
+
+In `resources/Driver Icons.sketch`:
+
+1. Set the `Brand/Accent` color variable to the repo's `primary_color` (in `.copier-answers.yml`),
+   so the icons match the docs' headings. The accent tiles fade from it to `Brand/Accent Dark`, so
+   make that about 15% darker.
+2. Replace the circle in the `Icon` and `Icon White` symbols with the brand's icon mark, taken
+   from its official SVG kit.
+3. In `Documentation Header`, replace `Brand Logo` with the brand's logo and set the driver name.
+4. Leave the grids hidden, or they end up in the exports.
+
+Then `make icons` exports everything to `dist/icons/`:
+
+- `www/icons/`: Control4's Shadow Shaped or Shadow Square icon, as `icon_style` picks, at the 18
+  sizes the drivers ship
+- `www/documentation/images/`: `header.png` and `finite-labs-logo.png`
+- `cards/`: the DriverCentral card and the light and dark website cards
+
+It also refreshes each of those files a driver already has under `drivers/*/www/`. For a new
+driver, copy the ones it uses from `dist/icons/www/` into `drivers/<name>/www/` once.
+
 ### Update an Existing Driver with Latest Template
 
 Copier is only needed for this occasional sync. It is not a build dependency.
@@ -136,6 +166,7 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
+| `icon_style` | Control4 icon artboard `make icons` exports: `shaped` (Shadow Shaped) or `square` (Shadow Square) | `shaped` |
 | `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version oauth) | (empty) |
 | `cloud_diagnostics` | Ship `lib.diagnostics` (Cloud Monitoring), which reports a DriverCentral build's memory use and errors to InfluxDB; needs a `drivercentral` distribution and four build secrets | `false` |
 | `extra_build_secrets` | Space-separated build secrets `.env.default` declares besides the template's own (`SUPPORT_CODE_SECRET` with DriverCentral, the four `INFLUXDB_*` with `cloud_diagnostics`); the Build workflow passes each by name | (empty) |

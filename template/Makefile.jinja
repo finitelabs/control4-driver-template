@@ -310,6 +310,15 @@ test: ## Run the Lua test suite (test/test_*.lua) and the tools' tests (tools/te
 support-code: ## Print today's Support Code, which opens a DriverCentral build's Lua window
 	@python3 tools/support_code.py
 
+# ─── Icons ────────────────────────────────────────────────────────────────────
+
+# Control4's icon artboard to export, from the icon_style answer: shaped or square.
+ICON_STYLE ?= {{ icon_style }}
+
+.PHONY: icons
+icons: ## Export the icons and doc images from resources/Driver Icons.sketch (needs Sketch)
+	python3 tools/icons.py --style $(ICON_STYLE)
+
 # ─── Build ────────────────────────────────────────────────────────────────────
 
 .PHONY: build build-nodocs

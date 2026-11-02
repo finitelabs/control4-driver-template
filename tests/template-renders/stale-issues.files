@@ -11,6 +11,7 @@ CONTRIBUTING.md
 LICENSE
 Makefile
 requirements.txt
+resources/Driver Icons.sketch
 src/constants.lua
 src/lib/bindings.lua
 src/lib/conditionals.lua
@@ -64,6 +65,7 @@ tools/docs.py
 tools/gen-squishy.lua
 tools/github-markdown.css
 tools/github-setup
+tools/icons.py
 tools/package.py
 tools/preprocess.py
 tools/support_code.py
