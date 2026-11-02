@@ -9,6 +9,8 @@ _skip_if_exists:
   - "CHANGELOG.md"
   # Seeded with the keys the template lib needs; drivers extend it.
   - "src/constants.lua"
+  # Seeded with the build secrets the template passes; drivers add their own.
+  - ".env.default"
 
 # Conditionally exclude files based on answers
 _exclude:
@@ -79,6 +81,22 @@ cloud_diagnostics:
   default: false
   validator: >-
     {% if cloud_diagnostics and 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}Cloud Monitoring reports only from a DriverCentral build, and distributions has none.{% endif %}
+
+extra_build_secrets:
+  type: str
+  help: "Space-separated build secrets .env.default declares besides the template's own (SUPPORT_CODE_SECRET with a DriverCentral build, the four INFLUXDB_* with cloud_diagnostics). The Build workflow passes each to make build by name, and no other secret."
+  default: ""
+  validator: >-
+    {% for name in extra_build_secrets.split() %}{% if not name | regex_search('^[A-Z_][A-Z0-9_]*$') %}{{ name }} is not a build secret name: use capital letters, digits and '_'. {% endif %}{% endfor %}
+
+# Not asked: every build secret the Build workflow passes, the template's own first.
+build_secrets:
+  type: str
+  when: false
+  default: >-
+    {{ ((['SUPPORT_CODE_SECRET'] if 'drivercentral' in distributions.split() or 'drivercentral-dev' in distributions.split() else [])
+    + (['INFLUXDB_URL', 'INFLUXDB_TOKEN', 'INFLUXDB_METRICS_DB', 'INFLUXDB_LOGS_DB'] if cloud_diagnostics else [])
+    + extra_build_secrets.split()) | unique | join(' ') }}
 
 extra_required_checks:
   type: str
