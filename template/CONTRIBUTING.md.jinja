@@ -665,6 +665,9 @@ OnDriverLateInit = diagnostics:wrapLateInit(OnDriverLateInit)
 --#endif
 ```
 
+A test runs the late init with `ShimLateInit()`, not `OnDriverLateInit()`: the
+wrap only reports an error, and `ShimLateInit()` fails the test on it.
+
 While enabled, the library owns `ON_HANDLER_ERROR`, `ON_TIMER_ERROR` and
 `ON_UNHANDLED_REJECTION`, so a driver sets none of them. A callback no
 dispatcher runs, such as `OnZigbeePacketIn`, a TCP client's callbacks or a raw
