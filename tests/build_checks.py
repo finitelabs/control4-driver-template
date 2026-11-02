@@ -3,6 +3,7 @@
 `make init` (make render render-example in-render-init). Run with an interpreter that has PyYAML,
 e.g. `uvx --from copier python tests/build_checks.py CHECK DIR`.
 
+    tests/build_checks.py driverless DIR        before its first driver, make build and make verify pass as no-ops
     tests/build_checks.py idempotent DIR        make build, commit, make build: the second build changes nothing
     tests/build_checks.py readme-images DIR     README.md links an image, and every ./images/ link resolves
     tests/build_checks.py encrypted DIR         a build that substitutes a secret packages every distribution encrypted
@@ -15,6 +16,7 @@ secrets, and put the files they edit back afterwards. Neither depends on how tho
 import contextlib
 import os
 import re
+import shutil
 import subprocess
 import sys
 import zipfile
@@ -174,6 +176,32 @@ def report(problems, passed):
     return 0
 
 
+def driverless(render):
+    """A new repo has no driver until its first lands, and its build and CI must still pass."""
+    if (render / "drivers").exists():
+        return report(["the render already has drivers/, so this check tests nothing"], "")
+    problems = []
+    for target, says in (
+        ("build", "nothing to build"),
+        ("build-nodocs", "nothing to build"),
+        ("verify", "nothing to verify"),
+    ):
+        result = subprocess.run(["make", target], cwd=render, capture_output=True, text=True)
+        if result.returncode != 0:
+            lines = (result.stdout + result.stderr).splitlines()
+            why = next((line for line in reversed(lines) if "Error" in line), lines[-1] if lines else "")
+            problems.append(f"make {target} fails with no drivers: {why.strip()[:200]}")
+        elif says not in result.stdout:
+            problems.append(f"make {target} with no drivers does not say {says}")
+    if (render / "dist").exists():
+        problems.append("make build with no drivers made dist/")
+    result = subprocess.run(["python3", "tools/preprocess.py", "--oss"], cwd=render, capture_output=True, text=True)
+    if result.returncode != 0:
+        problems.append(f"preprocess.py fails with no drivers: {result.stderr.strip()[-200:]}")
+    shutil.rmtree(render / "build", ignore_errors=True)
+    return report(problems, "A repo with no driver yet builds and verifies nothing")
+
+
 def idempotent(render):
     run(["git", "init", "-q"], render)
     run(["git", "config", "user.email", "ci@example.com"], render)
@@ -271,6 +299,7 @@ def cloud_monitoring(render):
 
 
 CHECKS = {
+    "driverless": driverless,
     "idempotent": idempotent,
     "readme-images": readme_images,
     "encrypted": encrypted,

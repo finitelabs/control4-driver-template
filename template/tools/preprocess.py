@@ -719,7 +719,11 @@ def main():
     (build_dir / ENCRYPTED_MARKER).unlink(missing_ok=True)
 
     shutil.copytree(src_dir, build_dir / "src")
-    shutil.copytree(drivers_dir, build_dir / "drivers")
+    if drivers_dir.is_dir():
+        shutil.copytree(drivers_dir, build_dir / "drivers")
+    else:
+        # A new repo, until its first driver lands.
+        (build_dir / "drivers").mkdir()
     shutil.copytree(vendor_dir, build_dir / "vendor")
 
     # Copy documentation if present (optional)

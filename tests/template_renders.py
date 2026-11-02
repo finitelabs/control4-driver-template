@@ -152,6 +152,9 @@ def check_upload_retention(data, directory):
             "every actions/upload-artifact step in build.yml needs retention-days naming the tag, pull request and "
             f"otherwise cases ({uploads} uploads, retention lines {counts})"
         ]
+    skipped = text.count("if: always() && hashFiles('drivers/*/driver.xml') != ''")
+    if skipped != uploads:
+        return [f"every upload step in build.yml must skip a repo with no driver yet ({skipped} of {uploads} do)"]
     return []
 
 

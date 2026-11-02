@@ -290,6 +290,9 @@ The driver.xml step stamps today's date as the version unless `DRIVER_VERSION`
 is set. On a tag build CI sets it to the tag's date, so the tag must be
 `vYYYYMMDD` or `vYYYYMMDD-suffix` or the build fails.
 
+A repo with no driver yet (no `drivers/*/driver.xml`) builds and verifies
+nothing, and CI uploads nothing, so a new repo's first pull request goes green.
+
 Each distribution's outputs are grouped by type under `dist/<distribution>/`:
 `c4z/` (packaged drivers), `docs/` (generated PDFs) and `source/` (the squished
 per-driver Lua). `<repo>.zip` sits alongside them and contains `c4z/` and
