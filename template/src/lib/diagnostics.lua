@@ -43,9 +43,8 @@ local ERROR_RATE_LIMIT = 10
 local ERROR_RATE_WINDOW = 60
 local MESSAGE_MAX_BYTES = 200
 local TRACEBACK_MAX_BYTES = 2000
---- A controller starting many instances at once can take seconds to send; 2 s lost a first report on dev.
+--- A controller starting many instances at once can take seconds to send.
 local POST_TIMEOUT_SECONDS = 10
---- A post that gets no answer, or a server error, is sent once more after this long.
 local POST_RETRY_DELAY = 30 * ONE_SECOND
 --- Most points a driver's onReport callback adds to one report, and the longest string value it may send.
 local DRIVER_POINTS_MAX = 200
@@ -1027,7 +1026,7 @@ function Diagnostics:_writeErrorLog(message, traceback, source, timestamp)
 end
 
 --- Posts line protocol to a database. The only place a report leaves the controller. A post that gets no answer,
---- or a server error, is sent once more; a refusal (a bad token or line) would only be refused again.
+--- a server error or a 429 is sent once more, after POST_RETRY_DELAY.
 --- @private
 --- @param body string
 --- @param database string
