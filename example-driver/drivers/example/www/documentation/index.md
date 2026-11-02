@@ -65,7 +65,11 @@ every driver and implements no device-specific behavior.
 
 #### Cloud Status (read-only)
 
-Displays the DriverCentral cloud license status.
+Displays the DriverCentral cloud license status. To refresh it, select the
+"DriverCentral Cloud" driver in the "System Design" tab and perform the "Check
+Drivers" action.
+
+<img alt="Check Drivers" src="./images/check-drivers.png" width="300"/>
 
 #### Automatic Updates \[ Off | **_On_** \]
 

@@ -27,7 +27,8 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
   drift; with `--apply` it creates the repository if needed and fixes the drift.
 - **icons.py**: `make icons`, which exports the icons and doc images from
   `resources/Driver Icons.sketch` with Sketch's `sketchtool`. Needs Sketch; no build runs it.
-- **test_preprocess.py**: tests for preprocess.py's directives, build encryption and secrets check, run by `make test`.
+- **test_preprocess.py**: tests for preprocess.py's directives, shared doc images, build encryption and
+  secrets check, run by `make test`.
 
 ### Common Libraries (`src/lib/`)
 - **bindings.lua**: binding management (add/remove/query Control4 driver bindings)
@@ -60,11 +61,14 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **c4_shim.lua**: shim layer replacing C4 API calls with native Lua equivalents for local testing
 - **run_test.sh**: test runner script with LuaJIT
 
-### Driver Icons (`resources/`)
+### Driver Icons and Shared Doc Images (`resources/`)
 - **Driver Icons.sketch**: Control4's OS 3 device and service icon template, plus the Finite Labs
   frames: the documentation header, the DriverCentral card, the light and dark website cards and
   the Finite Labs logo. Copied once when a project is created; `copier update` never touches it
   after that.
+- **documentation/images/**: images every driver's docs share, such as `check-drivers.png` (the
+  DriverCentral Cloud driver's Check Drivers action). `preprocess.py` copies one into a built doc's
+  `images/` when the doc links it and has no copy of its own.
 
 ### Project Files
 - **Makefile**: build, format, docs, package, verify, and clean targets
