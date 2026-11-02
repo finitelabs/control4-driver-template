@@ -63,12 +63,15 @@ render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME
 # ─── Build leg ────────────────────────────────────────────────────────────────
 # CI's build leg is `make build-checks`: the example driver, built in the render.
 
-.PHONY: build-driverless render-example build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-checks
+.PHONY: build-driverless render-example build-doc-alerts build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-checks
 build-driverless: ## Check the render, before it has a driver, builds and verifies nothing
 	$(PYTHON) tests/build_checks.py driverless "$(RENDER)"
 
 render-example: ## Add the example driver to the render
 	$(PYTHON) tests/template_renders.py example $(NAME) "$(RENDER)"
+
+build-doc-alerts: ## Check the render's docs.py renders each GitHub alert
+	$(PYTHON) tests/build_checks.py doc-alerts "$(RENDER)"
 
 build-idempotent: ## Check a second make build in the render changes nothing
 	$(PYTHON) tests/build_checks.py idempotent "$(RENDER)"
@@ -82,6 +85,6 @@ build-encrypted: ## Check a build that substitutes a secret is encrypted
 build-cloud-monitoring: ## Check Cloud Monitoring reaches only the DriverCentral build
 	$(PYTHON) tests/build_checks.py cloud-monitoring "$(RENDER)"
 
-BUILD_LEG := render build-driverless render-example in-render-init in-render-check in-render-test \
+BUILD_LEG := render build-driverless render-example in-render-init build-doc-alerts in-render-check in-render-test \
   build-idempotent build-readme-images build-encrypted build-cloud-monitoring
 build-checks: $(BUILD_LEG) ## Run CI's build leg for NAME

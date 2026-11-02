@@ -4,6 +4,7 @@
 e.g. `uvx --from copier python tests/build_checks.py CHECK DIR`.
 
     tests/build_checks.py driverless DIR        before its first driver, make build and make verify pass as no-ops
+    tests/build_checks.py doc-alerts DIR        docs.py renders each GitHub alert as GitHub does, and fmt keeps it
     tests/build_checks.py idempotent DIR        make build, commit, make build: the second build changes nothing
     tests/build_checks.py readme-images DIR     README.md links an image, and every ./images/ link resolves
     tests/build_checks.py encrypted DIR         a build that substitutes a secret packages every distribution encrypted
@@ -18,6 +19,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
@@ -197,6 +199,32 @@ def driverless(render):
     return report(problems, "A repo with no driver yet builds and verifies nothing")
 
 
+def doc_alerts(render):
+    """The driver docs use GitHub's alerts, and nothing else checks how they render."""
+    python = str(render / ".venv" / "bin" / "python3")
+    kinds = ("NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION")
+    problems = []
+    with tempfile.TemporaryDirectory() as tmp:
+        md = Path(tmp) / "index.md"
+        md.write_text("# Alerts\n\n" + "\n".join(f"> [!{kind}]\n> A {kind.lower()} alert.\n" for kind in kinds))
+        if (
+            subprocess.run([python, "tools/docs.py", "fmt", "--check", "--wrap", "80", str(md)], cwd=render).returncode
+            != 0
+        ):
+            problems.append("docs.py fmt would rewrite a GitHub alert")
+        run([python, "tools/docs.py", "md2html", str(md), tmp], render)
+        html = (Path(tmp) / "index.html").read_text(encoding="utf-8")
+    for kind in kinds:
+        if f"markdown-alert markdown-alert-{kind.lower()}" not in html:
+            problems.append(f"a [!{kind}] alert does not render as an alert")
+    titles = html.count('class="markdown-alert-title"')
+    if titles != len(kinds):
+        problems.append(f"the HTML has {titles} alert titles, want {len(kinds)}")
+    if "[!" in html:
+        problems.append("an alert's [!KIND] marker shows as text")
+    return report(problems, f"docs.py renders all {len(kinds)} GitHub alerts")
+
+
 def idempotent(render):
     run(["git", "init", "-q"], render)
     run(["git", "config", "user.email", "ci@example.com"], render)
@@ -294,6 +322,7 @@ def cloud_monitoring(render):
 
 
 CHECKS = {
+    "doc-alerts": doc_alerts,
     "driverless": driverless,
     "idempotent": idempotent,
     "readme-images": readme_images,
