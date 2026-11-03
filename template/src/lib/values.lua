@@ -205,7 +205,8 @@ end
 --- @param varType VariableType? The type of the variable, if `nil` it will not be registered as a variable.
 --- @param callbackOrWritable (fun(newValue: string|integer|number): void)|boolean|nil Callback to register, `true` for writable-with-placeholder, `false` to clear, or `nil` for no change.
 --- @param propertyFormat string|table<any, string>|nil How the property shows the value: a string is a suffix (e.g., " °C"); a table gives the property's text per value instead (e.g., { [true] = "On", [false] = "Off" }), and a value it does not list shows as the variable reads.
---- @return boolean changed True if the value changed, false otherwise.
+--- @return boolean changed True if the value itself changed: a new name, one deleted before, or a different value.
+--- @return boolean recordChanged True if anything stored for it changed: the value, or also its type, writability, suffix or labels.
 function Values:update(name, value, varType, callbackOrWritable, propertyFormat)
   log:trace("Values:update(%s, %s, %s, %s, %s)", name, value, varType, callbackOrWritable, propertyFormat)
   local suffix = type(propertyFormat) == "string" and propertyFormat or nil
@@ -238,10 +239,9 @@ function Values:update(name, value, varType, callbackOrWritable, propertyFormat)
   -- items have a chance to re-register their callbacks).
   local writable = self._callbacks[name] ~= nil or (existing and existing.writable) or false
 
-  -- Check if the entry has changed
-  local changed = not existing
-    or existing.deleted
-    or not sameValue(existing.value, value)
+  -- A driver keys its events on the value alone, so a record gaining labels on an update fires none.
+  local valueChanged = not existing or existing.deleted or not sameValue(existing.value, value)
+  local changed = valueChanged
     or existing.suffix ~= suffix
     or not sameLabels(existing.labels, labels)
     or existing.varType ~= varType
@@ -301,7 +301,7 @@ function Values:update(name, value, varType, callbackOrWritable, propertyFormat)
     end
   end
 
-  return changed
+  return valueChanged, changed
 end
 
 --- Deletes a value. A value that has had a variable is marked as deleted, and its

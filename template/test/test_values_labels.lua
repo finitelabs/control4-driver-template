@@ -77,15 +77,33 @@ end)
 T.eq("an equal table built anew", changed, false)
 T.eq("with no write", writes, 0)
 
-T.section("a change of labels is a change, as a suffix change is")
+T.section("a change of labels changes the record, as a suffix change does, but not the value")
 values = fresh("Output 1 State")
 values:update("Output 1 State", true, "BOOL", nil, ON_OFF)
-T.eq("other text", values:update("Output 1 State", true, "BOOL", nil, { [true] = "Closed", [false] = "Open" }), true)
+local valueChanged, recordChanged =
+  values:update("Output 1 State", true, "BOOL", nil, { [true] = "Closed", [false] = "Open" })
+T.eq("other text: the value is the same", valueChanged, false)
+T.eq("other text: the record changed", recordChanged, true)
 T.eq("shows the new label", Properties["Output 1 State"], "Closed")
-T.eq("labels to a suffix", values:update("Output 1 State", true, "BOOL", nil, " x"), true)
+valueChanged, recordChanged = values:update("Output 1 State", true, "BOOL", nil, " x")
+T.eq("labels to a suffix: the value is the same", valueChanged, false)
+T.eq("labels to a suffix: the record changed", recordChanged, true)
 T.eq("shows the suffix", Properties["Output 1 State"], "1 x")
-T.eq("a suffix to labels", values:update("Output 1 State", true, "BOOL", nil, ON_OFF), true)
+valueChanged, recordChanged = values:update("Output 1 State", true, "BOOL", nil, ON_OFF)
+T.eq("a suffix to labels: the value is the same", valueChanged, false)
+T.eq("a suffix to labels: the record changed", recordChanged, true)
 T.eq("shows the label again", Properties["Output 1 State"], "On")
+
+T.section("a driver adopting labels on an update sees no value change for the same value")
+values = fresh("Output 1 State")
+values:update("Output 1 State", true, "BOOL")
+T.eq(
+  "the first update with labels, same value: no value change",
+  (values:update("Output 1 State", true, "BOOL", nil, ON_OFF)),
+  false
+)
+T.eq("a new value with the labels is a change", (values:update("Output 1 State", false, "BOOL", nil, ON_OFF)), true)
+T.eq("and shows its label", Properties["Output 1 State"], "Off")
 
 T.section("restore shows the labels before the driver updates the value again")
 values = fresh("Output 1 State")
