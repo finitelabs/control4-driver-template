@@ -239,7 +239,6 @@ function Values:update(name, value, varType, callbackOrWritable, propertyFormat)
   -- items have a chance to re-register their callbacks).
   local writable = self._callbacks[name] ~= nil or (existing and existing.writable) or false
 
-  -- A driver keys its events on the value alone, so a record gaining labels on an update fires none.
   local valueChanged = not existing or existing.deleted or not sameValue(existing.value, value)
   local changed = valueChanged
     or existing.suffix ~= suffix
