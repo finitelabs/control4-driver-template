@@ -92,7 +92,7 @@ T.check("coerces a non-string name", Variables["98765"] == "x")
 -- lib/values.lua reads "0"/"1" back from a BOOL because it wrote "0"/"1", not
 -- because Director coerces.
 C4:AddVariable("Raw", "true", "BOOL", true, false)
-T.check("does not normalise a BOOL value", Variables["Raw"] == "true")
+T.check("does not normalize a BOOL value", Variables["Raw"] == "true")
 
 T.raises("raises on a boolean value", function()
   C4:AddVariable("Bad", true, "BOOL", true, false)
@@ -190,7 +190,7 @@ C4:SetVariable("Locked", "1")
 T.check("writes through to a readOnly variable", Variables["Locked"] == "1")
 
 C4:SetVariable("Locked", "false")
-T.check("does not normalise a BOOL value", Variables["Locked"] == "false")
+T.check("does not normalize a BOOL value", Variables["Locked"] == "false")
 
 T.raises("raises on a boolean value", function()
   C4:SetVariable("Temp", true)
@@ -453,7 +453,7 @@ for _, hasSocket in ipairs({ false, true }) do
       end)()
     )
 
-    -- The defect itself: with a table handle nothing is cancelled and the
+    -- The defect itself: with a table handle nothing is canceled and the
     -- TimerFunctions entry leaks.
     Timer, TimerFunctions = {}, {}
     local fired = 0
@@ -471,7 +471,7 @@ for _, hasSocket in ipairs({ false, true }) do
 
     if hasSocket then
       clock.advance(10)
-      T.check(label .. ": a cancelled callback does not fire", fired == 0, fired)
+      T.check(label .. ": a canceled callback does not fire", fired == 0, fired)
 
       -- Or the assertion above would pass for the wrong reason
       Timer, TimerFunctions = {}, {}
@@ -480,7 +480,7 @@ for _, hasSocket in ipairs({ false, true }) do
         ran = ran + 1
       end)
       clock.advance(10)
-      T.check(label .. ": an uncancelled callback fires", ran == 1, ran)
+      T.check(label .. ": an uncanceled callback fires", ran == 1, ran)
     end
   end)
 
