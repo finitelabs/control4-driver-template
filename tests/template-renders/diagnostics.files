@@ -60,6 +60,7 @@ test/test_update_property.lua
 test/test_update_settings.lua
 test/test_url_json.lua
 test/test_values_ids.lua
+test/test_values_labels.lua
 test/test_watched_variable.lua
 test/test_websocket.lua
 test/testlib.lua
