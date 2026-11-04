@@ -1,7 +1,7 @@
 --- Utility module for managing devices, their bindings, properties, data, and general device-related operations in a Control4-driven environment.
 
 -- On a controller with no room left for compiled code, LuaJIT's compiler retries and fails in every hot
--- loop, hundreds of times slower than its interpreter, which is fast enough for every driver.
+-- loop, hundreds of times slower than its interpreter.
 if jit then
   jit.off()
 end
