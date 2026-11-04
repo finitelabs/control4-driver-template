@@ -26,6 +26,7 @@ src/constants.lua
 src/lib/bindings.lua
 src/lib/conditionals.lua
 src/lib/driver-filenames.lua
+src/lib/drivercentral.lua
 src/lib/events.lua
 src/lib/github-updater.lua
 src/lib/http.lua

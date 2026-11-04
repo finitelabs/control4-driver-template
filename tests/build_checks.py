@@ -24,7 +24,6 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
 
-import yaml
 
 EXAMPLE = Path("drivers") / "example"
 DIAGNOSTICS = Path("src") / "lib" / "diagnostics.lua"
@@ -94,8 +93,7 @@ def run(args, render, **env):
 
 
 def distributions(render):
-    answers = yaml.safe_load((render / ".copier-answers.yml").read_text(encoding="utf-8"))
-    return str(answers["distributions"]).split()
+    return ["drivercentral", "oss"]
 
 
 def packages(render, build):

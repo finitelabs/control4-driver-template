@@ -1,0 +1,2 @@
+# expect: Must be 0 or a DriverCentral product id
+dc_pid: -1
