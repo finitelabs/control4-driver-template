@@ -144,8 +144,8 @@ Then `make icons` exports everything to `dist/icons/`:
   the DriverCentral card's tile is centered at 264 px in its 300 px frame
 
 It also refreshes each of those files a driver already has under `drivers/*/www/`, and the
-repo-root `documentation/images/header.png` a root-docs README is built from. Commit what it
-refreshes, then run `make docs-readme`, so `make icons` leaves a clean tree. For a new driver,
+repo-root `documentation/images/header.png` a root-docs README is built from. Run
+`make docs-readme`, then commit what both refreshed, so `make icons` leaves a clean tree. For a new driver,
 copy the ones it uses from `dist/icons/www/` into `drivers/<name>/www/` once.
 
 ### Update an Existing Driver with Latest Template
