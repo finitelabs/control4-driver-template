@@ -144,10 +144,13 @@ Then `make icons` exports everything to `dist/icons/`:
 - `www/icons/`: Control4's Shadow Shaped or Shadow Square icon, as `icon_style` picks, at the 18
   sizes the drivers ship
 - `www/documentation/images/`: `header.png`
-- `cards/`: the DriverCentral card and the light and dark website cards
+- `cards/`: the DriverCentral card and the light and dark website cards, which carry no badges;
+  the DriverCentral card's tile is centered at 264 px in its 300 px frame
 
-It also refreshes each of those files a driver already has under `drivers/*/www/`. For a new
-driver, copy the ones it uses from `dist/icons/www/` into `drivers/<name>/www/` once.
+It also refreshes each of those files a driver already has under `drivers/*/www/`, and the
+repo-root `documentation/images/header.png` a root-docs README is built from. Run
+`make docs-readme`, then commit what both refreshed, so `make icons` leaves a clean tree. For a new driver,
+copy the ones it uses from `dist/icons/www/` into `drivers/<name>/www/` once.
 
 ### Update an Existing Driver with Latest Template
 
