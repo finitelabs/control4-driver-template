@@ -47,7 +47,7 @@ github_org:
 
 dc_pid:
   type: int
-  help: "DriverCentral product id, from the product's page in the vendor panel. 0 until the product exists."
+  help: "DriverCentral product id, from the product's page in the vendor panel. 0 until the product exists, and a DriverCentral build stops itself until then."
   default: 0
   validator: "{% if dc_pid < 0 %}Must be 0 or a DriverCentral product id{% endif %}"
 

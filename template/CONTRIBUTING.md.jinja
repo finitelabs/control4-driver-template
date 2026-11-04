@@ -46,6 +46,8 @@ then pull the change in with `copier update`.
   memory use and errors (see [Cloud Monitoring](#cloud-monitoring))
 {%- endif %}
 - `driver-filenames.lua`: every `.c4z` the repo builds, written in by the build
+- `drivercentral.lua`: the DriverCentral product, its cloud client and the
+  license gate (see [The License Gate](#the-license-gate))
 - `events.lua`: event firing and management
 - `http.lua`: HTTP client wrapper
 - `logging.lua`: structured logging with configurable levels
@@ -529,6 +531,57 @@ A DriverCentral build is packaged encrypted with or without a secret.
 `make package` then opens every package of an encrypted build and fails unless
 each holds `driver.lua.encrypted`, no `driver.lua`, and a `driver.xml` that asks
 for encryption.
+
+### The License Gate
+
+`lib/drivercentral.lua` is a DriverCentral build's link to DriverCentral: the
+product it sells as, the cloud client that licenses it, and the gate that stops
+the driver while it has no license. The client keeps the license in `DC_X`: 1
+when licensed (a showroom license too), minus the hours left in a trial, and 0
+without one. It is 0 from the driver's late init until the DriverCentral Cloud
+driver first answers, and it turns 0 when the Cloud driver stops answering for a
+minute.
+
+The gate reads `DC_X` every 10 s and stops the driver after five minutes of 0,
+longer than a Cloud driver update or a slow boot, and starts it again as soon as
+a license is back. With `dc_pid` 0 the client never starts and the gate stops
+the driver at its load, so a build made before its product exists does not run.
+
+Each driver of a DriverCentral build starts the client first in `OnDriverInit`
+and the gate at the end of `OnDriverLateInit`:
+
+```lua
+--#ifdef DRIVERCENTRAL
+local drivercentral = require("lib.drivercentral")
+--#endif
+
+function OnDriverInit()
+  --#ifdef DRIVERCENTRAL
+  drivercentral:startClient()
+  --#else
+  C4:AllowExecute(true)
+  --#endif
+end
+
+function OnDriverLateInit()
+  --#ifdef DRIVERCENTRAL
+  drivercentral:startGate(function(licensed)
+    -- Stop or start the connection, and show why in Driver Status.
+  end)
+  --#endif
+end
+```
+
+A driver that talks to a device or a cloud checks `drivercentral:licensed()` at
+the one place every command passes on its way out, and shows
+`drivercentral.UNLICENSED_STATUS` in Driver Status while it is stopped. An OSS
+build has no gate, so those calls sit inside `#ifdef DRIVERCENTRAL` too. A
+companion that reaches its device only through another driver needs no gate of
+its own. Never gate `ExecuteCommand` ahead of the client: the license arrives
+through it.
+
+`test/dc_cloud.lua` is a fake Cloud driver that answers the real client, for
+testing a driver's gate; `test/test_drivercentral.lua` shows how.
 
 ### The Support Code
 
