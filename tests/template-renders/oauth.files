@@ -13,6 +13,14 @@ requirements.txt
 resources/Driver Icons.sketch
 resources/documentation/images/check-drivers.png
 resources/documentation/images/finite-labs-logo.png
+resources/drivercentral/README.md
+resources/drivercentral/assets/finite-labs-logo.png
+resources/drivercentral/banners/facts-strip-2400x200.html
+resources/drivercentral/banners/launch-post-2400x1200.html
+resources/drivercentral/banners/spotlight-4096x848.html
+resources/drivercentral/photos/frame.html
+resources/drivercentral/photos/photos.txt
+resources/drivercentral/render.sh
 src/constants.lua
 src/lib/bindings.lua
 src/lib/conditionals.lua

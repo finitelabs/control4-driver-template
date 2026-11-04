@@ -13,6 +13,8 @@ _skip_if_exists:
   - ".env.default"
   # The icon template, copied once; each driver makes it its own.
   - "resources/Driver Icons.sketch"
+  # The DriverCentral marketing set, seeded once; each driver fills in its own.
+  - "resources/drivercentral/**"
 
 # Conditionally exclude files based on answers
 _exclude:
@@ -23,6 +25,7 @@ _exclude:
   - "{% if 'oss' not in distributions.split() %}.github/release.yml{% endif %}"
   - "{% if not stale_issues %}.github/workflows/stale.yml{% endif %}"
   - "{% if 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}vendor/cloud-client-byte.lua{% endif %}"
+  - "{% if 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}resources/drivercentral{% endif %}"
   - "{% if 'bitn' not in vendor_modules.split() %}vendor/bitn.lua{% endif %}"
   - "{% if 'crypto' not in vendor_modules.split() %}vendor/crypto.lua{% endif %}"
   - "{% if 'bthome' not in vendor_modules.split() %}vendor/bthome.lua{% endif %}"

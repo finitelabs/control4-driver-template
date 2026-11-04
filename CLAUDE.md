@@ -100,9 +100,10 @@ driver actually requires, so a rendered-but-unused module is zero bytes in the
 `github-updater.lua` and its tests are gated on `oss`, the distribution whose
 update mechanism they are.
 
-`_skip_if_exists` holds `CHANGELOG.md`, `src/constants.lua`, `.env.default` and
-`resources/Driver Icons.sketch`, so existing repos never receive changes to them;
-only newly created ones do. This is why the template can seed `src/constants.lua`
+`_skip_if_exists` holds `CHANGELOG.md`, `src/constants.lua`, `.env.default`,
+`resources/Driver Icons.sketch` and `resources/drivercentral/**`, so existing repos
+never receive changes to them; only newly created ones do, and a repo gets any of
+them it lacks. This is why the template can seed `src/constants.lua`
 (with the property-visibility keys its lib requires) and `.env.default` (with the
 build secrets it passes) without clobbering what a driver has since added. A repo
 without `resources/Driver Icons.sketch` gets the template's on its next `copier
@@ -112,7 +113,8 @@ update`, even when it keeps its own icons under another name.
 
 **Only `.jinja` files have their contents rendered**, with the suffix stripped on
 the way out — currently `Makefile`, `CONTRIBUTING.md`, `CHANGELOG.md`,
-`.env.default`, the build and stale workflows, `tools/github-setup`, and the
+`.env.default`, the build and stale workflows, `tools/github-setup`, the
+DriverCentral marketing pages under `resources/drivercentral/`, and the
 answers file. Everything else
 is copied byte for byte, so `{{` in a `.lua` or `.py` file passes straight
 through and is not a template error. In `tools/github-setup.jinja` a bash
