@@ -40,6 +40,11 @@ function OnDriverLateInit()
   end
   gInitialized = true
   UpdateProperty("Driver Status", "Online")
+  --#ifdef DRIVERCENTRAL
+  drivercentral:startGate(function(licensed)
+    UpdateProperty("Driver Status", licensed and "Online" or drivercentral.UNLICENSED_STATUS)
+  end)
+  --#endif
 end
 
 function OPC.Driver_Status(propertyValue)

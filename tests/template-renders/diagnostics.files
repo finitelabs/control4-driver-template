@@ -40,6 +40,7 @@ src/lib/utils.lua
 src/lib/values.lua
 test/c4_fixtures.lua
 test/c4_shim.lua
+test/dc_cloud.lua
 test/run_test.sh
 test/test_bindings_rename.lua
 test/test_bindings_static_connections.lua
@@ -49,6 +50,7 @@ test/test_device_id_list.lua
 test/test_diagnostics_reporting.lua
 test/test_diagnostics_scrub.lua
 test/test_dispatch.lua
+test/test_drivercentral.lua
 test/test_events_text.lua
 test/test_github_updater_alias.lua
 test/test_github_updater_one_at_a_time.lua
