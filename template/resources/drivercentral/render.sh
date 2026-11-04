@@ -23,7 +23,7 @@ shot() {
 shot 2048,424 banners/spotlight-4096x848.png banners/spotlight-4096x848.html
 shot 1200,600 banners/launch-post-2400x1200.png banners/launch-post-2400x1200.html
 shot 1200,100 banners/facts-strip-2400x200.png banners/facts-strip-2400x200.html
-while IFS='|' read -r name query; do
+while IFS='|' read -r name query || [ -n "$name" ]; do
 	case "$name" in '' | '#'*) continue ;; esac
 	shot 1000,1000 "photos/$name.png" "photos/frame.html?$query"
 done <"$here/photos/photos.txt"
