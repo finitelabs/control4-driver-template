@@ -57,9 +57,13 @@ sent = {}
 output = traced(function()
   SendSecretToDevice(42, "ARM", { UserCode = CODE })
 end)
-T.contains("its device and command", output, "C4:SendToDevice(42, ARM, ***REDACTED***, nil, nil)")
+T.contains("its device and command", output, "C4:SendToDevice(42, ARM, ***REDACTED***, nil, false)")
 T.excludes("and never the code", output, CODE)
 T.eq("C4 is handed the parameters whole", sent[1][5].UserCode, CODE)
+T.eq("and told not to log the command's content", { sent[1][2], sent[1][7] }, { 5, false })
+sent = {}
+SendSecretToDevice(42, "ARM", { UserCode = CODE }, nil, true)
+T.eq("unless the caller asks it to", sent[1][7], true)
 
 T.section("the plain wrappers still trace every argument")
 output = traced(function()

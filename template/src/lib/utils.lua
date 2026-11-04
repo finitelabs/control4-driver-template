@@ -171,14 +171,14 @@ function SendToProxy(idBinding, strCommand, tParams, strMessage, allowEmptyValue
 end
 
 --- SendToDevice for a command whose parameters hold a secret, such as a user code or a password: its trace
---- names the device and the command, never the parameters.
+--- names the device and the command, never the parameters, and C4 does not log its content unless asked to.
 --- @param deviceId DeviceId The ID of the driver to send the command to.
 --- @param strCommand string The command to send.
 --- @param tParams table A table containing parameters for the command.
 --- @param allowEmptyValues? boolean Allows empty strings as parameter values (optional). Defaults to false.
---- @param logCommand? boolean If false, prevents logging of the command's content (optional). Defaults to true.
+--- @param logCommand? boolean If true, lets C4 log the command's content (optional). Defaults to false.
 function SendSecretToDevice(deviceId, strCommand, tParams, allowEmptyValues, logCommand)
-  return C4CallHiding("SendToDevice", 3, deviceId, strCommand, tParams, allowEmptyValues, logCommand)
+  return C4CallHiding("SendToDevice", 3, deviceId, strCommand, tParams, allowEmptyValues, logCommand == true)
 end
 
 --- SendToProxy for a message whose parameters hold a secret, such as a user code: its trace names the binding
