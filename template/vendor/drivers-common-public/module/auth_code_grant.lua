@@ -26,8 +26,14 @@
 --      nothing. Upstream passed nil to SaltedEncrypt, which threw before
 --      AccessTokenGranted, so a provider that issues no refresh token never connected.
 --   8. The class and its public methods carry LuaDoc.
+--   9. A 429 or 408 answering a refresh retries it, as delta 4 does. Upstream read
+--      every 4xx as a denial, so a rate-limited refresh deleted the refresh token and
+--      unlinked the account. On the code exchange they still deny, since there is no
+--      refresh to retry and the user can link again. Every retry, delta 4's too, waits
+--      for the response's Retry-After, in seconds or as an HTTP date, held to between
+--      30 seconds and an hour, and 30 seconds without one.
 --
--- test/test_oauth_auth_code_grant.lua covers 2 to 7.
+-- test/test_oauth_auth_code_grant.lua covers 2 to 7 and 9.
 
 AUTH_CODE_GRANT_VER = 37
 
@@ -76,6 +82,54 @@ local function bodyTable(data)
     return data
   end
   return {}
+end
+
+local MIN_RETRY_DELAY = 30 -- seconds
+local MAX_RETRY_DELAY = 3600 -- one hour
+
+local MONTHS =
+  { Jan = 1, Feb = 2, Mar = 3, Apr = 4, May = 5, Jun = 6, Jul = 7, Aug = 8, Sep = 9, Oct = 10, Nov = 11, Dec = 12 }
+
+--- Seconds since the epoch of an HTTP date (IMF-fixdate), or nil when s is not one.
+--- @param s string
+--- @return number|nil
+local function httpDate(s)
+  local d, mon, y, h, mi, sec = s:match("^%a%a%a, (%d%d) (%a%a%a) (%d%d%d%d) (%d%d):(%d%d):(%d%d) GMT$")
+  local m = MONTHS[mon]
+  if not m then
+    return nil
+  end
+  y, d = tonumber(y), tonumber(d)
+  -- Days from 1970-01-01 in the proleptic Gregorian calendar, counted from March.
+  if m <= 2 then
+    y = y - 1
+  end
+  local era = math.floor(y / 400)
+  local yoe = y - era * 400
+  local doy = math.floor((153 * ((m + 9) % 12) + 2) / 5) + d - 1
+  local days = era * 146097 + yoe * 365 + math.floor(yoe / 4) - math.floor(yoe / 100) + doy - 719468
+  return days * 86400 + tonumber(h) * 3600 + tonumber(mi) * 60 + tonumber(sec)
+end
+
+--- How long to wait before retrying a token request: the response's Retry-After, held
+--- to between MIN_RETRY_DELAY and MAX_RETRY_DELAY, or MIN_RETRY_DELAY without one.
+--- @param tHeaders table|nil The response headers.
+--- @return number delay In milliseconds.
+local function retryDelay(tHeaders)
+  local seconds
+  if type(tHeaders) == "table" then
+    for k, v in pairs(tHeaders) do
+      if string.lower(tostring(k)) == "retry-after" then
+        v = tostring(v)
+        seconds = tonumber(v:match("^%s*(%d+)%s*$"))
+        if seconds == nil then
+          local at = httpDate(v)
+          seconds = at and (at - os.time())
+        end
+      end
+    end
+  end
+  return math.max(MIN_RETRY_DELAY, math.min(MAX_RETRY_DELAY, seconds or MIN_RETRY_DELAY)) * ONE_SECOND
 end
 
 --- Merge TOKEN_HEADERS into headers without replacing a header already set.
@@ -457,7 +511,7 @@ function oauthObject:GetTokenResponse(strError, responseCode, tHeaders, data, co
     local _timer = function(timer)
       self:RefreshToken()
     end
-    SetTimer(self.timerPrefix .. "RefreshToken", 30 * ONE_SECOND, _timer)
+    SetTimer(self.timerPrefix .. "RefreshToken", retryDelay(tHeaders), _timer)
   end
 
   if strError then
@@ -511,6 +565,8 @@ function oauthObject:GetTokenResponse(strError, responseCode, tHeaders, data, co
     self:setLink("")
 
     self:notify("AccessTokenGranted", contextInfo, self.ACCESS_TOKEN, self.REFRESH_TOKEN)
+  elseif (responseCode == 429 or responseCode == 408) and context.reason == "refresh_token" then
+    retryLater("HTTP " .. responseCode)
   elseif type(responseCode) == "number" and responseCode >= 400 and responseCode < 500 then
     self.ACCESS_TOKEN = nil
     self.REFRESH_TOKEN = nil
