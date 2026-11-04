@@ -2,7 +2,8 @@
 -- golden path from state to stored refresh token, the short link getting the
 -- redirect duration, and the deltas against upstream AUTH_CODE_GRANT 37
 -- (TOKEN_HEADERS guard, bodies that are not tables, retry on a token response that
--- is neither 200 nor 4xx, MakeStateFailed, reported callback errors).
+-- is neither 200 nor 4xx, MakeStateFailed, reported callback errors, retry on a
+-- rate-limited refresh after its Retry-After).
 --
 -- Run from the driver root:
 --   make test
@@ -16,7 +17,8 @@ local OAuth = require("drivers-common-public.module.auth_code_grant")
 
 local REDIRECT = "https://apps.control4driversdev.com/"
 
--- Every request the grant makes, answered by `respond`, which tests replace.
+-- Every request the grant makes, answered by `respond`, which tests replace. It
+-- returns the error, status, body and response headers.
 local requests = {}
 local respond = function(req)
   return nil, 204, nil
@@ -24,8 +26,8 @@ end
 urlDo = function(method, url, data, headers, callback, context)
   local req = { method = method, url = url, data = data, headers = headers }
   table.insert(requests, req)
-  local strError, code, body = respond(req)
-  callback(strError, code, {}, body, context, url)
+  local strError, code, body, responseHeaders = respond(req)
+  callback(strError, code, responseHeaders or {}, body, context, url)
 end
 
 -- Timers are recorded by name rather than run, so a test fires the one it means.
@@ -265,5 +267,110 @@ ok, _, out = T.capture(function()
 end)
 T.check("a URL callback that raises does not escape", ok)
 T.contains("and is printed, where upstream dropped it", out, "response handler broke")
+
+T.section("delta 9: a 429 or 408 answering a refresh retries it")
+for _, code in ipairs({ 429, 408 }) do
+  reset()
+  grant, events = newGrant()
+  respond = function()
+    return nil, code, { error = "slow_down" }
+  end
+  grant:RefreshToken(nil, "rt")
+  local retry = timers[grant.timerPrefix .. "RefreshToken"]
+  T.truthy("HTTP " .. code .. " schedules a retry", retry)
+  T.eq("in 30 seconds for " .. code, retry and retry.delay, 30 * ONE_SECOND)
+  T.eq("and keeps the refresh token for " .. code, grant.REFRESH_TOKEN, "rt")
+  T.eq("with no AccessTokenDenied for " .. code, lastEvent(events, "AccessTokenDenied"), nil)
+end
+
+reset()
+links = {}
+grant, events = newGrant({
+  LINK_CHANGE_CALLBACK = function(link)
+    table.insert(links, link)
+  end,
+})
+respond = function()
+  return nil, 200, { access_token = "at1", refresh_token = "rt1", expires_in = 3600 }
+end
+grant:GetUserToken("c")
+ShimPersistLand()
+local seen, linksSeen = #events, #links
+respond = function()
+  return nil, 429, {}
+end
+grant:RefreshToken()
+T.eq("a 429 after a grant notifies nothing", #events, seen)
+T.eq("leaves the link alone", #links, linksSeen)
+T.eq("and keeps the access token", grant.ACCESS_TOKEN, "at1")
+again = OAuth:new({
+  NAME = "Again",
+  API_CLIENT_ID = grant.API_CLIENT_ID,
+  API_SECRET = "secret",
+  TOKEN_ENDPOINT_URI = "https://id.example.invalid/connect/token",
+})
+T.truthy("the stored refresh token survives", timers[again.timerPrefix .. "InitWithToken"])
+respond = function()
+  return nil, 200, { access_token = "at2", expires_in = 3600 }
+end
+timers[grant.timerPrefix .. "RefreshToken"].callback()
+T.contains("the retry refreshes", requests[#requests].data, "refresh_token=rt1")
+T.eq("and the new access token is granted", lastEvent(events, "AccessTokenGranted").args[1], "at2")
+
+T.section("delta 9: a retry waits for the response's Retry-After")
+local NOW = 1793707200 -- Tue, 03 Nov 2026 12:00:00 GMT
+local realTime = os.time
+local function retryAfter(code, headers, now)
+  reset()
+  grant = newGrant()
+  respond = function()
+    return nil, code, {}, headers
+  end
+  os.time = function(t)
+    return t and realTime(t) or now or NOW
+  end
+  grant:RefreshToken(nil, "rt")
+  os.time = realTime
+  local retry = timers[grant.timerPrefix .. "RefreshToken"]
+  return retry and retry.delay / ONE_SECOND
+end
+T.eq("seconds", retryAfter(429, { ["Retry-After"] = "120" }), 120)
+T.eq("under a lower-case name", retryAfter(429, { ["retry-after"] = "120" }), 120)
+T.eq("an HTTP date", retryAfter(429, { ["Retry-After"] = "Tue, 03 Nov 2026 12:10:00 GMT" }), 600)
+T.eq(
+  "an HTTP date in February of a leap year",
+  retryAfter(408, { ["Retry-After"] = "Thu, 29 Feb 2024 00:15:00 GMT" }, 1709164800),
+  900
+)
+T.eq("no sooner than 30 seconds", retryAfter(429, { ["Retry-After"] = "5" }), 30)
+T.eq(
+  "an HTTP date already past waits 30 seconds",
+  retryAfter(429, { ["Retry-After"] = "Sat, 01 Jan 2000 00:00:00 GMT" }),
+  30
+)
+T.eq("no later than an hour", retryAfter(429, { ["Retry-After"] = "86400" }), 3600)
+T.eq("a value that is neither waits 30 seconds", retryAfter(429, { ["Retry-After"] = "soon" }), 30)
+T.eq("a 503 retry waits for it too", retryAfter(503, { ["Retry-After"] = "300" }), 300)
+
+T.section("delta 9: every other 4xx is still a denial")
+for _, code in ipairs({ 400, 401 }) do
+  reset()
+  grant, events = newGrant()
+  respond = function()
+    return nil, code, { error = "invalid_grant" }
+  end
+  grant:RefreshToken(nil, "rt")
+  T.truthy("HTTP " .. code .. " is AccessTokenDenied", lastEvent(events, "AccessTokenDenied"))
+  T.eq("and forgets the refresh token for " .. code, grant.REFRESH_TOKEN, nil)
+  T.eq("with no retry for " .. code, timers[grant.timerPrefix .. "RefreshToken"], nil)
+end
+reset()
+grant, events = newGrant()
+respond = function()
+  return nil, 429, {}, { ["Retry-After"] = "60" }
+end
+grant:GetUserToken("c")
+T.truthy("a 429 answering the code exchange is AccessTokenDenied", lastEvent(events, "AccessTokenDenied"))
+T.eq("with no retry", timers[grant.timerPrefix .. "RefreshToken"], nil)
 
 T.finish()
