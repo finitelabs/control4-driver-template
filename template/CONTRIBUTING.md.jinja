@@ -435,8 +435,7 @@ directives with no comment prefix.
 
 ```lua
 --#ifdef DRIVERCENTRAL
-DC_PID = 1234
-DC_FILENAME = "driver.c4z"
+local supportCode = require("lib.support-code")
 --#else
 DRIVER_GITHUB_REPO = "{{ github_org }}/{{ project_name }}"
 --#endif
