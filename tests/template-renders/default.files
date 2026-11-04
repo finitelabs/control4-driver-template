@@ -50,6 +50,7 @@ test/test_persist_missing_key.lua
 test/test_persist_reload.lua
 test/test_persist_undecodable.lua
 test/test_persist_write_behind.lua
+test/test_secret_sends_trace.lua
 test/test_sensor_params.lua
 test/test_shim_bindings.lua
 test/test_support_code.lua
