@@ -1,4 +1,0 @@
-# version.lua ships on a non-oss build only when named.
-distributions: drivercentral
-readme_build: drivercentral
-vendor_modules: version

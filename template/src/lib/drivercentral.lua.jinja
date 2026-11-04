@@ -1,0 +1,19 @@
+--- The DriverCentral build's link to DriverCentral: the product it sells as and the cloud client that licenses it.
+
+--- @class DriverCentral
+local DriverCentral = {}
+
+--- The product's id in DriverCentral's vendor panel, from the repo's `dc_pid` answer; 0 until the product exists.
+DriverCentral.PRODUCT_ID = {{ dc_pid }}
+
+--- Starts DriverCentral's cloud client and closes the Lua window, which the Support Code reopens.
+--- Call it first in OnDriverInit: the client wraps OnDriverLateInit, ExecuteCommand, OnPropertyChanged and
+--- OnDriverDestroyed as they stand when it loads, so the driver must have defined them by then.
+function DriverCentral:startClient()
+  DC_PID = self.PRODUCT_ID
+  DC_X = nil
+  require("cloud-client-byte")
+  C4:AllowExecute(false)
+end
+
+return DriverCentral

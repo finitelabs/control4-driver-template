@@ -1,5 +1,0 @@
-# No github-updater, version.lua or release workflow; has cloud-client-byte.
-distributions: drivercentral
-readme_build: drivercentral
-# make icons exports Shadow Square.
-icon_style: square
