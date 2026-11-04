@@ -16,8 +16,10 @@ Marketing images for the driver's DriverCentral listing. Each image is an HTML p
 1. Put the brand's mark in `assets/brand-mark.png`, from its official kit, and note the kit's URL and usage terms in this README. Never trace or redraw it.
 2. In each page under `banners/`, replace "Driver Name", the chips and the line under them with what the driver does, from its docs and CHANGELOG. No tag lines. The facts strip holds facts that stay true between releases (the Control4 OS it needs, the trial, local or cloud, what it controls), never an install count.
 3. In `photos/frame.html`, replace "Driver Name" beside the mark.
-4. Add the listing photos: a screenshot per photo in `photos/sources/` and a line per photo in `photos/photos.txt`.
-5. Render, and check every image by eye.
+4. Fill in the trademark notice at the bottom of the spotlight, the launch post and the photo frame: the brand's names and Control4, with any symbol or wording the brand's own guidelines require.
+5. Size the mark by its weight, keeping its center. The pages hold a square mark at 245 px in the spotlight and 270 px in the launch post. Give a wide wordmark up to 330 px (300 px in the post) of width instead, and a tall mark less height, so every brand looks the same size.
+6. Add the listing photos: a screenshot per photo in `photos/sources/` and a line per photo in `photos/photos.txt`.
+7. Render, and check every image by eye.
 
 Every page takes its accent, `--accent`, from the repo's `primary_color`. The banners and the photo frame glow in `--glow`, which is the accent unless the page sets a lighter tint for a dark brand color. The facts strip shrinks its type until four longer facts fit.
 
