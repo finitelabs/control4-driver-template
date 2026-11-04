@@ -103,6 +103,8 @@ do
   T.eq("29 reads after the expiry: running", gate:licensed(), true)
   tick()
   T.eq("the 30th stops it", gate:licensed(), false)
+  DC_OnDriverStatus()
+  T.eq("a status call while DC_X is still 0 leaves it stopped", gate:licensed(), false)
   cloud.say({ AC = 1, AS = "License Activated" })
   T.eq("a license starts it without waiting for a read", gate:licensed(), true)
   T.eq("told stopped, then started", changes, { false, true })
@@ -168,6 +170,7 @@ do
   T.eq("Cloud Status", Properties["Cloud Status"], "No DriverCentral product")
   T.eq("stopped at once", changes, { false })
   DC_X = 1
+  DC_OnDriverStatus()
   tick(40)
   T.eq("and stays stopped whatever DC_X reads", gate:licensed(), false)
 end
