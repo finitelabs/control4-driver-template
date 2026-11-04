@@ -120,19 +120,21 @@ end
 --- @param text string
 --- @return string
 local function redactPairs(text)
-  local masked = text:gsub("()([%w_%-%.]+)=([^&%s]+)", function(at, key, value)
-    local rest = ""
-    -- A path segment's value ends at the next "/"; a query value keeps its "/" since base64 uses it.
-    if text:sub(at - 1, at - 1) == "/" then
-      value, rest = value:match("^([^/?#]*)(.*)$")
-      rest = redactPairs(rest)
+  local parts, pos = {}, 1
+  while true do
+    local at, keyEnd, key = text:find("([%w_%-%.]+)=", pos)
+    if not at then
+      break
     end
-    if isSensitiveKey(key) then
-      value = REDACTED
-    end
-    return key .. "=" .. value .. rest
-  end)
-  return masked
+    -- A path segment's value ends at the next "/", "?" or "#"; a query value keeps its "/" since base64 uses it.
+    local inPath = text:sub(at - 1, at - 1) == "/"
+    local value = text:match(inPath and "^[^/?#&%s]*" or "^[^&%s]*", keyEnd + 1)
+    local shown = (value ~= "" and isSensitiveKey(key)) and REDACTED or value
+    parts[#parts + 1] = text:sub(pos, at - 1) .. key .. "=" .. shown
+    pos = keyEnd + 1 + #value
+  end
+  parts[#parts + 1] = text:sub(pos)
+  return table.concat(parts)
 end
 
 --- Mask credentials inside an already-encoded body, query string, or URL.

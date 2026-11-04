@@ -243,6 +243,14 @@ do
 
   out = redact("http://192.0.2.1/stoke=visible/ds?last_ok=1")
   T.check("keys that only contain the letters stay readable", out == "http://192.0.2.1/stoke=visible/ds?last_ok=1", out)
+
+  out = redact('{"error_code":0,"result":{"stok":"BODY_STOK_LEAK","start_seq":7}}')
+  T.check("a stok in a JSON answer masked", not out:find("BODY_STOK_LEAK", 1, true), out)
+
+  -- One loop, not a call per segment: a long run of path pairs must neither overflow nor leak.
+  out = redact("x" .. string.rep("/a=1", 5000) .. "/stok=LONG_PATH_LEAK/ds")
+  T.check("a long run of path pairs still masks the token", not out:find("LONG_PATH_LEAK", 1, true))
+  T.check("a long run of path pairs keeps its readable pairs", out:sub(1, 9) == "x/a=1/a=1")
 end
 
 --------------------------------------------------------------------------------
