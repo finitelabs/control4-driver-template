@@ -68,8 +68,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **documentation/images/**: images every driver's docs share: `finite-labs-logo.png` and
   `check-drivers.png` (the DriverCentral Cloud driver's Check Drivers action). `preprocess.py` copies
   one into a built driver doc's `images/` when the doc links it and has no copy of its own.
-- **drivercentral/**: the DriverCentral marketing set, only when `distributions` builds for
-  DriverCentral: the spotlight banner, the launch-post image, the description's facts strip and
+- **drivercentral/**: the DriverCentral marketing set: the spotlight banner, the launch-post image, the description's facts strip and
   the listing photo frame, as HTML pages that `render.sh` renders to PNG with Chrome. Copied once,
   like the Sketch file; its README says how to fill it in. No make target runs it.
 
@@ -172,14 +171,14 @@ Copier will show diffs for any files that changed in the template and let you re
 | `project_name` | Project name (e.g., `control4-esphome`) | (required) |
 | `project_description` | Short description | `A Control4 driver` |
 | `github_org` | GitHub organization | (required) |
-| `distributions` | Space-separated build targets | `drivercentral oss` |
+| `dc_pid` | DriverCentral product id; 0 until the product exists. Every repo builds both `drivercentral` and `oss` | `0` |
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
 | `icon_style` | Control4 icon artboard `make icons` exports: `shaped` (Shadow Shaped) or `square` (Shadow Square) | `shaped` |
-| `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf version oauth) | (empty) |
-| `cloud_diagnostics` | Ship `lib.diagnostics` (Cloud Monitoring), which reports a DriverCentral build's memory use and errors to InfluxDB; needs a `drivercentral` distribution and four build secrets | `false` |
-| `extra_build_secrets` | Space-separated build secrets `.env.default` declares besides the template's own (`SUPPORT_CODE_SECRET` with DriverCentral, the four `INFLUXDB_*` with `cloud_diagnostics`); the Build workflow passes each by name | (empty) |
+| `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf oauth) | (empty) |
+| `cloud_diagnostics` | Ship `lib.diagnostics` (Cloud Monitoring), which reports a DriverCentral build's memory use and errors to InfluxDB; needs four build secrets | `false` |
+| `extra_build_secrets` | Space-separated build secrets `.env.default` declares besides the template's own (`SUPPORT_CODE_SECRET`, and the four `INFLUXDB_*` with `cloud_diagnostics`); the Build workflow passes each by name | (empty) |
 | `extra_required_checks` | Space-separated status checks a PR must pass besides `build`, each a job name from the repo's own workflows; `tools/github-setup` puts them in the branch ruleset | (empty) |
 | `stale_issues` | Ping inactive issues, then close them, unless an exempt author opened them | `false` |
 | `stale_exempt_authors` | Space-separated GitHub logins whose issues are left alone; a GitHub App is `name[bot]` (asked when `stale_issues` is true) | (empty) |

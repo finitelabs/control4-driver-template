@@ -89,16 +89,16 @@ A template ticket is not done at merge; it is done when the drift is closed.
 ## `_exclude` gates files on answers
 
 `copier.yml`'s `_exclude` list drops files the answers did not select —
-`distributions` controls OSS versus DriverCentral, `vendor_modules` the optional
-vendored libraries, `stale_issues` the stale-issue workflow, and
+`vendor_modules` the optional vendored libraries, `stale_issues` the stale-issue workflow, and
 `cloud_diagnostics` the Cloud Monitoring library and its tests, since a repo
 opts in to reporting. There is no other module-to-module gating: every other
 `src/lib/*.lua` renders unconditionally, and `gen-squishy` bundles only what a
 driver actually requires, so a rendered-but-unused module is zero bytes in the
 `.c4z`. A new `src/lib` file needs no `_exclude` entry.
 
-`github-updater.lua` and its tests are gated on `oss`, the distribution whose
-update mechanism they are.
+Every repo builds both distributions, `drivercentral` and `oss`, so nothing is
+gated on a distribution. `dc_pid` names the DriverCentral product and renders
+into `src/lib/drivercentral.lua`.
 
 `_skip_if_exists` holds `CHANGELOG.md`, `src/constants.lua`, `.env.default`,
 `resources/Driver Icons.sketch` and `resources/drivercentral/**`, so existing repos
@@ -113,7 +113,8 @@ update`, even when it keeps its own icons under another name.
 
 **Only `.jinja` files have their contents rendered**, with the suffix stripped on
 the way out — currently `Makefile`, `CONTRIBUTING.md`, `CHANGELOG.md`,
-`.env.default`, the build and stale workflows, `tools/github-setup`, the
+`.env.default`, `src/lib/drivercentral.lua`, the build and stale workflows,
+`tools/github-setup`, the
 DriverCentral marketing pages under `resources/drivercentral/`, and the
 answers file. Everything else
 is copied byte for byte, so `{{` in a `.lua` or `.py` file passes straight

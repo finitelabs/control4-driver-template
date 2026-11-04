@@ -1,8 +1,3 @@
---#ifdef DRIVERCENTRAL
-DC_PID = 0
-DC_X = nil
-DC_FILENAME = "example.c4z"
---#endif
 require("lib.utils")
 require("drivers-common-public.global.handlers")
 require("drivers-common-public.global.lib")
@@ -12,14 +7,14 @@ JSON = require("JSON")
 
 local log = require("lib.logging")
 --#ifdef DRIVERCENTRAL
+local drivercentral = require("lib.drivercentral")
 local supportCode = require("lib.support-code")
 local updateSettings = require("lib.update-settings")
 --#endif
 
 function OnDriverInit()
   --#ifdef DRIVERCENTRAL
-  require("cloud-client-byte")
-  C4:AllowExecute(false)
+  drivercentral:startClient()
   --#else
   C4:AllowExecute(true)
   --#endif
@@ -45,6 +40,11 @@ function OnDriverLateInit()
   end
   gInitialized = true
   UpdateProperty("Driver Status", "Online")
+  --#ifdef DRIVERCENTRAL
+  drivercentral:startGate(function(licensed)
+    UpdateProperty("Driver Status", licensed and "Online" or drivercentral.UNLICENSED_STATUS)
+  end)
+  --#endif
 end
 
 function OPC.Driver_Status(propertyValue)

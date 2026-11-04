@@ -1,2 +1,0 @@
-# No DriverCentral build: no cloud-client-byte or resources/drivercentral, and github-updater with its tests.
-distributions: oss

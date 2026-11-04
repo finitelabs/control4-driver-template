@@ -1,6 +1,9 @@
 .copier-answers.yml
 .env.default
+.github/release.yml
 .github/workflows/build.yml
+.github/workflows/label-release-pr.yml
+.github/workflows/release.yml
 .gitignore
 CHANGELOG.md
 CONTRIBUTING.md
@@ -22,7 +25,9 @@ src/constants.lua
 src/lib/bindings.lua
 src/lib/conditionals.lua
 src/lib/driver-filenames.lua
+src/lib/drivercentral.lua
 src/lib/events.lua
+src/lib/github-updater.lua
 src/lib/http.lua
 src/lib/logging.lua
 src/lib/lru.lua
@@ -34,6 +39,7 @@ src/lib/utils.lua
 src/lib/values.lua
 test/c4_fixtures.lua
 test/c4_shim.lua
+test/dc_cloud.lua
 test/run_test.sh
 test/test_bindings_rename.lua
 test/test_bindings_static_connections.lua
@@ -41,7 +47,12 @@ test/test_bindings_unnamed.lua
 test/test_c4_shim.lua
 test/test_device_id_list.lua
 test/test_dispatch.lua
+test/test_drivercentral.lua
 test/test_events_text.lua
+test/test_github_updater_alias.lua
+test/test_github_updater_one_at_a_time.lua
+test/test_github_updater_self_last.lua
+test/test_github_updater_write.lua
 test/test_http_redact.lua
 test/test_jit_off.lua
 test/test_lib_dependencies.lua
@@ -84,6 +95,7 @@ vendor/drivers-common-public/global/lib.lua
 vendor/drivers-common-public/global/timer.lua
 vendor/drivers-common-public/global/url.lua
 vendor/drivers-common-public/module/websocket.lua
+vendor/version.lua
 vendor/xml/XmlParser.lua
 vendor/xml/xml2lua.lua
 vendor/xml/xmlhandler/dom.lua

@@ -1,0 +1,4 @@
+# A repo with its DriverCentral product: the id reaches lib.drivercentral, the README is the DriverCentral one, and make icons exports Shadow Square.
+dc_pid: 999
+readme_build: drivercentral
+icon_style: square

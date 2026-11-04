@@ -18,14 +18,7 @@ _skip_if_exists:
 
 # Conditionally exclude files based on answers
 _exclude:
-  - "{% if 'oss' not in distributions.split() %}src/lib/github-updater.lua{% endif %}"
-  - "{% if 'oss' not in distributions.split() and 'version' not in vendor_modules.split() %}vendor/version.lua{% endif %}"
-  - "{% if 'oss' not in distributions.split() %}.github/workflows/release.yml{% endif %}"
-  - "{% if 'oss' not in distributions.split() %}.github/workflows/label-release-pr.yml{% endif %}"
-  - "{% if 'oss' not in distributions.split() %}.github/release.yml{% endif %}"
   - "{% if not stale_issues %}.github/workflows/stale.yml{% endif %}"
-  - "{% if 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}vendor/cloud-client-byte.lua{% endif %}"
-  - "{% if 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}resources/drivercentral{% endif %}"
   - "{% if 'bitn' not in vendor_modules.split() %}vendor/bitn.lua{% endif %}"
   - "{% if 'crypto' not in vendor_modules.split() %}vendor/crypto.lua{% endif %}"
   - "{% if 'bthome' not in vendor_modules.split() %}vendor/bthome.lua{% endif %}"
@@ -35,10 +28,6 @@ _exclude:
   - "{% if 'oauth' not in vendor_modules.split() %}vendor/drivers-common-public/global/make_short_link.lua{% endif %}"
   - "{% if 'oauth' not in vendor_modules.split() %}test/test_oauth_auth_code_grant.lua{% endif %}"
   - "{% if 'oauth' not in vendor_modules.split() %}test/test_oauth_short_link.lua{% endif %}"
-  - "{% if 'oss' not in distributions.split() %}test/test_github_updater_alias.lua{% endif %}"
-  - "{% if 'oss' not in distributions.split() %}test/test_github_updater_one_at_a_time.lua{% endif %}"
-  - "{% if 'oss' not in distributions.split() %}test/test_github_updater_self_last.lua{% endif %}"
-  - "{% if 'oss' not in distributions.split() %}test/test_github_updater_write.lua{% endif %}"
   - "{% if not cloud_diagnostics %}src/lib/diagnostics.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_reporting.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_scrub.lua{% endif %}"
@@ -56,10 +45,11 @@ github_org:
   type: str
   help: "GitHub organization"
 
-distributions:
-  type: str
-  help: "Space-separated build distributions (e.g., 'drivercentral oss')"
-  default: "drivercentral oss"
+dc_pid:
+  type: int
+  help: "DriverCentral product id, from the product's page in the vendor panel. 0 until the product exists, and a DriverCentral build stops itself until then."
+  default: 0
+  validator: "{% if dc_pid < 0 %}Must be 0 or a DriverCentral product id{% endif %}"
 
 readme_driver_slug:
   type: str
@@ -85,19 +75,17 @@ icon_style:
 
 vendor_modules:
   type: str
-  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf version oauth). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). version ships vendor/version.lua, which an oss build includes regardless. oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua)."
+  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua)."
   default: ""
 
 cloud_diagnostics:
   type: bool
   help: "Ship lib.diagnostics (Cloud Monitoring): a DriverCentral build reports its memory use and errors to InfluxDB. Needs the INFLUXDB_URL, INFLUXDB_TOKEN, INFLUXDB_METRICS_DB and INFLUXDB_LOGS_DB build secrets."
   default: false
-  validator: >-
-    {% if cloud_diagnostics and 'drivercentral' not in distributions.split() and 'drivercentral-dev' not in distributions.split() %}Cloud Monitoring reports only from a DriverCentral build, and distributions has none.{% endif %}
 
 extra_build_secrets:
   type: str
-  help: "Space-separated build secrets .env.default declares besides the template's own (SUPPORT_CODE_SECRET with a DriverCentral build, the four INFLUXDB_* with cloud_diagnostics). The Build workflow passes each to make build by name, and no other secret."
+  help: "Space-separated build secrets .env.default declares besides the template's own (SUPPORT_CODE_SECRET, and the four INFLUXDB_* with cloud_diagnostics). The Build workflow passes each to make build by name, and no other secret."
   default: ""
   validator: >-
     {% for name in extra_build_secrets.split() %}{% if not name | regex_search('^[A-Z_][A-Z0-9_]*$') %}{{ name }} is not a build secret name: use capital letters, digits and '_'. {% endif %}{% endfor %}
@@ -107,7 +95,7 @@ build_secrets:
   type: str
   when: false
   default: >-
-    {{ ((['SUPPORT_CODE_SECRET'] if 'drivercentral' in distributions.split() or 'drivercentral-dev' in distributions.split() else [])
+    {{ (['SUPPORT_CODE_SECRET']
     + (['INFLUXDB_URL', 'INFLUXDB_TOKEN', 'INFLUXDB_METRICS_DB', 'INFLUXDB_LOGS_DB'] if cloud_diagnostics else [])
     + extra_build_secrets.split()) | unique | join(' ') }}
 

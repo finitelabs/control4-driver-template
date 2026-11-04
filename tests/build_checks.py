@@ -24,9 +24,9 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree
 
-import yaml
 
 EXAMPLE = Path("drivers") / "example"
+DISTRIBUTIONS = ["drivercentral", "oss"]
 DIAGNOSTICS = Path("src") / "lib" / "diagnostics.lua"
 
 EXAMPLE_SECRET = "EXAMPLE_SECRET"
@@ -91,11 +91,6 @@ def run(args, render, **env):
     if result.returncode != 0:
         print(f"::error::{' '.join(args)} failed in {render}")
         sys.exit(result.returncode)
-
-
-def distributions(render):
-    answers = yaml.safe_load((render / ".copier-answers.yml").read_text(encoding="utf-8"))
-    return str(answers["distributions"]).split()
 
 
 def packages(render, build):
@@ -258,7 +253,7 @@ def encrypted(render):
         with open(render / EXAMPLE / "driver.lua", "a") as lua:
             lua.write(f'\nEXAMPLE_BUILD_SECRET = "__{EXAMPLE_SECRET}__"\n')
         run(["make", "build-nodocs"], render, **{EXAMPLE_SECRET: EXAMPLE_SECRET_VALUE})
-        for build in distributions(render):
+        for build in DISTRIBUTIONS:
             if not packages(render, build):
                 problems.append(f"the {build} build made no package")
             for c4z in packages(render, build):
@@ -293,7 +288,7 @@ def cloud_monitoring(render):
         with open(render / EXAMPLE / "driver.lua", "a") as lua:
             lua.write(CLOUD_MONITORING_LUA)
         run(["make", "build-nodocs"], render, **secrets)
-        for build in distributions(render):
+        for build in DISTRIBUTIONS:
             if not packages(render, build):
                 problems.append(f"the {build} build made no package")
             for c4z in packages(render, build):

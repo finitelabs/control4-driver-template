@@ -204,8 +204,7 @@ def check_build_secrets(data, directory):
 
 def check_named_secrets(data, directory):
     """build.yml passes each build secret by name, exactly the ones .env.default declares, and never toJSON(secrets)."""
-    distributions = str(data.get("distributions", "drivercentral oss")).split()
-    want = (["SUPPORT_CODE_SECRET"] if {"drivercentral", "drivercentral-dev"} & set(distributions) else []) + (
+    want = ["SUPPORT_CODE_SECRET"] + (
         ["INFLUXDB_URL", "INFLUXDB_TOKEN", "INFLUXDB_METRICS_DB", "INFLUXDB_LOGS_DB"]
         if data.get("cloud_diagnostics")
         else []
@@ -237,6 +236,14 @@ def check_icon_style(data, directory):
     return []
 
 
+def check_product_id(data, directory):
+    want = int(data.get("dc_pid", 0))
+    lines = (Path(directory) / "src" / "lib" / "drivercentral.lua").read_text(encoding="utf-8").splitlines()
+    if f"DriverCentral.PRODUCT_ID = {want}" not in lines:
+        return [f"src/lib/drivercentral.lua does not set DriverCentral.PRODUCT_ID = {want}"]
+    return []
+
+
 CHECKS = [
     check_stale_workflow,
     check_github_setup,
@@ -245,6 +252,7 @@ CHECKS = [
     check_build_secrets,
     check_named_secrets,
     check_icon_style,
+    check_product_id,
 ]
 
 
