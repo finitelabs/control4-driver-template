@@ -68,6 +68,10 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **documentation/images/**: images every driver's docs share: `finite-labs-logo.png` and
   `check-drivers.png` (the DriverCentral Cloud driver's Check Drivers action). `preprocess.py` copies
   one into a built driver doc's `images/` when the doc links it and has no copy of its own.
+- **drivercentral/**: the DriverCentral marketing set, only when `distributions` builds for
+  DriverCentral: the spotlight banner, the launch-post image, the description's facts strip and
+  the listing photo frame, as HTML pages that `render.sh` renders to PNG with Chrome. Copied once,
+  like the Sketch file; its README says how to fill it in. No make target runs it.
 
 ### Project Files
 - **Makefile**: build, format, docs, package, verify, and clean targets
