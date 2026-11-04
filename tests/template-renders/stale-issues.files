@@ -44,6 +44,7 @@ test/test_github_updater_one_at_a_time.lua
 test/test_github_updater_self_last.lua
 test/test_github_updater_write.lua
 test/test_http_redact.lua
+test/test_jit_off.lua
 test/test_lib_dependencies.lua
 test/test_nonfinite_numbers.lua
 test/test_persist_encrypted_trace.lua
