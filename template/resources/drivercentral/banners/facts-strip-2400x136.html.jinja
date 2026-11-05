@@ -6,7 +6,6 @@
   :root { --accent: {{ primary_color }}; }
   html, body { margin: 0; padding: 0; }
   body { width: 1200px; height: 68px; overflow: hidden; background: transparent; font-family: Inter, -apple-system, "Segoe UI", sans-serif; display: flex; align-items: center; }
-  /* Three-quarters of the listing's width, on a transparent page, so only the chips show. */
   .strip { width: 900px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 2px; box-sizing: border-box; }
   .fact { flex: 0 0 auto; height: 63px; box-sizing: border-box; background: #fff; border: 1.5px solid #d9dce1; border-radius: 12px; display: flex; align-items: center; gap: 12px; padding: 0 16px; }
   .fact svg { width: 34px; height: 34px; flex: none; fill: none; stroke: var(--accent); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
@@ -35,7 +34,7 @@
   // Longer facts shrink the type until the four fit the strip.
   const values = document.querySelectorAll('.value');
   document.fonts.ready.then(() => {
-    for (let size = 22; document.querySelector('.strip').scrollWidth > 900 && size > 18; size--) values.forEach(v => v.style.fontSize = size + 'px');
+    for (let size = 22; document.querySelector('.strip').scrollWidth > 900 && size > 16; size--) values.forEach(v => v.style.fontSize = size + 'px');
   });
 </script>
 </body></html>

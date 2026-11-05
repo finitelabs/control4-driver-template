@@ -1,6 +1,6 @@
 # DriverCentral images
 
-Marketing images for the driver's DriverCentral listing. Each image is an HTML page rendered to PNG, and the rendered PNGs sit next to their sources.
+Marketing images for the driver's DriverCentral listing. Each banner and photo is an HTML page rendered to PNG, and the rendered PNGs sit next to their sources. The product card comes from `make icons`.
 
 | Path | Size | Used for |
 | --- | --- | --- |
