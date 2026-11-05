@@ -104,17 +104,19 @@
     },
     // A round thermostat dial around the hub: a 270-degree ring with its setpoint, and floor heat in the gap below.
     dial(c) {
-      const r = 152, a0 = 135, a1 = 405, set = 330;
+      const r = 170, a0 = 135, a1 = 405, set = 330;
       const pt = (a, k = 1) => [HX + r * k * Math.cos(a * Math.PI / 180), HY + r * k * Math.sin(a * Math.PI / 180)];
       const [x0, y0] = pt(a0), [x1, y1] = pt(a1), [xs, ys] = pt(set);
       let s = `<path d="M${r0(x0)} ${r0(y0)} A${r} ${r} 0 1 1 ${r0(x1)} ${r0(y1)}" fill="none" stroke="rgba(255,255,255,0.18)" stroke-width="10" stroke-linecap="round"/>`;
       s += `<path d="M${r0(x0)} ${r0(y0)} A${r} ${r} 0 1 1 ${r0(xs)} ${r0(ys)}" fill="none" stroke="${c.tint}" stroke-width="10" stroke-linecap="round"/>`;
       for (let a = a0; a <= a1 + 0.1; a += 13.5) {
-        const [p, q] = pt(a, 1.12), [u, v] = pt(a, 1.2);
+        const [p, q] = pt(a, 1.08), [u, v] = pt(a, 1.15);
         s += `<path d="M${r0(p)} ${r0(q)} L${r0(u)} ${r0(v)}" stroke="rgba(255,255,255,0.35)" stroke-width="2" stroke-linecap="round"/>`;
       }
       s += `<circle cx="${r0(xs)}" cy="${r0(ys)}" r="13" fill="#fff" stroke="${c.tint}" stroke-width="5"/>`;
-      return s + hub(c) + node(HX, HY + 140, "floorheat", 30) + node(1452, 330, c.icons[0], 32) + node(1948, 330, c.icons[1], 32);
+      // A pill hub is drawn at 82% so the ring keeps clear of a wide logo; a circle hub already does.
+      const k = c.hub.startsWith("pill") ? 0.82 : 1;
+      return s + `<g transform="translate(${HX} ${HY}) scale(${k}) translate(${-HX} ${-HY})">${hub(c)}</g>` + node(HX, HY + 152, "floorheat", 30) + node(1440, 336, c.icons[0], 32) + node(1960, 336, c.icons[1], 32);
     },
     // Messages fanning out from the hub to labeled topics.
     topics(c) {
