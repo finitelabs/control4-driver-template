@@ -42,16 +42,21 @@
     + `<linearGradient id="link" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${t}" stop-opacity="0.9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.35"/></linearGradient></defs>`;
 
   // A square logo sits in a circle with about 21 px around its corners; a wordmark sits in a pill.
+  // A "-light" hub is white, for a brand whose kit has no logo for dark backgrounds.
   function hub(c, x = HX, y = HY) {
     const g = `<circle cx="${x}" cy="${y}" r="130" fill="url(#hubGlow)"/>`;
-    if (c.hub === "pill") {
+    const [shape, tone] = c.hub.split("-");
+    const fill = tone === "light" ? 'fill="#ffffff" stroke="rgba(255,255,255,0.85)"' : 'fill="#1b1d24" stroke="rgba(255,255,255,0.55)"';
+    if (shape === "pill") {
       return g + `<rect x="${x - 140}" y="${y - 54}" width="280" height="108" rx="54" fill="none" stroke="${c.tint}" stroke-opacity="0.45" stroke-width="1.5"/>`
-        + `<rect x="${x - 126}" y="${y - 40}" width="252" height="80" rx="40" fill="#1b1d24" stroke="rgba(255,255,255,0.55)" stroke-width="2.5"/>`
-        + `<image href="${c.logo}" x="${x - 96}" y="${y - 24}" width="192" height="48" preserveAspectRatio="xMidYMid meet"/>`;
+        + `<rect x="${x - 126}" y="${y - 40}" width="252" height="80" rx="40" ${fill} stroke-width="2.5"/>`
+        + `<image href="${c.logo}" x="${x - 108}" y="${y - 27}" width="216" height="54" preserveAspectRatio="xMidYMid meet"/>`;
     }
+    // The logo's diagonal is 106 px, so any shape keeps about 21 px inside the 148 px circle.
+    const lh = 106 / Math.sqrt(1 + c.aspect * c.aspect), lw = c.aspect * lh;
     return g + `<circle cx="${x}" cy="${y}" r="88" fill="none" stroke="${c.tint}" stroke-opacity="0.45" stroke-width="1.5"/>`
-      + `<circle cx="${x}" cy="${y}" r="74" fill="#1b1d24" stroke="rgba(255,255,255,0.55)" stroke-width="2.5"/>`
-      + `<image href="${c.logo}" x="${x - 37}" y="${y - 37}" width="74" height="74" preserveAspectRatio="xMidYMid meet"/>`;
+      + `<circle cx="${x}" cy="${y}" r="74" ${fill} stroke-width="2.5"/>`
+      + `<image href="${c.logo}" x="${r0(x - lw / 2)}" y="${r0(y - lh / 2)}" width="${r0(lw)}" height="${r0(lh)}" preserveAspectRatio="xMidYMid meet"/>`;
   }
 
   function node(x, y, icon, r = 38, square = false) {
@@ -166,9 +171,9 @@
 
   const items = (v) => (v || "").split("|").filter(Boolean).map((p) => (p.includes(":") ? p.split(":") : ["", p]));
 
-  function draw(el, launch) {
+  function draw(el, launch, aspect) {
     const d = el.dataset;
-    const c = { logo: d.logo, hub: d.hub || "circle", tint: d.tint || getComputedStyle(document.documentElement).getPropertyValue("--glow").trim(), icons: (d.icons || "").split(",").map((s) => s.trim()), items: items(d.items) };
+    const c = { logo: d.logo, aspect, hub: d.hub || "circle", tint: d.tint || getComputedStyle(document.documentElement).getPropertyValue("--glow").trim(), icons: (d.icons || "").split(",").map((s) => s.trim()), items: items(d.items) };
     const [w, h] = launch ? [1200, 600] : [2048, 424];
     el.setAttribute("viewBox", `0 0 ${w} ${h}`);
     el.setAttribute("style", `position:absolute;left:0;top:0;width:${w}px;height:${h}px`);
@@ -203,6 +208,11 @@
 
   const el = document.querySelector("svg.scene");
   if (!el) return;
-  const max = draw(el, document.body.clientWidth < 1600);
-  document.fonts.ready.then(() => guard(max));
+  // The logo's shape sizes it in a circle hub, so it loads before the art is drawn.
+  const logo = new Image();
+  const go = () => {
+    const max = draw(el, document.body.clientWidth < 1600, logo.naturalWidth && logo.naturalHeight ? logo.naturalWidth / logo.naturalHeight : 1);
+    document.fonts.ready.then(() => guard(max));
+  };
+  if (el.dataset.logo) { logo.onload = go; logo.onerror = go; logo.src = el.dataset.logo; } else go();
 })();

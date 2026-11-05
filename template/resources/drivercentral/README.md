@@ -13,7 +13,7 @@ Marketing images for the driver's DriverCentral listing. Each image is an HTML p
 
 ## Making the set
 
-1. Put the brand's logo in `assets/brand-mark.png`: the version its official kit makes for dark backgrounds, unedited, and note the kit's URL and usage terms in this README. Never trace, redraw, recolor or crop it, and never cut a mark out of a lockup the brand only supplies whole.
+1. Put the brand's logo in `assets/brand-mark.png`: the version its official kit makes for dark backgrounds, unedited, and note the kit's URL and usage terms in this README. Trim only its transparent margin. Never trace, redraw, recolor or crop the art, and never cut a mark out of a lockup the brand only supplies whole. A kit with no dark-background logo, or only one too small to stay sharp, gets a light hub (Banner art, below).
 2. In each page under `banners/`, replace "Driver Name", the chips and the line under them with what the driver does, from its docs and CHANGELOG. No tag lines, and no counts that change between releases (say "thousands of devices", not a number). The facts strip holds facts that stay true between releases: the Control4 OS it needs, the trial, local or cloud, what it controls.
 3. Pick the banners' art on the `<svg class="scene">` element (Banner art, below). Both banners use the same attributes.
 4. In `photos/frame.html`, replace "Driver Name" beside the logo.
@@ -28,7 +28,7 @@ Every page takes its accent, `--accent`, from the repo's `primary_color`. The ba
 `scene.js` draws the art on the right of both banners from the `<svg class="scene">` element's attributes. The brand's logo always sits at its center, and the art uses the page's `--glow` (or `data-tint`). Pick the style that shows what the driver does. The headline, chips and subtitle shrink until they end clear of the art.
 
 - `data-logo`: the logo, usually `../assets/brand-mark.png`.
-- `data-hub`: `circle` for a square logo, `pill` for a wordmark.
+- `data-hub`: `circle` for a square logo, `pill` for a wordmark. When the brand's kit has no logo for dark backgrounds, or only one too small to stay sharp, use `circle-light` or `pill-light`, a white hub for its usual logo.
 - `data-style`, and what it needs:
   - `mesh`: six devices linked to the logo. `data-icons` names six.
   - `rings`: sound pulses under a night sky. `data-icons` names four.
