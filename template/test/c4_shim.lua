@@ -1287,6 +1287,33 @@ function ShimResetEvents()
 end
 
 ---------------------------------------------------------------------------
+-- Pushes to a page
+-- C4:SendDataToUI records what a driver pushes, and throws on a boolean as Director does.
+---------------------------------------------------------------------------
+
+--- @type { command: string, params: table }[]
+local ui_pushes = {}
+
+function C4:SendDataToUI(command, params)
+  for name, value in pairs(params or {}) do
+    if type(value) == "boolean" then
+      error("SendDataToUI cannot send a boolean: " .. tostring(name))
+    end
+  end
+  table.insert(ui_pushes, { command = command, params = params })
+end
+
+--- The pushes since the last reset, oldest first.
+--- @return { command: string, params: table }[] pushes
+function ShimUIPushes()
+  return ui_pushes
+end
+
+function ShimResetUIPushes()
+  ui_pushes = {}
+end
+
+---------------------------------------------------------------------------
 -- Project devices
 -- C4:GetDevices / GetDeviceDisplayName / GetDeviceVariables read a registry a
 -- test populates with ShimSetDevices. An id absent from it is the nameless,

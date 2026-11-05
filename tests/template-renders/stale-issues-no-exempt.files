@@ -36,6 +36,8 @@ src/lib/lru.lua
 src/lib/persist.lua
 src/lib/redact.lua
 src/lib/support-code.lua
+src/lib/ui-join.js
+src/lib/ui.lua
 src/lib/update-settings.lua
 src/lib/utils.lua
 src/lib/values.lua
@@ -68,6 +70,7 @@ test/test_secret_sends_trace.lua
 test/test_sensor_params.lua
 test/test_shim_bindings.lua
 test/test_support_code.lua
+test/test_ui.lua
 test/test_update_property.lua
 test/test_update_settings.lua
 test/test_url_json.lua
