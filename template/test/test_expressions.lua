@@ -134,6 +134,164 @@ T.contains(
   "not a boolean (got number)"
 )
 
+T.section("A value can't become code")
+-- A value that ran as code would hang here, not fail, so a hook turns that into an error.
+local function guarded(fn)
+  debug.sethook(function()
+    error("a value ran as code")
+  end, "", 50000000)
+  local a, b = fn()
+  debug.sethook()
+  return a, b
+end
+local LOOP = '"..(function() while true do end end)().."'
+local RUNS = "(function() return 1 end)()"
+local valueDevices = {
+  [800] = {
+    deviceName = "Values",
+    variables = {
+      ["1"] = { name = "LOOP", value = LOOP },
+      ["2"] = { name = "EXIT", value = "os.exit()" },
+      ["3"] = { name = "OBRIEN", value = "O'Brien" },
+      ["4"] = { name = "SLASH", value = 'a"b\\c' },
+      ["5"] = { name = "TEXT", value = "On" },
+      ["6"] = { name = "NUM", value = "7" },
+      ["7"] = { name = "FLOAT", value = "2.5" },
+      ["8"] = { name = "YES", value = "true" },
+      ["9"] = { name = "NO", value = "false" },
+      ["10"] = { name = "LINES", value = "one\ntwo\rthree" },
+      ["11"] = { name = "CONTROL", value = "a\1b\0c" },
+      ["12"] = { name = "BACKSLASH", value = "ends\\" },
+      ["13"] = { name = "RUNS", value = RUNS },
+      ["14"] = { name = "CLOSES", value = "a]]..os.exit()..[[b" },
+      ["15"] = { name = "EMPTY", value = "" },
+    },
+  },
+}
+ShimSetDevices(valueDevices)
+local function condition(template)
+  return guarded(function()
+    local evaluated = Expressions.evaluate("condition", template)
+    return evaluated.result, evaluated.error
+  end)
+end
+for _, case in ipairs({
+  { "a value that breaks out of a string, unquoted", "PARAM{800,LOOP} == '" .. LOOP .. "'" },
+  { "and quoted", '"PARAM{800,LOOP}" == \'' .. LOOP .. "'" },
+  { "and in single quotes", "'PARAM{800,LOOP}' == '" .. LOOP .. "'" },
+  { "a value that calls os.exit, unquoted", 'PARAM{800,EXIT} == "os.exit()"' },
+  { "and quoted", '"PARAM{800,EXIT}" == "os.exit()"' },
+  { "a value with an apostrophe, unquoted", 'PARAM{800,OBRIEN} == "O\'Brien"' },
+  { "and in double quotes", '"PARAM{800,OBRIEN}" == "O\'Brien"' },
+  { "and in single quotes", "'PARAM{800,OBRIEN}' == \"O'Brien\"" },
+  { "a value with a quote and a backslash, unquoted", [[PARAM{800,SLASH} == 'a"b\\c']] },
+  { "and in double quotes", [["PARAM{800,SLASH}" == 'a"b\\c']] },
+  { "and in single quotes", [['PARAM{800,SLASH}' == 'a"b\\c']] },
+  { "a value that ends in a backslash stays inside its quotes", [["PARAM{800,BACKSLASH}" == 'ends\\']] },
+  { "newlines stay in the text", [["PARAM{800,LINES}" == "one\ntwo\rthree"]] },
+  { "and every other control character", [[#"PARAM{800,CONTROL}" == 5]] },
+  { "an unquoted string compares with a literal", 'PARAM{800,TEXT} == "On"' },
+  { "as does an empty one", 'PARAM{800,EMPTY} == ""' },
+  { "a long string takes a value", '[[PARAM{800,TEXT}]] == "On"' },
+  { "without its close letting one out", '[[PARAM{800,CLOSES}]] == "a]]..os.exit()..[[b"' },
+  { "and with a quote in the value", [==[ [[PARAM{800,SLASH}]] == 'a"b\\c' ]==] },
+  { "an escaped quote doesn't end the string around a token", [["a\"PARAM{800,TEXT}" == 'a"On']] },
+  { "an escaped backslash doesn't hide its closing quote", [["a\\" == 'a\\' and PARAM{800,NUM} == 7]] },
+  { "a long string with no token stays as it is", "[[a\"b]] == 'a\"b'" },
+  { "numbers compare", "PARAM{800,NUM} > 5" },
+  { "a number in quotes is its text", '"PARAM{800,NUM}" == "7"' },
+  { "booleans compare", "PARAM{800,YES} == true" },
+  { "and negate", "not PARAM{800,NO}" },
+  { "two values in one expression", "PARAM{800,NUM} > PARAM{800,FLOAT}" },
+  { "the same token twice", "PARAM{800,NUM} == PARAM{800,NUM}" },
+  { "a token in a comment stays a comment", 'PARAM{800,TEXT} == "On" -- PARAM{800,LOOP}' },
+}) do
+  local result, err = condition(case[2])
+  T.eq(case[1], result, true)
+  T.eq("  " .. case[2], err, nil)
+end
+
+T.eq("arithmetic still works", Expressions.evaluate("equation", "PARAM{800,NUM} * 2 + PARAM{800,FLOAT}").result, 16.5)
+T.eq("with the same token twice", Expressions.evaluate("equation", "PARAM{800,NUM} * PARAM{800,NUM}").result, 49)
+T.contains(
+  "arithmetic on text is an error, not code",
+  Expressions.evaluate("equation", "PARAM{800,RUNS} + 1").error,
+  "runtime error"
+)
+T.contains(
+  "so is a string where a number belongs",
+  Expressions.evaluate("equation", "PARAM{800,TEXT}").error,
+  "not a number (got string)"
+)
+local afterComment = Expressions.evaluate("equation", "1 -- don't\n + PARAM{800,RUNS}")
+T.eq("an apostrophe in a comment doesn't put a value in code", afterComment.result, nil)
+T.contains("it stays data, so this is an error", afterComment.error, "runtime error")
+T.eq("and the token after one still reads", Expressions.evaluate("equation", "1 -- don't\n + PARAM{800,NUM}").result, 8)
+T.eq(
+  "as does one after a block comment",
+  Expressions.evaluate("equation", "1 --[[ don't ]] + PARAM{800,NUM}").result,
+  8
+)
+local afterBlock = Expressions.evaluate("equation", "1 --[[ don't ]] + PARAM{800,RUNS}")
+T.eq("nor does one in a block comment", afterBlock.result, nil)
+T.contains("the same error", afterBlock.error, "runtime error")
+local missed = Expressions.evaluate("condition", "PARAM{800,NOPE} == nil or error('this ran')")
+T.contains("a missing variable keeps its clear error", missed.error, "variable NOPE not found on device 800")
+T.eq("and never evaluates", missed.error:find("this ran", 1, true), nil)
+local plain = Expressions.evaluate("string", "at PARAM{800,LOOP}")
+T.eq("text that isn't evaluated is plain substitution", plain.result, "at " .. LOOP)
+
+local realLoadstring = loadstring
+local compiles = 0
+loadstring = function(...) -- luacheck: ignore
+  compiles = compiles + 1
+  return realLoadstring(...)
+end
+for level = 1, 50 do
+  valueDevices[800].variables["6"].value = tostring(level)
+  T.eq("  value " .. level, Expressions.evaluate("equation", "PARAM{800,NUM} + 12345").result, level + 12345)
+end
+loadstring = realLoadstring -- luacheck: ignore
+T.eq("the compile cache holds across values", compiles, 1)
+
+T.section("Essentials' documented examples")
+ShimSetDevices({
+  [96] = {
+    deviceName = "Sensor A",
+    variables = {
+      ["1001"] = { name = "Temperature", value = "70.5" },
+      ["1002"] = { name = "Humidity", value = "52.5" },
+    },
+  },
+  [97] = {
+    deviceName = "Sensor B",
+    variables = { ["1001"] = { name = "Temperature", value = "71" }, ["1002"] = { name = "Humidity", value = "44.9" } },
+  },
+  [98] = { deviceName = "Sensor C", variables = { ["1001"] = { name = "Temperature", value = "72.5" } } },
+  [120] = {
+    deviceName = "Pool",
+    variables = { ["2001"] = { name = "Pool", value = "82" }, ["2002"] = { name = "Spa", value = "101" } },
+  },
+  [2795] = { deviceName = "Espresso", variables = { ["1017"] = { name = "Watts", value = "1343" } } },
+  [2675] = { deviceName = "Meter", variables = { ["1003"] = { name = "Daily", value = "36" } } },
+})
+for _, case in ipairs({
+  { "equation", "PARAM{96,1002} > 50 and 1 or 0", 1 },
+  { "equation", "PARAM{96,Humidity} > 50 and 1 or 0", 1 },
+  { "equation", "abs(PARAM{96,1002} - PARAM{97,1002})", 7.6 },
+  { "equation", "round((PARAM{96,1001} + PARAM{97,1001} + PARAM{98,1001}) / 3, 1)", 71.3 },
+  { "equation", "PARAM{2675,1003} / 24", 1.5 },
+  { "string", "Pool PARAM{120,2001}F / Spa PARAM{120,2002}F", "Pool 82F / Spa 101F" },
+  { "string", "Espresso: PARAM{2795,1017} W", "Espresso: 1343 W" },
+}) do
+  local got = Expressions.evaluate(case[1], case[2]).result
+  if type(got) == "number" then
+    got = round(got, 1)
+  end
+  T.eq(case[2], got, case[3])
+end
+setDevices()
+
 T.section("What the sandbox reaches")
 for _, name in ipairs({ "io", "os", "require", "loadstring", "load", "dofile", "getfenv", "setfenv", "_G", "debug" }) do
   local result = sandbox.eval(name)

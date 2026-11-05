@@ -6,6 +6,10 @@
 --- only schedules work: a trailing-edge debounce timer per expression does the
 --- recompute, so chatty variables coalesce.
 ---
+--- A variable's value can't become code: an evaluated expression reads it as data
+--- bound in the sandbox, or inside a string literal with its text escaped. Only the
+--- integrator writes the expression itself, and an expression can still loop.
+---
 --- Director sends a driver no listener events for its own variables. A driver whose
 --- expressions read its own variables calls notifyVariableChanged after writing them.
 
@@ -19,6 +23,9 @@ require("lib.utils")
 --- Lua pattern matching a PARAM{device,variable} token, capturing the two ids
 --- with surrounding whitespace trimmed.
 local PARAM_PATTERN = "PARAM%s*{%s*(.-)%s*,%s*(.-)%s*}"
+
+--- The same token, starting exactly where it's looked for.
+local TOKEN_AT = "^" .. PARAM_PATTERN
 
 --- Placeholder emitted when a PARAM{} token references a missing variable.
 local ERROR_VARIABLE_NOT_FOUND = "ERROR_VARIABLE_NOT_FOUND"
@@ -161,7 +168,8 @@ function Expressions.references(template)
 end
 
 --- Replace every PARAM{} token with its variable's current value, or with
---- ERROR_VARIABLE_NOT_FOUND when it has none.
+--- ERROR_VARIABLE_NOT_FOUND when it has none. The result is for display and for text
+--- that isn't evaluated: a value in it could be anything, so nothing may evaluate it.
 --- @param template string
 --- @return string result
 --- @return string|nil problem Why the first token that has no value doesn't.
@@ -203,6 +211,109 @@ function Expressions.render(template)
   )
 end
 
+--- A value as the contents of a quoted Lua string, where it stays text.
+--- @param value any
+--- @return string escaped
+local function escapeForLiteral(value)
+  return (tostring(value):gsub("[%c\\\"']", function(char)
+    return string.format("\\%03d", char:byte())
+  end))
+end
+
+--- A value as an unquoted token reads it: what its text would mean as Lua, and otherwise that text.
+--- @param value any
+--- @return number|boolean|string typed
+local function typedValue(value)
+  local text = tostring(value)
+  if text == "true" then
+    return true
+  elseif text == "false" then
+    return false
+  end
+  local number = tonumber(text)
+  if number ~= nil then
+    return number
+  end
+  return text
+end
+
+--- Turn a template into source for the sandbox and the values it reads. A token outside
+--- a string becomes `__p[n]`, so the source stays the same as values change. A token
+--- inside a string is written into it, escaped. Comments are walked too: an apostrophe in
+--- one isn't a string opening, and thinking so would put the next token's value in code.
+--- @param template string
+--- @return string source
+--- @return any[] bindings
+local function bindValues(template)
+  local out, bindings, indexOf = {}, {}, {}
+  local pos, len = 1, #template
+
+  local function bind(device, variable)
+    local key = device .. "," .. variable
+    if not indexOf[key] then
+      bindings[#bindings + 1] = typedValue(readVariable(device, variable))
+      indexOf[key] = #bindings
+    end
+    return string.format("__p[%d]", indexOf[key])
+  end
+
+  --- Copy text as it stands, up to and including `last`.
+  local function copyTo(last)
+    out[#out + 1] = template:sub(pos, last)
+    pos = last + 1
+  end
+
+  while pos <= len do
+    local _, tokenEnd, device, variable = template:find(TOKEN_AT, pos)
+    local char = template:sub(pos, pos)
+    local _, longOpen, longLevel = template:find("^%[(=*)%[", pos)
+    local _, blockOpen, blockLevel = template:find("^%-%-%[(=*)%[", pos)
+    if tokenEnd then
+      out[#out + 1] = bind(device, variable)
+      pos = tokenEnd + 1
+    elseif char == '"' or char == "'" then
+      copyTo(pos)
+      while pos <= len do
+        local _, innerEnd, innerDevice, innerVariable = template:find(TOKEN_AT, pos)
+        local inner = template:sub(pos, pos)
+        if innerEnd then
+          out[#out + 1] = escapeForLiteral(readVariable(innerDevice, innerVariable))
+          pos = innerEnd + 1
+        elseif inner == "\\" then
+          copyTo(pos + 1)
+        else
+          copyTo(pos)
+          if inner == char then
+            break
+          end
+        end
+      end
+    elseif longOpen then
+      local _, closeEnd = template:find("]" .. longLevel .. "]", longOpen + 1, true)
+      if closeEnd and template:sub(longOpen + 1, closeEnd):find(PARAM_PATTERN) then
+        -- A long string has no escapes, so one that takes a value is rewritten as a quoted one.
+        local body = template:sub(longOpen + 1, closeEnd - #longLevel - 2):gsub("^\r?\n", "")
+        body = body:gsub(PARAM_PATTERN, function(bodyDevice, bodyVariable)
+          return tostring(readVariable(bodyDevice, bodyVariable))
+        end)
+        out[#out + 1] = '"' .. escapeForLiteral(body) .. '"'
+        pos = closeEnd + 1
+      else
+        copyTo(closeEnd or len)
+      end
+    elseif blockOpen then
+      local _, closeEnd = template:find("]" .. blockLevel .. "]", blockOpen + 1, true)
+      copyTo(closeEnd or len)
+    elseif template:sub(pos, pos + 1) == "--" then
+      local newline = template:find("\n", pos, true)
+      copyTo(newline or len)
+    else
+      copyTo(pos)
+    end
+  end
+  return table.concat(out), bindings
+end
+
 --- Evaluate a template without touching anything.
 --- @param mode string "equation" for a number, "condition" for true or false, "string" for the substituted text.
 --- @param template string
@@ -216,7 +327,8 @@ function Expressions.evaluate(mode, template)
   elseif mode == "string" then
     evaluation.result = substituted
   else
-    local result, err = sandbox.eval(substituted)
+    local source, bindings = bindValues(template)
+    local result, err = sandbox.eval(source, nil, bindings)
     local want = mode == "condition" and "boolean" or "number"
     if err then
       evaluation.error = err

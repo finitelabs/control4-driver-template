@@ -5,8 +5,9 @@
 --- multi-variable expressions (tokens substituted before evaluation) share the
 --- engine with single-value transforms.
 ---
---- It limits what an expression can reach, not how long it runs: an expression can
---- hold a function literal, and nothing stops a loop inside one.
+--- It limits what an expression can reach, not how long it runs: an expression the
+--- integrator writes can hold a function literal, and nothing stops a loop inside
+--- one. A variable's value is not an expression: it arrives in `bindings`, as data.
 
 local log = require("lib.logging")
 
@@ -118,11 +119,13 @@ end
 
 --- Build the sandboxed environment for expression evaluation.
 --- @param rawValue any Optional raw value bound as `value` for transforms.
+--- @param bindings? any[] Values an expression reads as `__p[1]`, `__p[2]` and so on.
 --- @return table env
-local function buildEnv(rawValue)
+local function buildEnv(rawValue, bindings)
   local numValue = tonumber(rawValue)
   return {
     value = numValue ~= nil and numValue or rawValue,
+    __p = bindings,
     math = SANDBOX_MATH,
     string = SANDBOX_STRING,
     tonumber = tonumber,
@@ -166,9 +169,10 @@ end
 --- Evaluate an expression, optionally with a raw value bound as `value`.
 --- @param expression string Lua expression
 --- @param rawValue any Optional raw value available as `value` in the sandbox.
+--- @param bindings? any[] Values available as `__p[1]`, `__p[2]` and so on. They aren't part of the text, so the compile cache holds across values.
 --- @return any result The result, or rawValue on error (nil when no rawValue).
 --- @return string|nil err Error message if evaluation failed
-function Sandbox.eval(expression, rawValue)
+function Sandbox.eval(expression, rawValue, bindings)
   if not expression or expression == "" then
     return rawValue
   end
@@ -180,7 +184,7 @@ function Sandbox.eval(expression, rawValue)
     return rawValue, msg
   end
 
-  local env = buildEnv(rawValue)
+  local env = buildEnv(rawValue, bindings)
   -- setfenv must target fn directly so loadstring'd code resolves
   -- names (value, abs, device_name, etc.) from the sandbox environment.
   -- Safe: C4 Lua is single-threaded with no yields between here and pcall.
