@@ -2,8 +2,8 @@
 ---
 --- The broker handles messages one at a time and its cost grows with the square of a message's
 --- size, so a push to an open page stays near 4 KB however much it carries. A push with no page
---- subscribed costs nothing. A handler's return value never reaches the page: the REST reply is
---- the same whatever it returns, so a handler pushes its answer and returns nothing.
+--- subscribed costs nothing. The REST reply drops what a handler returns unless it is XML, so a
+--- handler pushes its answer and returns nothing.
 ---
 --- ```lua
 --- function UIR._GET_CONFIG()
