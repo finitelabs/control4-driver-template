@@ -41,8 +41,8 @@
   const defs = (t) => `<defs><radialGradient id="hubGlow"><stop offset="0" stop-color="${t}" stop-opacity="0.55"/><stop offset="1" stop-color="${t}" stop-opacity="0"/></radialGradient>`
     + `<linearGradient id="link" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="${t}" stop-opacity="0.9"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.35"/></linearGradient></defs>`;
 
-  // A square logo sits in a circle with about 21 px around its corners; a wordmark sits in a pill.
-  // A "-light" hub is white, for a brand whose kit has no logo for dark backgrounds.
+  // In a circle the logo's diagonal is 106 px, so any shape keeps about 21 px inside; a wordmark
+  // sits in a pill. A "-light" hub is white, for a brand whose kit has no logo for dark backgrounds.
   function hub(c, x = HX, y = HY) {
     const g = `<circle cx="${x}" cy="${y}" r="130" fill="url(#hubGlow)"/>`;
     const [shape, tone] = c.hub.split("-");
@@ -52,7 +52,6 @@
         + `<rect x="${x - 126}" y="${y - 40}" width="252" height="80" rx="40" ${fill} stroke-width="2.5"/>`
         + `<image href="${c.logo}" x="${x - 108}" y="${y - 27}" width="216" height="54" preserveAspectRatio="xMidYMid meet"/>`;
     }
-    // The logo's diagonal is 106 px, so any shape keeps about 21 px inside the 148 px circle.
     const lh = 106 / Math.sqrt(1 + c.aspect * c.aspect), lw = c.aspect * lh;
     return g + `<circle cx="${x}" cy="${y}" r="88" fill="none" stroke="${c.tint}" stroke-opacity="0.45" stroke-width="1.5"/>`
       + `<circle cx="${x}" cy="${y}" r="74" ${fill} stroke-width="2.5"/>`
@@ -178,7 +177,6 @@
     el.setAttribute("viewBox", `0 0 ${w} ${h}`);
     el.setAttribute("style", `position:absolute;left:0;top:0;width:${w}px;height:${h}px`);
     if (d.style === "hero") {
-      // A product image, not a logo: larger than a logo, centered in the art area.
       const [cx, cy, bw] = launch ? [926, 300, 400] : [1710, 212, 440];
       el.innerHTML = `<image href="${d.img}" x="${cx - bw / 2}" y="${cy - bw / 2}" width="${bw}" height="${bw}" preserveAspectRatio="xMidYMid meet" style="filter: drop-shadow(0 18px 40px rgba(0,0,0,0.5))"/>`;
       return launch ? 680 : 1360;
