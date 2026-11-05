@@ -9,19 +9,39 @@ Marketing images for the driver's DriverCentral listing. Each image is an HTML p
 | `banners/facts-strip-2400x200` | 2400x200 | The first image in the listing's description: four facts in a row |
 | `photos/1-...` onward | 2000x2000 | Listing photos, uploaded in number order |
 
-`assets/` holds what the pages share: the Finite Labs logo, and the brand's mark as `brand-mark.png`, taken from the brand's official kit.
+`assets/` holds what the pages share: the Finite Labs logo, `scene.js`, which draws the banners' art, and the brand's logo as `brand-mark.png`.
 
 ## Making the set
 
-1. Put the brand's mark in `assets/brand-mark.png`, from its official kit, and note the kit's URL and usage terms in this README. Never trace or redraw it.
-2. In each page under `banners/`, replace "Driver Name", the chips and the line under them with what the driver does, from its docs and CHANGELOG. No tag lines. The facts strip holds facts that stay true between releases (the Control4 OS it needs, the trial, local or cloud, what it controls), never an install count.
-3. In `photos/frame.html`, replace "Driver Name" beside the mark.
-4. Fill in the trademark notice at the bottom of the spotlight, the launch post and the photo frame: the brand's names and Control4, with any symbol or wording the brand's own guidelines require.
-5. Size the mark by its weight, keeping its center. The pages hold a square mark at 245 px in the spotlight and 270 px in the launch post. Give a wide wordmark up to 330 px (300 px in the post) of width instead, and a tall mark less height, so every brand looks the same size.
+1. Put the brand's logo in `assets/brand-mark.png`: the version its official kit makes for dark backgrounds, unedited, and note the kit's URL and usage terms in this README. Never trace, redraw, recolor or crop it, and never cut a mark out of a lockup the brand only supplies whole.
+2. In each page under `banners/`, replace "Driver Name", the chips and the line under them with what the driver does, from its docs and CHANGELOG. No tag lines, and no counts that change between releases (say "thousands of devices", not a number). The facts strip holds facts that stay true between releases: the Control4 OS it needs, the trial, local or cloud, what it controls.
+3. Pick the banners' art on the `<svg class="scene">` element (Banner art, below). Both banners use the same attributes.
+4. In `photos/frame.html`, replace "Driver Name" beside the logo.
+5. Fill in the trademark notice at the bottom of the spotlight, the launch post and the photo frame: the brand's names and Control4, with any symbol or wording the brand's own guidelines require.
 6. Add the listing photos: a screenshot per photo in `photos/sources/` and a line per photo in `photos/photos.txt`.
 7. Render, and check every image by eye.
 
 Every page takes its accent, `--accent`, from the repo's `primary_color`. The banners and the photo frame glow in `--glow`, which is the accent unless the page sets a lighter tint for a dark brand color. The facts strip shrinks its type until four longer facts fit.
+
+## Banner art
+
+`scene.js` draws the art on the right of both banners from the `<svg class="scene">` element's attributes. The brand's logo always sits at its center, and the art uses the page's `--glow` (or `data-tint`). Pick the style that shows what the driver does. The headline, chips and subtitle shrink until they end clear of the art.
+
+- `data-logo`: the logo, usually `../assets/brand-mark.png`.
+- `data-hub`: `circle` for a square logo, `pill` for a wordmark.
+- `data-style`, and what it needs:
+  - `mesh`: six devices linked to the logo. `data-icons` names six.
+  - `rings`: sound pulses under a night sky. `data-icons` names four.
+  - `ripples`: water ripples and bubbles. `data-icons` names four.
+  - `dial`: a thermostat dial with heat rising from the floor. `data-icons` names two.
+  - `circuit`: traces from the logo to six pads. `data-icons` names six.
+  - `matrix`: four sources routed through the logo to four screens. `data-icons` names the source and the screen icon.
+  - `strip`: a glowing LED strip.
+  - `chart`: a live line chart. `data-items` holds three series names, `name|name|name`.
+  - `topics`: messages fanning out to five labels. `data-items` holds `icon:label|...`.
+  - `tiles`: a grid of six labeled tools. `data-items` holds `icon:label|...`.
+  - `hero`: a product image instead of art, in `data-img`. It's drawn larger than a logo: 440 px wide on the spotlight and 400 px on the launch post.
+- Icons: bulb, motion, thermo, plug, lock, remote, strip, lightstrip, switch, meter, sound, moon, sunrise, clock, note, glow, door, fan, box, tv, globe, vars, sigma, branch, link, water, flame, calendar, chip. They're drawn for these banners, never taken from a brand. Add one to `scene.js` when a driver needs it.
 
 ## Rendering
 
