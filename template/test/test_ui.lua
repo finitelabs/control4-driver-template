@@ -230,7 +230,8 @@ if hasNode() then
   T.eq("a message between two parts of another", interleaved[1], { which = "a" })
   T.eq("leaves the other whole", interleaved[2], hardMessage())
 
-  ui:send("LONG", hardMessage())
+  T.unload("^lib%.ui$")
+  require("lib.ui"):send("LONG", hardMessage())
   local held = { pushes()[1] }
   T.unload("^lib%.ui$")
   require("lib.ui"):send("LONG", hardMessage())
