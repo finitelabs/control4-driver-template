@@ -33,7 +33,7 @@ Every page takes its accent, `--accent`, from the repo's `primary_color`. The ba
   - `mesh`: six devices linked to the logo. `data-icons` names six.
   - `rings`: sound pulses under a night sky. `data-icons` names four.
   - `ripples`: water ripples and bubbles. `data-icons` names four.
-  - `dial`: a thermostat dial with heat rising from the floor. `data-icons` names two.
+  - `dial`: a round thermostat dial, with floor heat in the gap below. `data-icons` names two.
   - `circuit`: traces from the logo to six pads. `data-icons` names six.
   - `matrix`: four sources routed through the logo to four screens. `data-icons` names the source and the screen icon.
   - `strip`: a glowing LED strip.
