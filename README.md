@@ -39,6 +39,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **persist.lua**: persistent storage abstraction over C4 PersistData
 - **redact.lua**: masks credentials in log lines and diagnostics reports
 - **values.lua**: value parsing, coercion, and formatting utilities
+- **expressions.lua** / **expression-sandbox.lua**: expressions over device variables: `PARAM{device,variable}` tokens, evaluation, and debounced watches
 - **logging.lua** / **utils.lua**: structured logging and general utilities (always included)
 - **github-updater.lua**: GitHub Releases-based self-updater for non-DriverCentral (`oss`) builds
 - **diagnostics.lua**: Cloud Monitoring, a DriverCentral build's hourly memory and error reports to InfluxDB (only with `cloud_diagnostics`)
