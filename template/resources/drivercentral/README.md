@@ -6,7 +6,7 @@ Marketing images for the driver's DriverCentral listing. Each image is an HTML p
 | --- | --- | --- |
 | `banners/spotlight-4096x848` | 4096x848 | DriverCentral homepage spotlight banner (emailed to DriverCentral, not uploaded) |
 | `banners/launch-post-2400x1200` | 2400x1200 | Launch posts (c4forums, Reddit, Discord) |
-| `banners/facts-strip-2400x200` | 2400x200 | The first image in the listing's description: four facts in a row |
+| `banners/facts-strip-2400x136` | 2400x136 | The first image in the listing's description: four facts in a row, three-quarters of the width, on a transparent background. Put it in a plain paragraph in the description, not a heading, which adds its own spacing |
 | `product-card-300x300.png` | 300x300 | The listing's product card, written by `make icons` from `resources/Driver Icons.sketch` |
 | `photos/1-...` onward | 2000x2000 | Listing photos, uploaded in number order |
 
