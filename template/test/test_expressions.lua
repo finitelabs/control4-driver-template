@@ -53,20 +53,17 @@ local function setDevices()
 end
 
 --- An engine over a table of expressions, counting recomputes per name.
-local function newEngine(expressions, opts)
+local function newEngine(expressions)
   local recomputed = {}
-  local options = {
+  return Expressions:new({
     getExpressions = function()
       return expressions
     end,
     recompute = function(name)
       recomputed[name] = (recomputed[name] or 0) + 1
     end,
-  }
-  for key, value in pairs(opts or {}) do
-    options[key] = value
-  end
-  return Expressions:new(options), recomputed
+  }),
+    recomputed
 end
 
 setDevices()
@@ -165,6 +162,12 @@ local valueDevices = {
       ["13"] = { name = "RUNS", value = RUNS },
       ["14"] = { name = "CLOSES", value = "a]]..os.exit()..[[b" },
       ["15"] = { name = "EMPTY", value = "" },
+      ["16"] = { name = "NAN", value = "nan" },
+      ["17"] = { name = "NANCAP", value = "NaN" },
+      ["18"] = { name = "INF", value = "inf" },
+      ["19"] = { name = "INFCAP", value = "INF" },
+      ["20"] = { name = "INFINITY", value = "Infinity" },
+      ["21"] = { name = "NEGINF", value = "-inf" },
     },
   },
 }
@@ -191,12 +194,21 @@ for _, case in ipairs({
   { "newlines stay in the text", [["PARAM{800,LINES}" == "one\ntwo\rthree"]] },
   { "and every other control character", [[#"PARAM{800,CONTROL}" == 5]] },
   { "an unquoted string compares with a literal", 'PARAM{800,TEXT} == "On"' },
+  { "nan stays a word", 'PARAM{800,NAN} == "nan"' },
+  { "in any case", 'PARAM{800,NANCAP} == "NaN"' },
+  { "inf stays a word", 'PARAM{800,INF} == "inf"' },
+  { "in any case", 'PARAM{800,INFCAP} == "INF"' },
+  { "infinity stays a word", 'PARAM{800,INFINITY} == "Infinity"' },
+  { "with a sign too", 'PARAM{800,NEGINF} == "-inf"' },
+  { "a commented-out token isn't read", "PARAM{800,TEXT} == 'On' -- PARAM{800,NOPE}" },
+  { "nor one in a block comment", "PARAM{800,TEXT} --[[ PARAM{800,NOPE} ]] == 'On'" },
   { "as does an empty one", 'PARAM{800,EMPTY} == ""' },
   { "a long string takes a value", '[[PARAM{800,TEXT}]] == "On"' },
   { "without its close letting one out", '[[PARAM{800,CLOSES}]] == "a]]..os.exit()..[[b"' },
   { "and with a quote in the value", [==[ [[PARAM{800,SLASH}]] == 'a"b\\c' ]==] },
   { "an escaped quote doesn't end the string around a token", [["a\"PARAM{800,TEXT}" == 'a"On']] },
   { "an escaped backslash doesn't hide its closing quote", [["a\\" == 'a\\' and PARAM{800,NUM} == 7]] },
+  { "a long string's own quote stays text beside a value", [==[ [[a"PARAM{800,TEXT}]] == 'a"On' ]==] },
   { "a long string with no token stays as it is", "[[a\"b]] == 'a\"b'" },
   { "numbers compare", "PARAM{800,NUM} > 5" },
   { "a number in quotes is its text", '"PARAM{800,NUM}" == "7"' },
@@ -235,9 +247,36 @@ T.eq(
 local afterBlock = Expressions.evaluate("equation", "1 --[[ don't ]] + PARAM{800,RUNS}")
 T.eq("nor does one in a block comment", afterBlock.result, nil)
 T.contains("the same error", afterBlock.error, "runtime error")
-local missed = Expressions.evaluate("condition", "PARAM{800,NOPE} == nil or error('this ran')")
+local missed = Expressions.evaluate("condition", "PARAM{800,NOPE} == nil")
 T.contains("a missing variable keeps its clear error", missed.error, "variable NOPE not found on device 800")
-T.eq("and never evaluates", missed.error:find("this ran", 1, true), nil)
+T.eq("and never evaluates", missed.result, nil)
+local refsNow, missingNow = Expressions.references("PARAM{800,TEXT} -- PARAM{800,NOPE}")
+T.eq("a commented-out token isn't a reference", #refsNow, 1)
+T.eq("nor is it waited for", #missingNow, 0)
+T.eq("a comment stays in the display text", Expressions.substitute("1 -- PARAM{800,NOPE}"), "1 -- PARAM{800,NOPE}")
+T.eq(
+  "text has no comments, so a token after -- substitutes",
+  Expressions.substitute("a -- PARAM{800,TEXT}", "string"),
+  "a -- On"
+)
+T.eq(
+  "and evaluating it agrees",
+  Expressions.evaluate("string", "Power -- PARAM{800,TEXT} [[PARAM{800,TEXT}]]").result,
+  "Power -- On [[On]]"
+)
+local _, textMissing = Expressions.references("a -- PARAM{800,NOPE}", "string")
+T.eq("and it's a reference there", #textMissing, 1)
+local commented, commentedCounts = newEngine({
+  code = { template = "PARAM{800,TEXT} -- PARAM{800,NOPE}", auto = true },
+  text = { template = "a -- PARAM{800,TEXT}", mode = "string", auto = true },
+})
+commented:resubscribeAll()
+T.eq("a commented-out token isn't watched", commented:watchedCount("code"), 1)
+T.eq("a token after -- in text is", commented:watchedCount("text"), 1)
+ShimFireTimers()
+T.eq("nothing's waited for, so nothing recomputes", commentedCounts.code, nil)
+commented:unsubscribeExpression("code")
+commented:unsubscribeExpression("text")
 local plain = Expressions.evaluate("string", "at PARAM{800,LOOP}")
 T.eq("text that isn't evaluated is plain substitution", plain.result, "at " .. LOOP)
 
@@ -300,9 +339,8 @@ end
 T.eq("string.dump isn't reachable", sandbox.eval("string.dump"), nil)
 T.eq('and nor is it through a string, ("").dump', sandbox.eval('("").dump'), nil)
 T.truthy("while the driver keeps its own", string.dump)
-local _, thrown = sandbox.eval("error('boom')")
-T.contains("an error in an expression is reported", thrown, "boom")
-T.truthy("and the driver still keeps its string.dump", string.dump)
+sandbox.eval("nothing.here")
+T.truthy("and still does after an expression fails", string.dump)
 local realFormat = string.format
 local _, changing = sandbox.eval("(function() string.format = nil end)()")
 T.contains("an expression can't change the string table", changing, "can't change")
@@ -468,25 +506,27 @@ T.eq("and the expression catches up", numericCounts.byId, 1)
 numeric:unsubscribeExpression("byId")
 
 ShimSetDevices({ [620] = { deviceName = "Never", variables = {} } })
-local never, neverCounts = newEngine({ never = { template = "PARAM{620,VALUE}", auto = true } }, { retryAttempts = 3 })
-local arms = 0
+local never, neverCounts = newEngine({ never = { template = "PARAM{620,VALUE}", auto = true } })
+local arms, retryDelay = 0, nil
 local realSetTimer = SetTimer
-SetTimer = function(name, ...) -- luacheck: ignore
+SetTimer = function(name, delay, ...) -- luacheck: ignore
   if tostring(name):find("ExprRetry", 1, true) then
     arms = arms + 1
+    retryDelay = delay
   end
-  return realSetTimer(name, ...)
+  return realSetTimer(name, delay, ...)
 end
 never:subscribeExpression("never")
-for _ = 1, 10 do
+T.eq("a try waits its interval", retryDelay, Expressions.RETRY_MS)
+for _ = 1, Expressions.RETRY_ATTEMPTS + 5 do
   ShimFireTimers()
 end
-T.eq("one that never comes stops being tried", arms, 3)
+T.eq("one that never comes stops being tried", arms, Expressions.RETRY_ATTEMPTS)
 T.eq("without recomputing", neverCounts.never, nil)
 never:unsubscribeExpression("never")
 
 arms = 0
-local dropped = newEngine({ dropped = { template = "PARAM{620,VALUE}", auto = true } }, { retryAttempts = 3 })
+local dropped = newEngine({ dropped = { template = "PARAM{620,VALUE}", auto = true } })
 dropped:subscribeExpression("dropped")
 dropped:unsubscribeExpression("dropped")
 for _ = 1, 3 do
@@ -496,7 +536,7 @@ T.eq("unwatching one ends its tries", arms, 1)
 
 arms = 0
 ShimSetDevices({ [630] = { deviceName = "Removed", variables = {} } })
-local removedLate = newEngine({ removed = { template = "PARAM{630,VALUE}", auto = true } }, { retryAttempts = 5 })
+local removedLate = newEngine({ removed = { template = "PARAM{630,VALUE}", auto = true } })
 removedLate:subscribeExpression("removed")
 removedLate:handleDeviceRemoved(630)
 for _ = 1, 3 do

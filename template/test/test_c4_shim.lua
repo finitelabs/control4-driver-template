@@ -1102,12 +1102,15 @@ T.eq("a malformed reference stays literal", C4:ParseXml("<v>&#;</v>").Value, "&#
 
 --------------------------------------------------------------------------------
 T.section("C4:GetVariable")
+--------------------------------------------------------------------------------
+
 ShimSetDevices({ [4242] = { variables = { ["7"] = { name = "LEVEL", value = "9" } } } })
 T.eq("reads a device's variable by id", C4:GetVariable(4242, 7), "9")
 T.eq("and has nothing for an id it lacks", C4:GetVariable(4242, 8), nil)
 T.eq("or a device it lacks", C4:GetVariable(4243, 7), nil)
 ShimResetDevices()
 
+--------------------------------------------------------------------------------
 T.section("C4:Base64Decode")
 --------------------------------------------------------------------------------
 

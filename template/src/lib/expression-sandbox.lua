@@ -1,13 +1,10 @@
---- Sandboxed Lua expression evaluator.
----
---- Evaluates user-defined expressions with Lua 5.1's loadstring and setfenv, with a
---- compile cache keyed by expression string. The `value` binding is optional, so
---- multi-variable expressions (tokens substituted before evaluation) share the
---- engine with single-value transforms.
+--- Evaluates expressions in a sandbox: compiled with loadstring, with a cache keyed by
+--- their text, and run with setfenv in an environment holding only `math`, `string`,
+--- a few helpers, and the values an expression reads as `__p[n]`.
 ---
 --- It limits what an expression can reach, not how long it runs: an expression the
 --- integrator writes can hold a function literal, and nothing stops a loop inside
---- one. A variable's value is not an expression: it arrives in `bindings`, as data.
+--- one. A variable's value is not an expression: it arrives as a binding, as data.
 
 local log = require("lib.logging")
 
@@ -118,13 +115,10 @@ local function compile(expression)
 end
 
 --- Build the sandboxed environment for expression evaluation.
---- @param rawValue any Optional raw value bound as `value` for transforms.
 --- @param bindings? any[] Values an expression reads as `__p[1]`, `__p[2]` and so on.
 --- @return table env
-local function buildEnv(rawValue, bindings)
-  local numValue = tonumber(rawValue)
+local function buildEnv(bindings)
   return {
-    value = numValue ~= nil and numValue or rawValue,
     __p = bindings,
     math = SANDBOX_MATH,
     string = SANDBOX_STRING,
@@ -146,49 +140,29 @@ local function buildEnv(rawValue, bindings)
     room_name = roomName,
     c2f = c2f,
     f2c = f2c,
-    map = function(tbl)
-      if type(tbl) ~= "table" then
-        return rawValue
-      end
-      local key = tostring(rawValue)
-      if tbl[key] ~= nil then
-        return tbl[key]
-      end
-      -- Try case-insensitive match
-      local lower = key:lower()
-      for k, v in pairs(tbl) do
-        if tostring(k):lower() == lower then
-          return v
-        end
-      end
-      return rawValue
-    end,
   }
 end
 
---- Evaluate an expression, optionally with a raw value bound as `value`.
+--- Evaluate an expression.
 --- @param expression string Lua expression
---- @param rawValue any Optional raw value available as `value` in the sandbox.
 --- @param bindings? any[] Values available as `__p[1]`, `__p[2]` and so on. They aren't part of the text, so the compile cache holds across values.
---- @return any result The result, or rawValue on error (nil when no rawValue).
+--- @return any result The result, or nil on error.
 --- @return string|nil err Error message if evaluation failed
-function Sandbox.eval(expression, rawValue, bindings)
+function Sandbox.eval(expression, bindings)
   if not expression or expression == "" then
-    return rawValue
+    return nil
   end
 
   local fn, compileErr = compile(expression)
   if not fn then
     local msg = "compile error: " .. (compileErr or "unknown")
     log:warn("Expression %s for '%s'", msg, expression)
-    return rawValue, msg
+    return nil, msg
   end
 
-  local env = buildEnv(rawValue, bindings)
-  -- setfenv must target fn directly so loadstring'd code resolves
-  -- names (value, abs, device_name, etc.) from the sandbox environment.
-  -- Safe: C4 Lua is single-threaded with no yields between here and pcall.
-  setfenv(fn, env)
+  -- setfenv must target fn directly so loadstring'd code resolves names from the
+  -- sandbox. Safe: C4 Lua is single-threaded with no yields between here and pcall.
+  setfenv(fn, buildEnv(bindings))
 
   -- A string's methods read the real string table, so ("").dump needs this too.
   local dump = string.dump
@@ -197,33 +171,11 @@ function Sandbox.eval(expression, rawValue, bindings)
   string.dump = dump
   if not ok then
     local msg = "runtime error: " .. tostring(result)
-    log:warn("Expression %s for '%s' (value=%s)", msg, expression, tostring(rawValue))
-    return rawValue, msg
+    log:warn("Expression %s for '%s'", msg, expression)
+    return nil, msg
   end
 
   return result
-end
-
---- Validate an expression without executing it.
---- @param expression string
---- @return boolean valid
---- @return string|nil errorMsg
-function Sandbox.validate(expression)
-  if not expression or expression == "" then
-    return true
-  end
-
-  local fn, err = loadstring("return " .. expression)
-  if not fn then
-    return false, err
-  end
-
-  return true
-end
-
---- Clear the expression cache.
-function Sandbox.clearCache()
-  _cache = {}
 end
 
 return Sandbox

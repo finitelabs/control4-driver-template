@@ -54,10 +54,7 @@ local removedDevices = {}
 --- @field _missing table<string, integer> expression name -> references last found missing
 --- @field _retries table<string, integer> expression name -> retries used
 --- @field _debounceMs number
---- @field _retryMs number
---- @field _retryAttempts integer
 --- @field _getExpressions fun(): table<string, table>
---- @field _extractRefs fun(template: string): ExpressionReference[], MissingReference[]?
 --- @field _recompute fun(name: string)
 local Expressions = {}
 Expressions.__index = Expressions
@@ -84,7 +81,8 @@ local function resolveVariable(deviceId, variable)
     return C4:GetDeviceVariables(deviceId)
   end)
   vars = (ok and type(vars) == "table") and vars or {}
-  local asId = tonumber(variable)
+  -- Digits only: tonumber also takes a variable named nan or inf.
+  local asId = tostring(variable):match("^%d+$") and tonumber(variable)
   for id, v in pairs(vars) do
     if type(v) == "table" then
       if asId and tonumber(id) == asId then
@@ -94,7 +92,7 @@ local function resolveVariable(deviceId, variable)
       end
     end
   end
-  return asId, variable, false
+  return asId or nil, variable, false
 end
 
 --- Say why a token has no value.
@@ -146,13 +144,106 @@ local function readVariable(device, variable)
   return value
 end
 
---- The variables a template references.
+--- Walk plain text's tokens in order.
+--- @param text string
+--- @param where string Passed on with each piece.
+--- @param onText fun(text: string, where: string)
+--- @param onToken fun(device: string, variable: string, where: string)
+local function scanPlain(text, where, onText, onToken)
+  local pos = 1
+  while true do
+    local from, to, device, variable = text:find(PARAM_PATTERN, pos)
+    if not from then
+      break
+    end
+    if from > pos then
+      onText(text:sub(pos, from - 1), where)
+    end
+    onToken(device, variable, where)
+    pos = to + 1
+  end
+  if pos <= #text then
+    onText(text:sub(pos), where)
+  end
+end
+
+--- Walk a template's tokens in order. Text that gets evaluated follows Lua's rules:
+--- comments and strings are told apart, so a token in a comment is only comment text,
+--- and an apostrophe in a comment doesn't open a string. Mode "string" isn't evaluated
+--- and has no such rules: `--` and quotes in it are just text.
 --- @param template string
+--- @param mode? string The template's mode.
+--- @param onText fun(text: string, where?: string) `where` is "long" inside a long string that holds a token, and "delimiter" for that string's own delimiters.
+--- @param onToken fun(device: string, variable: string, where: string) `where` is "code", "string" or "long".
+local function scanTokens(template, mode, onText, onToken)
+  if mode == "string" then
+    scanPlain(template, "string", onText, onToken)
+    return
+  end
+  local pos, len = 1, #template
+
+  local function textTo(last)
+    onText(template:sub(pos, last))
+    pos = last + 1
+  end
+
+  while pos <= len do
+    local _, tokenEnd, device, variable = template:find(TOKEN_AT, pos)
+    local char = template:sub(pos, pos)
+    local _, longOpen, longLevel = template:find("^%[(=*)%[", pos)
+    local _, blockOpen, blockLevel = template:find("^%-%-%[(=*)%[", pos)
+    if tokenEnd then
+      onToken(device, variable, "code")
+      pos = tokenEnd + 1
+    elseif char == '"' or char == "'" then
+      textTo(pos)
+      while pos <= len do
+        local _, innerEnd, innerDevice, innerVariable = template:find(TOKEN_AT, pos)
+        local inner = template:sub(pos, pos)
+        if innerEnd then
+          onToken(innerDevice, innerVariable, "string")
+          pos = innerEnd + 1
+        elseif inner == "\\" then
+          textTo(pos + 1)
+        else
+          textTo(pos)
+          if inner == char then
+            break
+          end
+        end
+      end
+    elseif longOpen then
+      local close = "]" .. longLevel .. "]"
+      local _, closeEnd = template:find(close, longOpen + 1, true)
+      if closeEnd and template:sub(longOpen + 1, closeEnd):find(PARAM_PATTERN) then
+        local _, newlineEnd = template:find("^\r?\n", longOpen + 1)
+        local bodyStart = (newlineEnd or longOpen) + 1
+        onText(template:sub(pos, bodyStart - 1), "delimiter")
+        scanPlain(template:sub(bodyStart, closeEnd - #close), "long", onText, onToken)
+        onText(close, "delimiter")
+        pos = closeEnd + 1
+      else
+        textTo(closeEnd or len)
+      end
+    elseif blockOpen then
+      local _, closeEnd = template:find("]" .. blockLevel .. "]", blockOpen + 1, true)
+      textTo(closeEnd or len)
+    elseif template:sub(pos, pos + 1) == "--" then
+      textTo(template:find("\n", pos, true) or len)
+    else
+      textTo(pos)
+    end
+  end
+end
+
+--- The variables a template references. A token in a comment isn't one.
+--- @param template string
+--- @param mode? string The template's mode: "string" has no comments.
 --- @return ExpressionReference[] refs Each one that has a numeric id. A numeric token the device doesn't list yet is included, since its id is known.
 --- @return MissingReference[] missing Each token the device doesn't list yet, numeric or by name. A removed device's aren't waited for.
-function Expressions.references(template)
+function Expressions.references(template, mode)
   local refs, missing = {}, {}
-  for device, variable in template:gmatch(PARAM_PATTERN) do
+  scanTokens(template, mode, function() end, function(device, variable)
     local deviceId = tonumber(device)
     if deviceId and not removedDevices[deviceId] then
       local variableId, _, listed = resolveVariable(deviceId, variable)
@@ -163,7 +254,7 @@ function Expressions.references(template)
         missing[#missing + 1] = { device = device, variable = variable }
       end
     end
-  end
+  end)
   return refs, missing
 end
 
@@ -171,44 +262,51 @@ end
 --- ERROR_VARIABLE_NOT_FOUND when it has none. The result is for display and for text
 --- that isn't evaluated: a value in it could be anything, so nothing may evaluate it.
 --- @param template string
+--- @param mode? string The template's mode: "string" has no comments.
 --- @return string result
 --- @return string|nil problem Why the first token that has no value doesn't.
-function Expressions.substitute(template)
-  local problem
-  local result = template:gsub(PARAM_PATTERN, function(device, variable)
+function Expressions.substitute(template, mode)
+  local out, problem = {}, nil
+  scanTokens(template, mode, function(text)
+    out[#out + 1] = text
+  end, function(device, variable)
     local value = readVariable(device, variable)
     if value == nil then
       local reason = missingReason(device, variable)
       log:warn("Expression reference not found: %s", reason)
       problem = problem or reason
-      return ERROR_VARIABLE_NOT_FOUND
+      out[#out + 1] = ERROR_VARIABLE_NOT_FOUND
+    else
+      out[#out + 1] = tostring(value)
     end
-    return tostring(value)
   end)
-  return result, problem
+  return table.concat(out), problem
 end
 
 --- Replace every PARAM{} token with `[Device > Variable]`, to show what an
 --- expression references at a glance.
 --- @param template string
+--- @param mode? string The template's mode: "string" has no comments.
 --- @return string rendered
-function Expressions.render(template)
-  return (
-    template:gsub(PARAM_PATTERN, function(device, variable)
-      local deviceId = tonumber(device)
-      local deviceLabel = "Device " .. device
-      local variableLabel = variable
-      if deviceId then
-        local dev = GetDevice(deviceId)
-        if dev and not IsEmpty(dev.displayName) then
-          deviceLabel = dev.displayName
-        end
-        local _, name = resolveVariable(deviceId, variable)
-        variableLabel = name
+function Expressions.render(template, mode)
+  local out = {}
+  scanTokens(template, mode, function(text)
+    out[#out + 1] = text
+  end, function(device, variable)
+    local deviceId = tonumber(device)
+    local deviceLabel = "Device " .. device
+    local variableLabel = variable
+    if deviceId then
+      local dev = GetDevice(deviceId)
+      if dev and not IsEmpty(dev.displayName) then
+        deviceLabel = dev.displayName
       end
-      return string.format("[%s > %s]", deviceLabel, variableLabel)
-    end)
-  )
+      local _, name = resolveVariable(deviceId, variable)
+      variableLabel = name
+    end
+    out[#out + 1] = string.format("[%s > %s]", deviceLabel, variableLabel)
+  end)
+  return table.concat(out)
 end
 
 --- A value as the contents of a quoted Lua string, where it stays text.
@@ -230,8 +328,9 @@ local function typedValue(value)
   elseif text == "false" then
     return false
   end
+  -- tonumber also takes nan, inf and infinity, which are words in a variable's text.
   local number = tonumber(text)
-  if number ~= nil then
+  if number ~= nil and number == number and math.abs(number) ~= math.huge then
     return number
   end
   return text
@@ -239,78 +338,33 @@ end
 
 --- Turn a template into source for the sandbox and the values it reads. A token outside
 --- a string becomes `__p[n]`, so the source stays the same as values change. A token
---- inside a string is written into it, escaped. Comments are walked too: an apostrophe in
---- one isn't a string opening, and thinking so would put the next token's value in code.
+--- inside a string is written into it, escaped, and a long string that takes one is
+--- rewritten as a quoted one, since it has no escapes.
 --- @param template string
 --- @return string source
 --- @return any[] bindings
 local function bindValues(template)
   local out, bindings, indexOf = {}, {}, {}
-  local pos, len = 1, #template
-
-  local function bind(device, variable)
-    local key = device .. "," .. variable
-    if not indexOf[key] then
-      bindings[#bindings + 1] = typedValue(readVariable(device, variable))
-      indexOf[key] = #bindings
-    end
-    return string.format("__p[%d]", indexOf[key])
-  end
-
-  --- Copy text as it stands, up to and including `last`.
-  local function copyTo(last)
-    out[#out + 1] = template:sub(pos, last)
-    pos = last + 1
-  end
-
-  while pos <= len do
-    local _, tokenEnd, device, variable = template:find(TOKEN_AT, pos)
-    local char = template:sub(pos, pos)
-    local _, longOpen, longLevel = template:find("^%[(=*)%[", pos)
-    local _, blockOpen, blockLevel = template:find("^%-%-%[(=*)%[", pos)
-    if tokenEnd then
-      out[#out + 1] = bind(device, variable)
-      pos = tokenEnd + 1
-    elseif char == '"' or char == "'" then
-      copyTo(pos)
-      while pos <= len do
-        local _, innerEnd, innerDevice, innerVariable = template:find(TOKEN_AT, pos)
-        local inner = template:sub(pos, pos)
-        if innerEnd then
-          out[#out + 1] = escapeForLiteral(readVariable(innerDevice, innerVariable))
-          pos = innerEnd + 1
-        elseif inner == "\\" then
-          copyTo(pos + 1)
-        else
-          copyTo(pos)
-          if inner == char then
-            break
-          end
-        end
-      end
-    elseif longOpen then
-      local _, closeEnd = template:find("]" .. longLevel .. "]", longOpen + 1, true)
-      if closeEnd and template:sub(longOpen + 1, closeEnd):find(PARAM_PATTERN) then
-        -- A long string has no escapes, so one that takes a value is rewritten as a quoted one.
-        local body = template:sub(longOpen + 1, closeEnd - #longLevel - 2):gsub("^\r?\n", "")
-        body = body:gsub(PARAM_PATTERN, function(bodyDevice, bodyVariable)
-          return tostring(readVariable(bodyDevice, bodyVariable))
-        end)
-        out[#out + 1] = '"' .. escapeForLiteral(body) .. '"'
-        pos = closeEnd + 1
-      else
-        copyTo(closeEnd or len)
-      end
-    elseif blockOpen then
-      local _, closeEnd = template:find("]" .. blockLevel .. "]", blockOpen + 1, true)
-      copyTo(closeEnd or len)
-    elseif template:sub(pos, pos + 1) == "--" then
-      local newline = template:find("\n", pos, true)
-      copyTo(newline or len)
+  scanTokens(template, nil, function(text, where)
+    if where == "delimiter" then
+      out[#out + 1] = '"'
+    elseif where == "long" then
+      out[#out + 1] = escapeForLiteral(text)
     else
-      copyTo(pos)
+      out[#out + 1] = text
     end
-  end
+  end, function(device, variable, where)
+    if where == "code" then
+      local key = device .. "," .. variable
+      if not indexOf[key] then
+        bindings[#bindings + 1] = typedValue(readVariable(device, variable))
+        indexOf[key] = #bindings
+      end
+      out[#out + 1] = string.format("__p[%d]", indexOf[key])
+    else
+      out[#out + 1] = escapeForLiteral(readVariable(device, variable))
+    end
+  end)
   return table.concat(out), bindings
 end
 
@@ -320,15 +374,15 @@ end
 --- @return ExpressionEvaluation evaluation
 function Expressions.evaluate(mode, template)
   template = template or ""
-  local substituted, problem = Expressions.substitute(template)
-  local evaluation = { rendered = Expressions.render(template), substituted = substituted }
+  local substituted, problem = Expressions.substitute(template, mode)
+  local evaluation = { rendered = Expressions.render(template, mode), substituted = substituted }
   if problem then
     evaluation.error = problem
   elseif mode == "string" then
     evaluation.result = substituted
   else
     local source, bindings = bindValues(template)
-    local result, err = sandbox.eval(source, nil, bindings)
+    local result, err = sandbox.eval(source, bindings)
     local want = mode == "condition" and "boolean" or "number"
     if err then
       evaluation.error = err
@@ -539,12 +593,9 @@ end
 
 --- Create a watch engine.
 --- @param opts table Constructor options:
----   - getExpressions: fun(): table<string, table> map of name -> { template, auto }; only auto ones are watched
+---   - getExpressions: fun(): table<string, table> map of name -> { template, mode?, auto }; only auto ones are watched
 ---   - recompute: fun(name: string) recompute a named expression
----   - extractRefs: fun(template: string): ExpressionReference[], MissingReference[]? defaults to Expressions.references
 ---   - debounceMs: number? debounce window in milliseconds (default 1000)
----   - retryMs: number? time between tries for a variable that isn't there yet (default RETRY_MS)
----   - retryAttempts: integer? how many tries (default RETRY_ATTEMPTS)
 --- @return Expressions
 function Expressions:new(opts)
   log:trace("Expressions:new(opts)")
@@ -555,10 +606,7 @@ function Expressions:new(opts)
   instance._missing = {}
   instance._retries = {}
   instance._debounceMs = opts.debounceMs or 1000
-  instance._retryMs = opts.retryMs or Expressions.RETRY_MS
-  instance._retryAttempts = opts.retryAttempts or Expressions.RETRY_ATTEMPTS
   instance._getExpressions = assert(opts.getExpressions, "getExpressions is required")
-  instance._extractRefs = opts.extractRefs or Expressions.references
   instance._recompute = assert(opts.recompute, "recompute is required")
   return instance
 end
@@ -619,8 +667,8 @@ end
 --- @param name string
 --- @param config table
 function Expressions:_watchReferences(name, config)
-  local refs, missing = self._extractRefs(config.template or "")
-  local missingCount = #(missing or {})
+  local refs, missing = Expressions.references(config.template or "", config.mode)
+  local missingCount = #missing
   local wasMissing = self._missing[name]
   local appeared = wasMissing ~= nil and missingCount < wasMissing
 
@@ -664,13 +712,13 @@ end
 --- @param name string
 function Expressions:_scheduleRetry(name)
   local used = self._retries[name] or 0
-  if used >= self._retryAttempts then
+  if used >= Expressions.RETRY_ATTEMPTS then
     log:warn("Expression '%s' still references %d missing variable(s); no more retries", name, self._missing[name] or 0)
     self._retries[name] = nil
     return
   end
   self._retries[name] = used + 1
-  SetTimer(retryTimerName(name), self._retryMs, function()
+  SetTimer(retryTimerName(name), Expressions.RETRY_MS, function()
     local config = self._getExpressions()[name]
     if config and toboolean(config.auto) then
       self:_watchReferences(name, config)
