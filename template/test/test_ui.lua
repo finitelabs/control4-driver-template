@@ -181,8 +181,11 @@ T.eq("a burst of functions builds once", builds, 1)
 T.check("and sends what it built", built[1].data:match('{"built":1}$') ~= nil, built[1].data)
 
 ui:coalesce("STATE", function() end)
+ui:coalesce("OTHER", { after = true })
 ShimFireTimers()
-T.eq("a function returning nil sends nothing", #pushes(), 0)
+local afterNil = pushes()
+T.eq("a function returning nil sends nothing", #afterNil, 1)
+T.check("and costs the value behind it nothing", afterNil[1].command == "OTHER", afterNil[1].command)
 
 ui:coalesce("RESULT", { name = "a" }, "RESULT:a")
 ui:coalesce("RESULT", { name = "b" }, "RESULT:b")
@@ -244,6 +247,23 @@ if hasNode() then
     lost[#lost + 1] = push
   end
   T.eq("a lost part costs only its own message", pageReceives(lost), { { next = true } })
+
+  ui:send("LONG", hardMessage())
+  local started = pushes()
+  ui:send("LONG", hardMessage())
+  local missedStart = pushes()
+  table.remove(missedStart, 1)
+  local joining = { started[1] }
+  for _, push in ipairs(missedStart) do
+    joining[#joining + 1] = push
+  end
+  ui:send("LONG", { next = true })
+  joining[#joining + 1] = pushes()[1]
+  T.eq(
+    "the rest of a message whose start was missed costs only that message",
+    pageReceives(joining),
+    { { next = true } }
+  )
 
   T.eq("a push with no frame delivers nothing", pageReceives({ { command = "X" } }), {})
 else

@@ -120,7 +120,10 @@ function UI:coalesce(command, data, key)
       local pending = self._pending
       self._pending = {}
       for _, item in ipairs(pending) do
-        local message = type(item.data) == "function" and item.data() or item.data
+        local message = item.data
+        if type(message) == "function" then
+          message = message()
+        end
         if message ~= nil then
           self:send(item.command, message)
         end
