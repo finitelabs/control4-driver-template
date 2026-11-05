@@ -229,7 +229,7 @@ local function scanTokens(template, mode, onText, onToken)
       local _, closeEnd = template:find("]" .. blockLevel .. "]", blockOpen + 1, true)
       textTo(closeEnd or len)
     elseif template:sub(pos, pos + 1) == "--" then
-      textTo(template:find("\n", pos, true) or len)
+      textTo(template:find("[\r\n]", pos) or len)
     else
       textTo(pos)
     end

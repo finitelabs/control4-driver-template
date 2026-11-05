@@ -205,6 +205,7 @@ for _, case in ipairs({
   { "as does an empty one", 'PARAM{800,EMPTY} == ""' },
   { "a long string takes a value", '[[PARAM{800,TEXT}]] == "On"' },
   { "without its close letting one out", '[[PARAM{800,CLOSES}]] == "a]]..os.exit()..[[b"' },
+  { "a comment ended by a lone CR leaves the next token in code", '1 -- x\r== 1 and PARAM{800,EXIT} == "os.exit()"' },
   { "and with a quote in the value", [==[ [[PARAM{800,SLASH}]] == 'a"b\\c' ]==] },
   { "an escaped quote doesn't end the string around a token", [["a\"PARAM{800,TEXT}" == 'a"On']] },
   { "an escaped backslash doesn't hide its closing quote", [["a\\" == 'a\\' and PARAM{800,NUM} == 7]] },
