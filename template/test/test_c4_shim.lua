@@ -1428,13 +1428,25 @@ do
     'arms[#arms + 1] = "oss"',
     "--#endif",
     "--#endif",
+    "--#ifdef OSS",
+    "--#ifdef DRIVERCENTRAL",
+    'arms[#arms + 1] = "both"',
+    "--#else",
+    'arms[#arms + 1] = "oss only"',
+    "--#endif",
+    'arms[#arms + 1] = "after"',
+    "--#endif",
     "return arms, debug.getinfo(1, 'l').currentline",
   }, "\n"))
   file:close()
   local dc, line = F.dofileBuild(path, "drivercentral")
   T.eq("a DriverCentral build runs its arm", dc, { "dc" })
-  T.eq("an OSS build runs its arms, nested ones too", F.dofileBuild(path, "oss"), { "not dc", "oss" })
-  T.eq("line numbers stay the source's", line, 12)
+  T.eq(
+    "an OSS build runs its arms, nested ones too",
+    F.dofileBuild(path, "oss"),
+    { "not dc", "oss", "oss only", "after" }
+  )
+  T.eq("line numbers stay the source's", line, 20)
   T.raises("an unknown build is refused", function()
     F.dofileBuild(path, "neither")
   end, "neither")
