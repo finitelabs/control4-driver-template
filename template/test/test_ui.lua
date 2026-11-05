@@ -228,11 +228,13 @@ if hasNode() then
   T.eq("leaves the other whole", interleaved[2], hardMessage())
 
   ui:send("LONG", hardMessage())
-  local backwards, reversed = pushes(), {}
-  for i = #backwards, 1, -1 do
-    reversed[#reversed + 1] = backwards[i]
+  local held = { pushes()[1] }
+  T.unload("^lib%.ui$")
+  require("lib.ui"):send("LONG", hardMessage())
+  for _, push in ipairs(pushes()) do
+    held[#held + 1] = push
   end
-  T.eq("parts arriving out of order still join", pageReceives(reversed)[1], hardMessage())
+  T.eq("a driver's reload under an open page leaves its next message whole", pageReceives(held), { hardMessage() })
 
   ui:send("LONG", hardMessage())
   local lost = pushes()
