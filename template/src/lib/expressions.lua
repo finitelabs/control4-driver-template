@@ -65,8 +65,8 @@ Expressions.__index = Expressions
 Expressions.RETRY_MS = 30000
 Expressions.RETRY_ATTEMPTS = 20
 
---- The longest changes can hold off a recompute, in seconds. A variable changing faster than the
---- debounce window would otherwise push it out for as long as it keeps changing.
+--- How long changes can keep pushing a recompute out, in seconds. It runs one debounce window
+--- after the last push.
 Expressions.MAX_WAIT_SECONDS = 10
 
 ---------------------------------------------------------------------------
@@ -639,7 +639,7 @@ end
 function Expressions:_scheduleRecompute(name)
   local now = os.time()
   local since = self._waitingSince[name]
-  if since and since <= now and now - since >= Expressions.MAX_WAIT_SECONDS then
+  if since and now - since >= Expressions.MAX_WAIT_SECONDS then
     return
   end
   self._waitingSince[name] = since and since <= now and since or now

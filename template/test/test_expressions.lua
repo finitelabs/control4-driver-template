@@ -398,9 +398,16 @@ OnWatchedVariableChanged(200, 7, "14")
 clock = clock + Expressions.MAX_WAIT_SECONDS
 OnWatchedVariableChanged(200, 7, "15")
 T.eq("a clock set back doesn't lose the limit", arms, 4)
+ShimFireTimers()
+local before = recomputed.power
+OnWatchedVariableChanged(200, 7, "16")
+engine:refreshExpression("power")
+clock = clock + Expressions.MAX_WAIT_SECONDS + 1
+OnWatchedVariableChanged(200, 7, "17")
+ShimFireTimers()
+T.eq("a refresh in the middle of a burst doesn't stop later recomputes", recomputed.power, before + 1)
 os.time = realTime -- luacheck: ignore
 SetTimer = realSetTimer
-ShimFireTimers()
 engine:unsubscribeExpression("power")
 
 T.section("A failing recompute")
