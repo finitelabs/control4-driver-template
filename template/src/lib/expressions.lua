@@ -273,7 +273,7 @@ function Expressions.substitute(template, mode)
     local value = readVariable(device, variable)
     if value == nil then
       local reason = missingReason(device, variable)
-      log:warn("Expression reference not found: %s", reason)
+      log:debug("Expression reference not found: %s", reason)
       problem = problem or reason
       out[#out + 1] = ERROR_VARIABLE_NOT_FOUND
     else
