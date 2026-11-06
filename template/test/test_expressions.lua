@@ -368,6 +368,46 @@ ShimFireTimers()
 T.eq("a burst of changes is one recompute", recomputed.power, 1)
 ShimFireTimers()
 T.eq("and nothing is left over", recomputed.power, 1)
+
+T.section("A variable that never stops changing")
+local realTime, realSetTimer = os.time, SetTimer
+local clock, arms = 5000, 0
+os.time = function() -- luacheck: ignore
+  return clock
+end
+SetTimer = function(name, ...)
+  if name:find("power", 1, true) then
+    arms = arms + 1
+  end
+  return realSetTimer(name, ...)
+end
+OnWatchedVariableChanged(200, 7, "10")
+T.eq("the first change arms the recompute", arms, 1)
+clock = clock + Expressions.MAX_WAIT_SECONDS - 1
+OnWatchedVariableChanged(200, 7, "11")
+T.eq("a change inside the limit pushes it out", arms, 2)
+clock = clock + 1
+OnWatchedVariableChanged(200, 7, "12")
+T.eq("at the limit it stays armed, so it comes", arms, 2)
+ShimFireTimers()
+T.eq("and it runs", recomputed.power, 2)
+OnWatchedVariableChanged(200, 7, "13")
+T.eq("the next change starts again", arms, 3)
+clock = clock - 86400
+OnWatchedVariableChanged(200, 7, "14")
+clock = clock + Expressions.MAX_WAIT_SECONDS
+OnWatchedVariableChanged(200, 7, "15")
+T.eq("a clock set back doesn't lose the limit", arms, 4)
+ShimFireTimers()
+local before = recomputed.power
+OnWatchedVariableChanged(200, 7, "16")
+engine:refreshExpression("power")
+clock = clock + Expressions.MAX_WAIT_SECONDS + 1
+OnWatchedVariableChanged(200, 7, "17")
+ShimFireTimers()
+T.eq("a refresh in the middle of a burst doesn't stop later recomputes", recomputed.power, before + 1)
+os.time = realTime -- luacheck: ignore
+SetTimer = realSetTimer
 engine:unsubscribeExpression("power")
 
 T.section("A failing recompute")
