@@ -589,6 +589,9 @@ for _ = 1, 3 do
 end
 logging.warn = nil
 T.eq("evaluating it warns nothing, since the driver gets the error", warned, 0)
-T.truthy("and the error still says what's missing", Expressions.evaluate("condition", "PARAM{700,NOPE} > 1").error:find("NOPE", 1, true))
+T.truthy(
+  "and the error still says what's missing",
+  Expressions.evaluate("condition", "PARAM{700,NOPE} > 1").error:find("NOPE", 1, true)
+)
 
 T.finish()
