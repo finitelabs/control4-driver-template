@@ -578,4 +578,17 @@ T.eq("the proxy's name its .c4i", vars[2].section, "light_v2")
 T.eq("a type is defaulted", vars[1].type, "STRING")
 T.eq("an id that isn't a number gives nothing", Expressions.deviceVariables("x"), nil)
 
+T.section("A missing variable doesn't fill the log")
+local logging = require("lib.logging")
+local warned = 0
+logging.warn = function()
+  warned = warned + 1
+end
+for _ = 1, 3 do
+  Expressions.evaluate("condition", "PARAM{700,NOPE} > 1")
+end
+logging.warn = nil
+T.eq("evaluating it warns nothing, since the driver gets the error", warned, 0)
+T.truthy("and the error still says what's missing", Expressions.evaluate("condition", "PARAM{700,NOPE} > 1").error:find("NOPE", 1, true))
+
 T.finish()
