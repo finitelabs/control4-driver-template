@@ -20,7 +20,10 @@ then pull the change in with `copier update`.
 - `.github/workflows/build.yml`: CI build and packaging
 - `.github/workflows/release.yml`: tagged GitHub releases. The updater offers a
   release only when its tag's date is later than the installed driver's version,
-  so give each release a later date than the last. A suffixed tag such as
+  so give each release a later date than the last. Its notes declare the highest
+  `minimum_os_version` among the packages, and the updater skips a release above
+  the controller's OS for the newest one it can run, so a driver may raise its
+  minimum OS only in a release after one with this check. A suffixed tag such as
   `v20260918-rc1` publishes as a pre-release, which only drivers on the
   Prerelease update channel pick up. Title the pull request that dates the
   changelog `release: vYYYYMMDD` (case and the colon don't matter):

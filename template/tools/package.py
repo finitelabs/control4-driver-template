@@ -30,6 +30,12 @@ Subcommands:
   package.py check-version <build> <version>
       Exit 1 unless dist/<build>/c4z holds a .c4z and every one's driver.xml
       says <version>.
+
+  package.py release-body <build>
+      Write dist/<build>/release-body.md, the start of the GitHub release's
+      notes: the highest minimum_os_version among dist/<build>/c4z's packages,
+      for the updater to read. Exit 1 if a package declares none. Writes nothing
+      for a build with no packages.
 """
 
 import re
@@ -142,11 +148,11 @@ def check_pdfs(build: str) -> int:
     return 0
 
 
-def c4z_version(c4z: Path) -> str:
+def c4z_field(c4z: Path, tag: str) -> str:
     with zipfile.ZipFile(c4z) as zf:
         xml = zf.read("driver.xml") if "driver.xml" in zf.namelist() else b""
     try:
-        return ElementTree.fromstring(xml).findtext("version") or ""
+        return ElementTree.fromstring(xml).findtext(tag) or ""
     except ElementTree.ParseError:
         return ""
 
@@ -158,7 +164,7 @@ def check_version(build: str, version: str) -> int:
         return 1
     problems = []
     for c4z in packages:
-        got = c4z_version(c4z)
+        got = c4z_field(c4z, "version")
         if got != version:
             problems.append(f"{c4z} has driver version {got!r}, expected {version!r}")
     for problem in problems:
@@ -166,6 +172,27 @@ def check_version(build: str, version: str) -> int:
     if problems:
         return 1
     print(f"{build}: {len(packages)} packages, each at version {version}")
+    return 0
+
+
+def release_body(build: str) -> int:
+    minimums = {}
+    problems = []
+    for c4z in sorted((Path("dist") / build / "c4z").glob("*.c4z")):
+        declared = c4z_field(c4z, "minimum_os_version").strip()
+        if re.fullmatch(r"\d+(\.\d+)*", declared):
+            minimums[declared] = tuple(int(part) for part in declared.split("."))
+        else:
+            problems.append(f"{c4z} declares minimum_os_version {declared!r}")
+    for problem in problems:
+        print(f"Error: {problem}", file=sys.stderr)
+    if problems:
+        return 1
+    if minimums:
+        highest = max(minimums, key=minimums.get)
+        body = Path("dist") / build / "release-body.md"
+        body.write_text(f"<!-- minimum_os_version: {highest} -->\n")
+        print(f"{build}: release notes declare minimum OS {highest}")
     return 0
 
 
@@ -186,6 +213,8 @@ def main() -> int:
         return check_pdfs(rest[0])
     elif cmd == "check-version" and len(rest) == 2:
         return check_version(rest[0], rest[1])
+    elif cmd == "release-body" and len(rest) == 1:
+        return release_body(rest[0])
     else:
         print(__doc__, file=sys.stderr)
         return 1

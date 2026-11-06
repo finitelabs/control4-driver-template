@@ -18,6 +18,7 @@ from package import (  # noqa: E402
     check_encrypted,
     check_pdfs,
     check_version,
+    release_body,
     tag_version,
 )
 
@@ -181,6 +182,46 @@ class CheckVersionTest(InTempDir):
     def test_no_package_fails(self):
         (Path("dist") / "oss" / "c4z").mkdir(parents=True)
         self.assertEqual(self._run(check_version, "oss", "20261101")[0], 1)
+
+
+def minimum_xml(minimum):
+    return (
+        f"<devicedata><minimum_os_version>{minimum}</minimum_os_version></devicedata>"
+    )
+
+
+class ReleaseBodyTest(InTempDir):
+    BODY = Path("dist") / "oss" / "release-body.md"
+
+    def test_the_highest_minimum_is_declared(self):
+        self._package("oss", {"driver.xml": minimum_xml("3.3.0")}, "a.c4z")
+        self._package("oss", {"driver.xml": minimum_xml("4.3.0")}, "b.c4z")
+        self.assertEqual(self._run(release_body, "oss")[0], 0)
+        self.assertEqual(self.BODY.read_text(), "<!-- minimum_os_version: 4.3.0 -->\n")
+
+    def test_versions_compare_as_numbers(self):
+        self._package("oss", {"driver.xml": minimum_xml("4.9.0")}, "a.c4z")
+        self._package("oss", {"driver.xml": minimum_xml("4.10.0")}, "b.c4z")
+        self.assertEqual(self._run(release_body, "oss")[0], 0)
+        self.assertIn("minimum_os_version: 4.10.0 ", self.BODY.read_text())
+
+    def test_a_package_with_no_minimum_fails(self):
+        self._package("oss", {"driver.xml": minimum_xml("4.3.0")}, "a.c4z")
+        self._package("oss", {"driver.xml": "<devicedata/>"}, "b.c4z")
+        code, _, err = self._run(release_body, "oss")
+        self.assertEqual(code, 1)
+        self.assertIn("b.c4z declares minimum_os_version ''", err)
+        self.assertFalse(self.BODY.exists())
+
+    def test_a_minimum_that_is_not_a_version_fails(self):
+        self._package("oss", {"driver.xml": minimum_xml("latest")})
+        self.assertEqual(self._run(release_body, "oss")[0], 1)
+        self.assertFalse(self.BODY.exists())
+
+    def test_a_build_with_no_package_writes_nothing(self):
+        (Path("dist") / "oss" / "c4z").mkdir(parents=True)
+        self.assertEqual(self._run(release_body, "oss")[0], 0)
+        self.assertFalse(self.BODY.exists())
 
 
 if __name__ == "__main__":

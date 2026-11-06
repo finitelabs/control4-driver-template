@@ -28,7 +28,15 @@ function GitHubUpdater:new()
   return instance
 end
 
---- Retrieve the latest release from a GitHub repository.
+--- The minimum OS a release's notes declare (tools/package.py release-body).
+--- @param release table The release, as GitHub lists it.
+--- @return string|nil minimumOS
+local function declaredMinimumOS(release)
+  return string.match(tostring(release.body or ""), "<!%-%- minimum_os_version: ([%d%.]+) %-%->")
+end
+
+--- Retrieve the newest release from a GitHub repository that this controller's OS can run.
+--- A release that declares no minimum counts as runnable: it predates the declaration, so it is no newer than this driver.
 --- @param repo string The GitHub repository, in the format "owner/repo".
 --- @param includePrereleases? boolean If true, includes pre-releases (optional).
 --- @return Deferred<table|nil, string> latestRelease Deferred resolving to the latest release table, or rejected with an error message.
@@ -39,16 +47,31 @@ function GitHubUpdater:getLatestRelease(repo, includePrereleases)
     return reject("repo name is required")
   end
   return http:get("https://api.github.com/repos/" .. repo .. "/releases", DEFAULT_HEADERS):next(function(response)
-    for _, release in pairs(response.body or {}) do
+    local skipped = false
+    for _, release in ipairs(response.body or {}) do
       local releaseVersion, err = version(release.tag_name)
       if IsEmpty(err) then
         if not release.draft and (toboolean(includePrereleases) or not release.prerelease) then
-          release.version = releaseVersion
-          return release
+          local minimumOS = declaredMinimumOS(release)
+          if minimumOS == nil or VersionCheck(minimumOS) then
+            release.version = releaseVersion
+            return release
+          end
+          skipped = true
+          log:warn(
+            "Not installing repo %s release %s: it requires Control4 OS %s and this controller runs %s",
+            repo,
+            release.tag_name,
+            minimumOS,
+            C4:GetVersionInfo().version
+          )
         end
       else
         log:warn("repo %s release '%s' has an invalid tag version '%s'", repo, release.name, release.tag_name)
       end
+    end
+    if skipped then
+      return reject(string.format("repo %s has no release this controller's OS can run", repo))
     end
     return reject(string.format("repo %s does not have any valid releases", repo))
   end, function(response)

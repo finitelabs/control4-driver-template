@@ -54,6 +54,7 @@ test/test_dispatch.lua
 test/test_drivercentral.lua
 test/test_events_text.lua
 test/test_github_updater_alias.lua
+test/test_github_updater_minimum_os.lua
 test/test_github_updater_one_at_a_time.lua
 test/test_github_updater_self_last.lua
 test/test_github_updater_write.lua
