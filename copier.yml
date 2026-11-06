@@ -28,6 +28,9 @@ _exclude:
   - "{% if 'oauth' not in vendor_modules.split() %}vendor/drivers-common-public/global/make_short_link.lua{% endif %}"
   - "{% if 'oauth' not in vendor_modules.split() %}test/test_oauth_auth_code_grant.lua{% endif %}"
   - "{% if 'oauth' not in vendor_modules.split() %}test/test_oauth_short_link.lua{% endif %}"
+  - "{% if 'expressions' not in vendor_modules.split() %}src/lib/expressions.lua{% endif %}"
+  - "{% if 'expressions' not in vendor_modules.split() %}src/lib/expression-sandbox.lua{% endif %}"
+  - "{% if 'expressions' not in vendor_modules.split() %}test/test_expressions.lua{% endif %}"
   - "{% if not cloud_diagnostics %}src/lib/diagnostics.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_reporting.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_scrub.lua{% endif %}"
@@ -75,7 +78,7 @@ icon_style:
 
 vendor_modules:
   type: str
-  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua)."
+  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua)."
   default: ""
 
 cloud_diagnostics:

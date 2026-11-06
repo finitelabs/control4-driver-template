@@ -91,10 +91,14 @@ A template ticket is not done at merge; it is done when the drift is closed.
 `copier.yml`'s `_exclude` list drops files the answers did not select —
 `vendor_modules` the optional vendored libraries, `stale_issues` the stale-issue workflow, and
 `cloud_diagnostics` the Cloud Monitoring library and its tests, since a repo
-opts in to reporting. There is no other module-to-module gating: every other
-`src/lib/*.lua` renders unconditionally, and `gen-squishy` bundles only what a
-driver actually requires, so a rendered-but-unused module is zero bytes in the
-`.c4z`. A new `src/lib` file needs no `_exclude` entry.
+opts in to reporting. `vendor_modules` has one exception to holding only vendored
+libraries: `expressions` gates `src/lib/expressions.lua`,
+`src/lib/expression-sandbox.lua` and their test. It's an optional module a driver
+opts into, like crypto, and gating it keeps a render from conflicting with
+Essentials' own `src/lib/expressions.lua` at its next update. There is no other
+module-to-module gating: every other `src/lib/*.lua` renders unconditionally, and
+`gen-squishy` bundles only what a driver actually requires, so a rendered-but-unused
+module is zero bytes in the `.c4z`. A new `src/lib` file needs no `_exclude` entry.
 
 Every repo builds both distributions, `drivercentral` and `oss`, so nothing is
 gated on a distribution. `dc_pid` names the DriverCentral product and renders

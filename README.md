@@ -39,6 +39,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **persist.lua**: persistent storage abstraction over C4 PersistData
 - **redact.lua**: masks credentials in log lines and diagnostics reports
 - **values.lua**: value parsing, coercion, and formatting utilities
+- **expressions.lua** / **expression-sandbox.lua**: expressions over device variables: `PARAM{device,variable}` tokens, evaluation, and debounced watches (only with `expressions` in `vendor_modules`)
 - **logging.lua** / **utils.lua**: structured logging and general utilities (always included)
 - **github-updater.lua**: GitHub Releases-based self-updater for non-DriverCentral (`oss`) builds
 - **diagnostics.lua**: Cloud Monitoring, a DriverCentral build's hourly memory and error reports to InfluxDB (only with `cloud_diagnostics`)
@@ -176,7 +177,7 @@ Copier will show diffs for any files that changed in the template and let you re
 | `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
 | `icon_style` | Control4 icon artboard `make icons` exports: `shaped` (Shadow Shaped) or `square` (Shadow Square) | `shaped` |
-| `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf oauth) | (empty) |
+| `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf oauth), and `expressions` for the `src/lib` expression engine | (empty) |
 | `cloud_diagnostics` | Ship `lib.diagnostics` (Cloud Monitoring), which reports a DriverCentral build's memory use and errors to InfluxDB; needs four build secrets | `false` |
 | `extra_build_secrets` | Space-separated build secrets `.env.default` declares besides the template's own (`SUPPORT_CODE_SECRET`, and the four `INFLUXDB_*` with `cloud_diagnostics`); the Build workflow passes each by name | (empty) |
 | `extra_required_checks` | Space-separated status checks a PR must pass besides `build`, each a job name from the repo's own workflows; `tools/github-setup` puts them in the branch ruleset | (empty) |
