@@ -25,9 +25,8 @@ local _cache = {}
 --- Maximum number of cached expressions before eviction.
 local MAX_CACHE_SIZE = 500
 
---- How often, in Lua instructions, an evaluation's limits are checked. Nothing stops a
---- concatenation between checks: at every fourth, a string copied into itself in a loop
---- holds under 12 MB when the memory check fails it, where every eighth let it reach 144 MB.
+--- How often, in Lua instructions, an evaluation's limits are checked. Nothing checks
+--- memory between checks, and each concatenation there can multiply a string's size.
 local CHECK_EVERY = 4
 
 --- The most Lua instructions an evaluation runs: a typical expression runs under a
@@ -40,8 +39,9 @@ local MAX_MEMORY_KB = 4096
 --- The longest string `rep`, `format` and `gsub` make, in bytes.
 local MAX_STRING = 1024 * 1024
 
---- The most steps a pattern search may take, counted as Lua's matcher backtracks
---- through the subject. A search runs in C, where no instruction is counted.
+--- The most steps an evaluation's pattern searches may take in all, counted as Lua's
+--- matcher could backtrack through each subject. A search runs in C, where no
+--- instruction is counted, so each is charged before it runs.
 local MAX_PATTERN_STEPS = 10000000
 
 --- The longest pattern searched with, in characters: an expression's patterns run to a few dozen.
@@ -52,6 +52,9 @@ local TOO_MUCH_MEMORY = "the expression used too much memory"
 local STRING_TOO_LONG = "the expression made a string over 1 MB"
 local PATTERN_TOO_SLOW = "a pattern search in the expression would take too long"
 local PATTERN_TOO_LONG = "a pattern in the expression is over 1000 characters"
+
+--- Pattern steps the running evaluation has been charged.
+local spentSteps = 0
 
 --- Strings' shared metatable: a string's methods are read through its `__index`.
 local STRING_META = getmetatable("")
@@ -188,45 +191,32 @@ local function parsePattern(pattern, anchored)
 end
 
 --- The most steps Lua's matcher can take searching subject for pattern: each start
---- tried, times the ways each item can be tried, times the pattern's length for the
---- work of a step. Over the limit at first, it's counted again from this subject: how
---- long a run each repeated class can match, and where the pattern's fixed start is.
+--- tried, times the ways each item can be tried there, times the pattern's length for
+--- the work of a step. It's counted from this subject: how long a run each repeated
+--- class can match, and where the pattern's fixed start is.
 --- @param subject string
+--- @param n integer How much of the subject the search covers.
 --- @param pattern string
 --- @param anchorable boolean
+--- @param budget number Steps left: past them, the count stops early.
 --- @return number steps
-local function patternSteps(subject, pattern, anchorable)
-  local n, width = #subject, math.max(#pattern, 1)
+local function patternSteps(subject, n, pattern, anchorable, budget)
+  local width = math.max(#pattern, 1)
   local anchored = anchorable and pattern:sub(1, 1) == "^"
   -- Every start is tried, each at least as far as the pattern's fixed start.
   local base = anchored and width or (n + 1) * width
-  if base > MAX_PATTERN_STEPS then
+  if base > budget then
     return base
   end
   local items = parsePattern(pattern, anchored)
   if not items then
     return 0
   end
-  local function steps(starts, run)
-    local total = starts * width
-    for _, item in ipairs(items) do
-      if item.factor == "n" then
-        total = total * (n + 1)
-      elseif item.factor == 2 then
-        total = total * 2
-      elseif item.factor == "run" then
-        total = total * (run(item.class) + 1)
-      end
-    end
-    return base + total
+  if n < #subject then
+    -- Only what the search covers is scanned below, so the scan costs what's charged.
+    subject = n == 0 and "" or subject:sub(-n)
   end
   local starts = anchored and 1 or n + 1
-  local naive = steps(starts, function()
-    return n
-  end)
-  if naive <= MAX_PATTERN_STEPS then
-    return naive
-  end
   if not anchored then
     local prefix = {}
     for _, item in ipairs(items) do
@@ -241,28 +231,65 @@ local function patternSteps(subject, pattern, anchorable)
       starts = found * #prefix
     end
   end
-  local runs = {}
-  return steps(starts, function(class)
-    if class == "." then
-      -- Every character, without copying the subject to find it.
-      return n
-    end
-    if not runs[class] then
-      local longest = 0
-      for match in subject:gmatch(class .. "+") do
-        longest = math.max(longest, #match)
+  local total, runs = starts * width, {}
+  for _, item in ipairs(items) do
+    if item.factor == "n" then
+      total = total * (n + 1)
+    elseif item.factor == 2 then
+      total = total * 2
+    elseif item.factor == "run" then
+      local class = item.class
+      if not runs[class] then
+        -- "." matches every character: n, without copying the subject to find it.
+        local longest = class == "." and n or 0
+        if class ~= "." then
+          for match in subject:gmatch(class .. "+") do
+            longest = math.max(longest, #match)
+          end
+        end
+        runs[class] = longest
       end
-      runs[class] = longest
+      total = total * (runs[class] + 1)
     end
-    return runs[class]
-  end)
+  end
+  return base + total
 end
 
---- Refuses a pattern search that could run too long.
+--- @param value any
+--- @return integer length The length of value as the string functions read it; 0 for others.
+local function length(value)
+  local kind = type(value)
+  return (kind == "string" or kind == "number") and #tostring(value) or 0
+end
+
+--- @param subject any
+--- @param init any Where a search starts, as find and match read it.
+--- @return integer n How much of the subject a search from init covers.
+local function searched(subject, init)
+  local size, start = length(subject), tonumber(init) or 1
+  if start < 0 then
+    start = math.max(size + start + 1, 1)
+  elseif start == 0 then
+    start = 1
+  end
+  return math.max(size - start + 1, 0)
+end
+
+--- Charges a search's steps to the evaluation, refusing it when they'd pass the limit.
+--- @param steps number
+local function charge(steps)
+  if steps > MAX_PATTERN_STEPS - spentSteps then
+    error(PATTERN_TOO_SLOW, 0)
+  end
+  spentSteps = spentSteps + steps
+end
+
+--- Charges a pattern search, refusing one that could run too long.
 --- @param subject any
 --- @param pattern any
 --- @param anchorable boolean
-local function checkPattern(subject, pattern, anchorable)
+--- @param init? any
+local function checkPattern(subject, pattern, anchorable, init)
   if type(subject) == "number" then
     subject = tostring(subject)
   end
@@ -273,16 +300,8 @@ local function checkPattern(subject, pattern, anchorable)
   if #pattern > MAX_PATTERN_LENGTH then
     error(PATTERN_TOO_LONG, 0)
   end
-  if patternSteps(subject, pattern, anchorable) > MAX_PATTERN_STEPS then
-    error(PATTERN_TOO_SLOW, 0)
-  end
-end
-
---- @param value any
---- @return integer length The length of value as the string functions read it; 0 for others.
-local function length(value)
-  local kind = type(value)
-  return (kind == "string" or kind == "number") and #tostring(value) or 0
+  local budget = MAX_PATTERN_STEPS - spentSteps
+  charge(patternSteps(subject, searched(subject, init), pattern, anchorable, budget))
 end
 
 --- @param size number
@@ -337,17 +356,15 @@ end
 
 local function find(s, pattern, init, plain)
   if plain then
-    if (length(s) + 1) * length(pattern) > MAX_PATTERN_STEPS then
-      error(PATTERN_TOO_SLOW, 0)
-    end
+    charge((searched(s, init) + 1) * length(pattern))
   else
-    unlimited(checkPattern, s, pattern, true)
+    unlimited(checkPattern, s, pattern, true, init)
   end
   return string.find(s, pattern, init, plain)
 end
 
 local function match(s, pattern, init)
-  unlimited(checkPattern, s, pattern, true)
+  unlimited(checkPattern, s, pattern, true, init)
   return string.match(s, pattern, init)
 end
 
@@ -525,10 +542,10 @@ function Sandbox.eval(expression, bindings)
 
   -- A string's methods are read through its metatable, so ("x"):rep(n) needs this too.
   local hook, mask, count = debug.gethook()
-  local index = STRING_META.__index
-  STRING_META.__index = SANDBOX_STRING
+  local index, spent = STRING_META.__index, spentSteps
+  STRING_META.__index, spentSteps = SANDBOX_STRING, 0
   local ok, result = runLimited(fn)
-  STRING_META.__index = index
+  STRING_META.__index, spentSteps = index, spent
   if type(hook) == "function" then
     debug.sethook(hook, mask, count)
   end

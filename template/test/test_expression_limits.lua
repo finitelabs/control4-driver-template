@@ -156,6 +156,35 @@ do
   )
   -- Counted the most it could be: a fixed start can overlap itself at each of its characters.
   fails("a fixed start that overlaps itself", '("a"):rep(150):find(("a"):rep(50) .. ".-.-b")', "would take too long")
+  fails(
+    "searches that each pass, in a loop, add up",
+    '(function() local s = ("a"):rep(1400) while true do s:find(".-b") end end)()',
+    "would take too long"
+  )
+  fails(
+    "plain finds the same",
+    '(function() local s = ("a"):rep(2^19) while true do s:find("b", 1, true) end end)()',
+    "would take too long"
+  )
+  T.eq(
+    "a search from near the end counts from there",
+    sandbox.eval('("a"):rep(4000):find("a*a*b", 3990) == nil and "searched"'),
+    "searched"
+  )
+  T.eq(
+    "a plain find from near the end the same",
+    sandbox.eval('("a"):rep(2^20):find(("a"):rep(19) .. "b", 2^20 - 5, true) == nil and "searched"'),
+    "searched"
+  )
+  local _, tailErr, tailSeconds =
+    eval('(function() local s = ("a"):rep(2^20) .. ("b"):rep(2^20) while true do s:find("a*b", -10) end end)()')
+  T.contains("searches of a long subject's tail run until the instruction limit", tailErr or "", "ran too long")
+  T.check("without scanning the whole subject each time", tailSeconds < 1, tailSeconds)
+  local walk = "(function() local s, n, at = __p[1], 0, 1 while true do "
+    .. 'local i, j = s:find("%d+", at) if not i then return n end n = n + 1 at = j + 1 end end)()'
+  T.eq("a loop that walks a subject's matches with find", sandbox.eval(walk, { ("reading 12.5, "):rep(100) }), 200)
+  local count = '(function() local n = 0 for _ in __p[1]:gmatch("%d+") do n = n + 1 end return n end)()'
+  T.eq("gmatch walks a longer one", sandbox.eval(count, { ("reading 12.5, "):rep(4000) }), 8000)
   T.raises("a malformed pattern still reports Lua's own error", function()
     local _, err = sandbox.eval('("x"):find("[a")')
     error(err)
