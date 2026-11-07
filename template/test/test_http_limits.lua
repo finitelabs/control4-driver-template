@@ -80,6 +80,14 @@ local function serve(scripts)
       run(self, "POST", url, data, headers)
       return self
     end
+    function t:Put(url, data, headers)
+      run(self, "PUT", url, data, headers)
+      return self
+    end
+    function t:Delete(url, headers)
+      run(self, "DELETE", url, nil, headers)
+      return self
+    end
     function t:Custom(url, method, data, headers)
       run(self, method, url, data, headers)
       return self
@@ -327,6 +335,20 @@ do
   T.eq("without the body or the type it added", last().headers["Content-Type"], nil)
   send("POST", "https://example.invalid/keep", "a=1", { maxRedirects = 1 })
   T.eq("a 307 keeps the method and body", { last().method, last().data }, { "POST", "a=1" })
+  routes["https://example.invalid/moved"] = hop("/done", 302)
+  routes["https://example.invalid/gone"] = hop("/done", 301)
+  local r2 = send("PATCH", "https://example.invalid/moved", "a=1", { maxRedirects = 1 })
+  T.eq("a PATCH's 302 keeps the method and body", { last().method, last().data, r2.ok }, { "PATCH", "a=1", true })
+  send("PUT", "https://example.invalid/gone", "a=1", { maxRedirects = 1 })
+  T.eq("a PUT's 301 the same", { last().method, last().data }, { "PUT", "a=1" })
+  send("DELETE", "https://example.invalid/form", nil, { maxRedirects = 1 })
+  T.eq("a 303 after any method is a GET", last().method, "GET")
+  send("HEAD", "https://example.invalid/form", nil, { maxRedirects = 1 })
+  T.eq("but HEAD", last().method, "HEAD")
+  routes[base .. "page.jpg"] = hop("?page=2")
+  routes[base .. "page.jpg?page=2"] = jpeg
+  send("GET", base .. "page.jpg", nil, { maxRedirects = 1 })
+  T.eq("a query-only location keeps the path", last().url, base .. "page.jpg?page=2")
 
   local headers = { Authorization = "Bearer SECRET", ["X-Api-Key"] = "KEY", Accept = "image/*" }
   http:request("GET", base .. "next.jpg", nil, headers, { maxRedirects = 1 })

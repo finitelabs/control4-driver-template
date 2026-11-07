@@ -47,8 +47,8 @@ end
 --- @field privateUrl? boolean Keeps the URL out of every log line and out of what the request settles with, a redirect's
 --- Location header included: a URL can carry a login or a token.
 --- @field maxRedirects? integer The most redirects followed when the controller hands one back unfollowed, to an http or
---- https address. Each is a transfer of its own with the same options, a 301, 302 or 303 after a POST is followed with
---- a GET, and credential headers aren't sent on to another site.
+--- https address. Each is a transfer of its own with the same options. A 303, or a POST's 301 or 302, is followed with
+--- a GET, any other keeps the method and body, and credential headers aren't sent on to another site.
 
 --- @class HTTPResponse
 --- @field url? string The URL of the request, or the one a followed redirect led to; absent with `privateUrl`.
@@ -108,6 +108,9 @@ local function resolve(base, location)
   end
   if location:sub(1, 1) == "/" then
     return scheme .. "//" .. authority .. location
+  end
+  if location:sub(1, 1) == "?" then
+    return scheme .. "//" .. authority .. path .. location
   end
   return scheme .. "//" .. authority .. (path:match("^(.*/)") or "/") .. location
 end
@@ -233,7 +236,8 @@ local function stream(method, url, data, headers, settings, options, done, hops)
     local nextUrl = hops > 0 and code >= 300 and code < 400 and resolve(url, header(final.headers, "Location"))
     if nextUrl then
       local nextMethod, nextData = method, callerData
-      if code ~= 307 and code ~= 308 and method ~= "GET" and method ~= "HEAD" then
+      -- As curl and browsers do: a 303 is fetched with a GET, and so is a POST's 301 or 302.
+      if (code == 303 and method ~= "HEAD") or ((code == 301 or code == 302) and method == "POST") then
         nextMethod, nextData = "GET", nil
       end
       local nextHeaders = callerHeaders
