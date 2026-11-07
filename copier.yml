@@ -31,6 +31,7 @@ _exclude:
   - "{% if 'expressions' not in vendor_modules.split() %}src/lib/expressions.lua{% endif %}"
   - "{% if 'expressions' not in vendor_modules.split() %}src/lib/expression-sandbox.lua{% endif %}"
   - "{% if 'expressions' not in vendor_modules.split() %}test/test_expressions.lua{% endif %}"
+  - "{% if 'expressions' not in vendor_modules.split() %}test/test_expression_limits.lua{% endif %}"
   - "{% if not cloud_diagnostics %}src/lib/diagnostics.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_reporting.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_scrub.lua{% endif %}"
