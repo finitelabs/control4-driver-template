@@ -169,6 +169,19 @@ do
   fails("find from a NaN start, which searches it all", '("a"):rep(2000):find("a*a*b", 0/0)', "would take too long")
   fails("match the same", '("a"):rep(2000):match("a*a*b", 0/0)', "would take too long")
   fails("a fractional start below zero", '("a"):rep(2000):find("a*a*b", -0.5)', "would take too long")
+  fails("a start past 32 bits", '("a"):rep(2000):find("a*a*b", 2^40)', "would take too long")
+  fails(
+    "a start before the subject, which searches it all",
+    '("a"):rep(2000):find("a*a*b", -5000)',
+    "would take too long"
+  )
+  T.eq(
+    "a start just past the end searches nothing",
+    sandbox.eval(
+      '("a"):rep(4000):find("a*a*b", 4001) == nil and ("a"):rep(4000):find("a*a*b", 4002) == nil and "searched"'
+    ),
+    "searched"
+  )
   fails("a plain find from a NaN start", '("a"):rep(2^20):find(("a"):rep(19) .. "b", 0/0, true)', "would take too long")
   T.eq(
     "a search from near the end counts from there",
