@@ -111,6 +111,7 @@ end
 --- @field labels table<string, string>? Optional property text per variable text (e.g., { ["1"] = "On", ["0"] = "Off" })
 --- @field writable boolean? Whether the variable accepts writes from programming. Persisted so restore can recreate the C4 variable with the correct readOnly flag.
 --- @field deleted boolean? If true, the value has no variable now; its record keeps its id, if it has one
+--- @field property false? If false, a same-named property is left alone: set by `opts.property` in `update`
 
 --- Deleting a plain value in an older build left a deleted record, which restore
 --- by name adds as a hidden placeholder. Each such slot moves to a name built from
