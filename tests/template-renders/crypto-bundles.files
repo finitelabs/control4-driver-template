@@ -48,6 +48,7 @@ test/test_bindings_rename.lua
 test/test_bindings_static_connections.lua
 test/test_bindings_unnamed.lua
 test/test_c4_shim.lua
+test/test_deferred.lua
 test/test_device_id_list.lua
 test/test_dispatch.lua
 test/test_drivercentral.lua
