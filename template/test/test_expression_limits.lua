@@ -166,6 +166,10 @@ do
     '(function() local s = ("a"):rep(2^19) while true do s:find("b", 1, true) end end)()',
     "would take too long"
   )
+  fails("find from a NaN start, which searches it all", '("a"):rep(2000):find("a*a*b", 0/0)', "would take too long")
+  fails("match the same", '("a"):rep(2000):match("a*a*b", 0/0)', "would take too long")
+  fails("a fractional start below zero", '("a"):rep(2000):find("a*a*b", -0.5)', "would take too long")
+  fails("a plain find from a NaN start", '("a"):rep(2^20):find(("a"):rep(19) .. "b", 0/0, true)', "would take too long")
   T.eq(
     "a search from near the end counts from there",
     sandbox.eval('("a"):rep(4000):find("a*a*b", 3990) == nil and "searched"'),

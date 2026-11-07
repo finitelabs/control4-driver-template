@@ -267,12 +267,16 @@ end
 --- @return integer n How much of the subject a search from init covers.
 local function searched(subject, init)
   local size, start = length(subject), tonumber(init) or 1
+  if start ~= math.floor(start) or math.abs(start) > size then
+    -- NaN and fractions the search reads its own way, and a start past either end, are all of it.
+    return size
+  end
   if start < 0 then
-    start = math.max(size + start + 1, 1)
+    start = size + start + 1
   elseif start == 0 then
     start = 1
   end
-  return math.max(size - start + 1, 0)
+  return size - start + 1
 end
 
 --- Charges a search's steps to the evaluation, refusing it when they'd pass the limit.
