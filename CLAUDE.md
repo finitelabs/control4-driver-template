@@ -93,7 +93,7 @@ A template ticket is not done at merge; it is done when the drift is closed.
 `cloud_diagnostics` the Cloud Monitoring library and its tests, since a repo
 opts in to reporting. `vendor_modules` has one exception to holding only vendored
 libraries: `expressions` gates `src/lib/expressions.lua`,
-`src/lib/expression-sandbox.lua` and their test. It's an optional module a driver
+`src/lib/expression-sandbox.lua` and their tests. It's an optional module a driver
 opts into, like crypto, and gating it keeps a render from conflicting with
 Essentials' own `src/lib/expressions.lua` at its next update. There is no other
 module-to-module gating: every other `src/lib/*.lua` renders unconditionally, and

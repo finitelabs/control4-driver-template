@@ -34,12 +34,12 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **bindings.lua**: binding management (add/remove/query Control4 driver bindings)
 - **conditionals.lua**: conditional/programming UI management
 - **events.lua**: event firing and management
-- **http.lua**: HTTP client wrapper around C4:urlGet/urlPost/urlPut/urlDelete
+- **http.lua**: HTTP client wrapper around C4:urlGet/urlPost/urlPut/urlDelete, with a body cap, a headers check, redirects followed and a private URL for fetching from an address the integrator gives
 - **lru.lua**: LRU cache utility
 - **persist.lua**: persistent storage abstraction over C4 PersistData
 - **redact.lua**: masks credentials in log lines and diagnostics reports
 - **values.lua**: value parsing, coercion, and formatting utilities
-- **expressions.lua** / **expression-sandbox.lua**: expressions over device variables: `PARAM{device,variable}` tokens, evaluation, and debounced watches (only with `expressions` in `vendor_modules`)
+- **expressions.lua** / **expression-sandbox.lua**: expressions over device variables: `PARAM{device,variable}` tokens, evaluation within limits on time, memory and pattern searches, and debounced watches (only with `expressions` in `vendor_modules`)
 - **logging.lua** / **utils.lua**: structured logging and general utilities (always included)
 - **github-updater.lua**: GitHub Releases-based self-updater for non-DriverCentral (`oss`) builds
 - **diagnostics.lua**: Cloud Monitoring, a DriverCentral build's hourly memory and error reports to InfluxDB (only with `cloud_diagnostics`)
