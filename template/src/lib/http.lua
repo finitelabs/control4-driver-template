@@ -18,7 +18,7 @@ local MAX_TIMEOUT = 300
 local DEFAULT_TIMEOUT = 30
 
 --- The options this library reads itself. Any other option is the controller's, passed to it.
-local OWN_OPTIONS = { maxBytes = true, onHeaders = true, privateUrl = true }
+local OWN_OPTIONS = { maxBytes = true, onHeaders = true, privateUrl = true, maxRedirects = true }
 
 --- The transfer error the controller reports when a transfer runs out of time (curl's).
 local TIMED_OUT = 28
@@ -44,24 +44,28 @@ end
 --- @field onHeaders? fun(code: integer, headers: table<string, string>): any Sees the answer's status and headers
 --- before its body. A value other than nil or false refuses the answer: the transfer stops, and the request rejects
 --- with that value as `refused`.
---- @field privateUrl? boolean Keeps the URL out of every log line and out of what the request settles with: a URL can
---- carry a login or a token.
+--- @field privateUrl? boolean Keeps the URL out of every log line and out of what the request settles with, a redirect's
+--- Location header included: a URL can carry a login or a token.
+--- @field maxRedirects? integer The most redirects followed when the controller hands one back unfollowed, to an http or
+--- https address. Each is a transfer of its own with the same options, a 301, 302 or 303 after a POST is followed with
+--- a GET, and credential headers aren't sent on to another site.
 
 --- @class HTTPResponse
---- @field url? string The URL of the request; absent with `privateUrl`.
+--- @field url? string The URL of the request, or the one a followed redirect led to; absent with `privateUrl`.
 --- @field code number The HTTP response code.
 --- @field headers table<string, string> The headers of the response.
 --- @field body string|table<string, any> The body of the response.
 
 --- @class HTTPErrorResponse
 --- @field error string The error message.
---- @field url? string The URL of the request; absent with `privateUrl`.
+--- @field url? string The URL of the request, or the one a followed redirect led to; absent with `privateUrl`.
 --- @field code number The HTTP response code.
 --- @field headers table<string, string> The headers of the response.
 --- @field body string|table<string, any> The body of the response.
 --- @field refused? any What `onHeaders` refused the answer with.
 --- @field tooLarge? boolean The body passed `maxBytes`.
---- @field timedOut? boolean The transfer ran out of time. Reported only with `maxBytes`, `onHeaders` or `privateUrl`.
+--- @field timedOut? boolean The transfer ran out of time. Reported only with `maxBytes`, `onHeaders`, `privateUrl` or
+--- `maxRedirects`.
 
 --- @param code any
 --- @return boolean passing A response on the way to the answer: an interim response or a redirect.
@@ -86,6 +90,48 @@ local function header(headers, name)
   return nil
 end
 
+--- Where a redirect points, from the URL it came from.
+--- @param base string
+--- @param location any
+--- @return string|nil url An http or https URL, or nil for anything else.
+local function resolve(base, location)
+  location = tostring(location or ""):match("^%s*(.-)%s*$")
+  if location:lower():match("^https?://") then
+    return location
+  end
+  local scheme, authority, path = base:match("^(%a[%w+.-]*:)//([^/?#]*)([^?#]*)")
+  if location == "" or location:match("^%a[%w+.-]*:") or not scheme then
+    return nil
+  end
+  if location:sub(1, 2) == "//" then
+    return scheme .. location
+  end
+  if location:sub(1, 1) == "/" then
+    return scheme .. "//" .. authority .. location
+  end
+  return scheme .. "//" .. authority .. (path:match("^(.*/)") or "/") .. location
+end
+
+--- The headers an answer to a private URL settles with: those that name a URL are left out.
+--- @param headers table<string, string>
+--- @return table<string, string> headers
+local function withoutUrls(headers)
+  local kept = {}
+  for name, value in pairs(headers) do
+    local lower = type(name) == "string" and name:lower() or ""
+    if lower ~= "location" and lower ~= "content-location" then
+      kept[name] = value
+    end
+  end
+  return kept
+end
+
+--- @param url string
+--- @return string origin Its scheme and authority, lower case.
+local function origin(url)
+  return (url:match("^(%a[%w+.-]*://[^/?#]*)") or ""):lower()
+end
+
 --- @return string userAgent The User-Agent urlDo sends, built the same way.
 local function userAgent()
   if USER_AGENT == nil then
@@ -108,8 +154,10 @@ end
 --- @param headers? table<string, string>
 --- @param settings table<string, any> The controller's options.
 --- @param options HTTPOptions
---- @param done fun(strError: string|nil, code: number, headers: table, body: any, failure: table)
-local function stream(method, url, data, headers, settings, options, done)
+--- @param done fun(strError: string|nil, code: number, headers: table, body: any, failure: table, url: string)
+--- @param hops integer Redirects still to follow.
+local function stream(method, url, data, headers, settings, options, done, hops)
+  local callerHeaders, callerData = headers, data
   headers = CopyTable(headers) or {}
   if headers["User-Agent"] == nil then
     headers["User-Agent"] = userAgent()
@@ -178,9 +226,27 @@ local function stream(method, url, data, headers, settings, options, done)
       if errCode == -1 and errMsg == nil then
         errMsg = "Transfer cancelled"
       end
-      return done(errMsg, response.code or 0, response.headers or {}, "", failure)
+      return done(errMsg, response.code or 0, response.headers or {}, "", failure, url)
     end
     local final = type(responses) == "table" and responses[#responses] or {}
+    local code = tonumber(final.code) or 0
+    local nextUrl = hops > 0 and code >= 300 and code < 400 and resolve(url, header(final.headers, "Location"))
+    if nextUrl then
+      local nextMethod, nextData = method, callerData
+      if code ~= 307 and code ~= 308 and method ~= "GET" and method ~= "HEAD" then
+        nextMethod, nextData = "GET", nil
+      end
+      local nextHeaders = callerHeaders
+      if origin(nextUrl) ~= origin(url) then
+        nextHeaders = {}
+        for name, value in pairs(callerHeaders or {}) do
+          if not redact.isSensitiveKey(name) then
+            nextHeaders[name] = value
+          end
+        end
+      end
+      return stream(nextMethod, nextUrl, nextData, nextHeaders, settings, options, done, hops - 1)
+    end
     --- @type any
     local body = table.concat(parts)
     if (header(final.headers, "Content-Type") or ""):find("application/json", 1, true) then
@@ -192,7 +258,7 @@ local function stream(method, url, data, headers, settings, options, done)
         body = { body }
       end
     end
-    done(nil, final.code, final.headers or {}, body, failure)
+    done(nil, final.code, final.headers or {}, body, failure, url)
   end
 
   local transfer = C4:url():SetOptions(settings):OnHeaders(onHeaders):OnBodyChunk(onBodyChunk):OnDone(onDone)
@@ -294,11 +360,11 @@ function Http:request(method, url, data, headers, options)
   -- WARN, which is emitted at the default level with nobody enabling trace.
   -- A URL carrying a token in its query string leaks here otherwise.
   local target = private and "" or (" to " .. redact.value(url))
-  local function settle(strError, code, responseHeaders, body, failure)
+  local function settle(strError, code, responseHeaders, body, failure, finalUrl)
     local result = {
-      url = not private and url or nil,
+      url = not private and (finalUrl or url) or nil,
       code = code,
-      headers = responseHeaders,
+      headers = private and withoutUrls(responseHeaders or {}) or responseHeaders,
       body = body,
     }
     if strError or IsEmpty(code) or code < 200 or code >= 300 then
@@ -310,8 +376,9 @@ function Http:request(method, url, data, headers, options)
     end
   end
 
-  if options.maxBytes ~= nil or options.onHeaders ~= nil or private then
-    stream(method, url, data, headers, settings, options, settle)
+  local hops = tonumber(options.maxRedirects) or 0
+  if options.maxBytes ~= nil or options.onHeaders ~= nil or private or hops > 0 then
+    stream(method, url, data, headers, settings, options, settle, hops)
   else
     urlDo(method, url, data, headers, function(strError, responseCode, responseHeaders, responseBody)
       settle(strError, responseCode, responseHeaders, responseBody, {})

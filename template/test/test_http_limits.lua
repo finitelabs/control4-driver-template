@@ -21,8 +21,8 @@ local transfers = {}
 
 --- Answer every C4:url() transfer with `script`: its responses in order, each with code, headers and
 --- body chunks, then `script.fail` ({ errCode, errMsg }) or success. Hooks run as the controller runs
---- them, and the first one that returns true stops the transfer.
-local function serve(script)
+--- them, and the first one that returns true stops the transfer. A function gives each URL's script.
+local function serve(scripts)
   C4.url = function()
     local t = { hooks = {}, chunks = 0 }
     transfers[#transfers + 1] = t
@@ -44,6 +44,7 @@ local function serve(script)
     end
     local function run(self, method, url, data, headers)
       self.method, self.url, self.data, self.headers = method, url, data, headers
+      local script = type(scripts) == "function" and scripts(url) or scripts
       local responses = {}
       for _, r in ipairs(script) do
         local response = { code = r.code, headers = r.headers or {} }
@@ -268,6 +269,73 @@ do
   T.eq("another method is a custom request", last().method, "PATCH")
 end
 
+T.section("maxRedirects follows a redirect the controller hands back")
+do
+  local base = "https://example.invalid/pictures/"
+  local function hop(location, code)
+    return { { code = code or 302, headers = { Location = location }, chunks = { "<html>moved</html>" } } }
+  end
+  local jpeg = { { code = 200, headers = { ["Content-Type"] = "image/jpeg" }, chunks = { "\255\216\255\0", "\1\2" } } }
+  local routes = {
+    [base .. "cam.jpg"] = hop("next.jpg"),
+    [base .. "next.jpg"] = hop("/top.jpg"),
+    ["https://example.invalid/top.jpg"] = hop("//cdn.example.invalid/a.jpg"),
+    ["https://cdn.example.invalid/a.jpg"] = hop("http://cdn.example.invalid/b.jpg", 301),
+    ["http://cdn.example.invalid/b.jpg"] = jpeg,
+  }
+  serve(function(url)
+    return routes[url] or hop("ftp://example.invalid/x")
+  end)
+  local first = #transfers
+  local r = send("GET", base .. "cam.jpg", nil, { maxRedirects = 4, maxBytes = 100 })
+  T.truthy("it resolves", r.ok)
+  T.eq("binary-safe, with the last answer's body", r.value.body, "\255\216\255\0\1\2")
+  T.eq("and the URL it came from", r.value.url, "http://cdn.example.invalid/b.jpg")
+  local followed = {}
+  for i = first + 1, #transfers do
+    followed[#followed + 1] = transfers[i].url
+  end
+  T.eq("relative, root, scheme-relative and absolute locations, each a transfer", followed, {
+    base .. "cam.jpg",
+    base .. "next.jpg",
+    "https://example.invalid/top.jpg",
+    "https://cdn.example.invalid/a.jpg",
+    "http://cdn.example.invalid/b.jpg",
+  })
+  T.eq("each with the request's options", last().options.timeout, 30)
+
+  r = send("GET", base .. "cam.jpg", nil, { maxRedirects = 3 })
+  T.eq("one more than the limit rejects with the redirect's status", { r.ok, r.value.code }, { false, 301 })
+  r = send("GET", base .. "cam.jpg")
+  T.eq(
+    "without the option nothing is followed, as before",
+    { r.ok, r.value.code, #transfers },
+    { false, 302, first + 10 }
+  )
+  r = send("GET", "https://example.invalid/other", nil, { maxRedirects = 4 })
+  T.eq(
+    "a location that isn't http or https isn't followed",
+    { r.value.code, last().url },
+    { 302, "https://example.invalid/other" }
+  )
+
+  routes["https://example.invalid/form"] = hop("/done", 303)
+  routes["https://example.invalid/keep"] = hop("/done", 307)
+  routes["https://example.invalid/done"] = jpeg
+  send("POST", "https://example.invalid/form", { a = 1 }, { maxRedirects = 1 })
+  T.eq("a 303 after a POST is followed with a GET", last().method, "GET")
+  T.eq("without the body or the type it added", last().headers["Content-Type"], nil)
+  send("POST", "https://example.invalid/keep", "a=1", { maxRedirects = 1 })
+  T.eq("a 307 keeps the method and body", { last().method, last().data }, { "POST", "a=1" })
+
+  local headers = { Authorization = "Bearer SECRET", ["X-Api-Key"] = "KEY", Accept = "image/*" }
+  http:request("GET", base .. "next.jpg", nil, headers, { maxRedirects = 1 })
+  T.eq("the same site gets the credentials", last().headers.Authorization, "Bearer SECRET")
+  http:request("GET", "https://example.invalid/top.jpg", nil, headers, { maxRedirects = 1 })
+  T.eq("another site doesn't", { last().headers.Authorization, last().headers["X-Api-Key"] }, { nil, nil })
+  T.eq("but gets the rest", last().headers.Accept, "image/*")
+end
+
 T.section("a transfer that runs out of time says so")
 do
   serve({ { code = 200, chunks = chunks(2, 100) }, fail = { 28, "Operation timed out after 20000 milliseconds" } })
@@ -304,6 +372,7 @@ do
       { { code = 200 }, fail = { 6, "Could not resolve host: " .. host } },
       { { code = 200, headers = { ["Content-Length"] = "999999" } } },
       { { code = 200, headers = { ["Content-Type"] = "text/html" } } },
+      { { code = 302, headers = { Location = private .. "&hop=" .. token } } },
     }
     local out = {}
     for _, script in ipairs(runs) do
@@ -319,6 +388,7 @@ do
   local function opts(extra)
     local o = {
       maxBytes = 1000,
+      maxRedirects = 2,
       onHeaders = function(_, headers)
         return (headers["Content-Type"] or ""):match("^text/html") and "page" or nil
       end,
