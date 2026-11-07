@@ -52,6 +52,7 @@ test/test_device_id_list.lua
 test/test_dispatch.lua
 test/test_drivercentral.lua
 test/test_events_text.lua
+test/test_expression_limits.lua
 test/test_expressions.lua
 test/test_github_updater_alias.lua
 test/test_github_updater_one_at_a_time.lua
