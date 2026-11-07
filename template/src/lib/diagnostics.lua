@@ -38,7 +38,7 @@ local INFLUXDB_TOP_N = 10
 --- Paths that should always be recursed into, even if they exceed the CENSUS_THRESHOLD.
 --- @type table<string, boolean?>
 local CENSUS_ALWAYS_RECURSE = { ["_G"] = true }
---- Paths never walked: package holds every module loaded and its compiled chunk, generated data included.
+--- Paths never walked: package.loaded holds every module loaded, generated data included.
 --- @type table<string, boolean?>
 local CENSUS_SKIP = { ["_G.package"] = true }
 
