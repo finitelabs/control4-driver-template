@@ -1,5 +1,5 @@
--- The promise tests that vendor/deferred.lua carried as M.selftest(), moved here so
--- drivers don't ship them. The cases and their messages are unchanged.
+-- Tests for vendor/deferred.lua: resolve and reject, chaining, M.all(), M.first(), M.map()
+-- and the extend option.
 --
 -- Run from the driver root:
 --   make test
