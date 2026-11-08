@@ -197,8 +197,8 @@ function Log:_setDumps()
   DEBUGPRINT, DEBUG_TIMER, DEBUG_RFN, DEBUG_URL, DEBUG_WEBSOCKET = on, on, on, on, on
 end
 
---- Fills the Log Level property's list with the levels allowed now. The property is a DYNAMIC_LIST, so it has no
---- list until a driver load sends one: Composer takes no LIST value that driver.xml doesn't list.
+--- Fills the Log Level property's list with the levels allowed now. The property is a DYNAMIC_LIST, so it shows no
+--- list until this sends one.
 --- @private
 function Log:_offerLogLevels()
   if self._offering or type(Properties) ~= "table" or Properties[LOG_LEVEL_PROPERTY] == nil then
