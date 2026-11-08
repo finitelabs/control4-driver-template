@@ -8,6 +8,9 @@
 
 local T = require("testlib")
 
+-- run_test.sh runs from test/ and make test from the root; both put src/?.lua on LUA_PATH.
+local TAIL = assert(package.searchpath("squish-tail", package.path))
+
 local function module()
   return {}
 end
@@ -33,7 +36,7 @@ function OnDriverLateInit(...)
   require("tail.inLateInit")
   return "done", nil, 3
 end
-dofile("src/squish-tail.lua")
+dofile(TAIL)
 local a, _, c = OnDriverLateInit("DIT_STARTUP", "x")
 T.eq("late init gets its arguments", table.concat(seen.args, ","), "DIT_STARTUP,x")
 T.truthy("the copies are there while late init runs", seen.during)
@@ -48,7 +51,7 @@ T.truthy("a module that lost its copy is still loaded", package.loaded["tail.atL
 T.section("A driver with no late init gets one that only drops the copies")
 seed()
 OnDriverLateInit = nil
-dofile("src/squish-tail.lua")
+dofile(TAIL)
 T.eq("the tail defines OnDriverLateInit", type(OnDriverLateInit), "function")
 T.eq("it returns nothing", select("#", OnDriverLateInit()), 0)
 T.falsy("the loaded module's copy goes", package.preload["tail.atLoad"])
@@ -59,7 +62,7 @@ seed()
 function OnDriverLateInit()
   error("late init failed")
 end
-dofile("src/squish-tail.lua")
+dofile(TAIL)
 T.raises("the error reaches Director", function()
   OnDriverLateInit()
 end, "late init failed")

@@ -4,7 +4,7 @@
 -- Run from the template repo:
 --   make build-squish-tail NAME=<render>
 -- or, in a render, after make build:
---   SQUISHED=dist/oss/source/example.lua ./test/run_test.sh <template repo>/tests/squish_tail.lua
+--   SQUISHED="$PWD/dist/oss/source/<driver>.lua" ./test/run_test.sh <template repo>/tests/squish_tail.lua
 
 require("c4_shim")
 

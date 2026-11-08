@@ -322,19 +322,25 @@ def squish_tail(render):
     run(["make", "build-nodocs"], render)
     problems = []
     for build in DISTRIBUTIONS:
-        squishy = render / "build" / build / EXAMPLE / "squishy"
-        mains = re.findall(r'^Main "([^"]+)"', squishy.read_text(encoding="utf-8"), re.M) if squishy.is_file() else []
-        if mains != ["driver.lua", "../../src/squish-tail.lua"]:
-            problems.append(f"the {build} squishy's Main files are {mains}, not driver.lua then src/squish-tail.lua")
+        squishies = sorted((render / "build" / build / "drivers").glob("*/squishy"))
+        if not squishies:
+            problems.append(f"the {build} build made no squishy")
+        for squishy in squishies:
+            mains = re.findall(r'^Main "([^"]+)"', squishy.read_text(encoding="utf-8"), re.M)
+            if mains != ["driver.lua", "../../src/squish-tail.lua"]:
+                problems.append(f"{squishy.relative_to(render)} names Main files {mains}, not driver.lua then the tail")
     # Only OSS keeps its squished Lua in plain text, so only it can be loaded and taken through its init.
-    source = render / "dist" / "oss" / "source" / "example.lua"
+    sources = sorted((render / "dist" / "oss" / "source").glob("*.lua"))
+    if not sources:
+        problems.append("the oss build made no squished Lua")
     probe = Path(__file__).resolve().parent / "squish_tail.lua"
-    result = subprocess.run(
-        [str(render / "test" / "run_test.sh"), str(probe)], cwd=render, env={**os.environ, "SQUISHED": str(source)}
-    )
-    if result.returncode != 0:
-        problems.append("the oss build keeps preload copies of loaded modules after late init")
-    return report(problems, "squish tail: both squishies end with it, and the oss build drops its copies")
+    for source in sources:
+        result = subprocess.run(
+            [str(render / "test" / "run_test.sh"), str(probe)], cwd=render, env={**os.environ, "SQUISHED": str(source)}
+        )
+        if result.returncode != 0:
+            problems.append(f"{source.relative_to(render)} keeps preload copies of loaded modules after late init")
+    return report(problems, "squish tail: every squishy ends with it, and each oss build drops its copies")
 
 CHECKS = {
     "doc-alerts": doc_alerts,
