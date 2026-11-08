@@ -178,4 +178,13 @@ do
   T.eq("and its second", C4:GetBoundProviderDevice(700, 2), 100)
 end
 
+T.section("a link bound to another of our provider links is bound to the one asked for")
+do
+  local p = bindings:getOrAddDynamicBinding("relays", "p2", "CONTROL", true, "Relay 2", "RELAY").bindingId
+  local q = bindings:getOrAddDynamicBinding("relays", "q", "CONTROL", true, "Relay 3", "RELAY").bindingId
+  C4:Bind(100, p, 710, 1, "RELAY")
+  T.eq("Bind binds it", Bind(100, q, 710, 1, "RELAY"), true)
+  T.check("so the second link lists the device", Select(C4:GetBoundConsumerDevices(100, q), 710) ~= nil)
+end
+
 T.finish()
