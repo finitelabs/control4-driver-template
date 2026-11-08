@@ -31,12 +31,11 @@ function OnDriverLateInit()
     return
   end
 
-  -- Fire OnPropertyChanged once per property to set initial globals.
+  -- Fire OnPropertyChanged once per property to set initial globals. The router runs each
+  -- handler in its own xpcall and reports a failure itself, so one property's error doesn't
+  -- stop the rest.
   for p, _ in pairs(Properties) do
-    local status, err = pcall(OnPropertyChanged, p)
-    if not status and err then
-      log:error("Error in OnPropertyChanged for property '%s': %s", p, err or "unknown error")
-    end
+    OnPropertyChanged(p)
   end
   gInitialized = true
   UpdateProperty("Driver Status", "Online")
