@@ -98,6 +98,23 @@ The Lua tab prints the build date it was stamped with:
 20261014
 ```
 
+<!-- #ifdef DRIVERCENTRAL -->
+
+#### Log Level \[ 0 - Fatal | 1 - Error | 2 - Warning | **_3 - Info_** | 4 - Debug \]
+
+Sets the logging level. Default is `3 - Info`. While a Support Code has
+Composer's Lua tab open, it also offers `5 - Trace` and `6 - Ultra`.
+
+> [!TIP]
+> To capture a log for a support request:
+>
+> 1. Set **Log Level** to `4 - Debug`.
+> 1. Set **Log Mode** to `Print`.
+> 1. Send the output from Composer's Lua tab as described under
+>    [Support](#support).
+
+<!-- #else -->
+
 #### Log Level \[ 0 - Fatal | 1 - Error | 2 - Warning | **_3 - Info_** | 4 - Debug | 5 - Trace | 6 - Ultra \]
 
 Sets the logging level. Default is `3 - Info`.
@@ -109,6 +126,8 @@ Sets the logging level. Default is `3 - Info`.
 > 1. Set **Log Mode** to `Print`.
 > 1. Send the output from Composer's Lua tab as described under
 >    [Support](#support).
+
+<!-- #endif -->
 
 #### Log Mode \[ **_Off_** | Print | Log | Print and Log \]
 
@@ -122,8 +141,9 @@ Sets the logging mode. Default is `Off`.
 
 #### Support Code
 
-Leave it blank unless Finite Labs support gives you a code: it opens Composer's
-Lua tab to this driver for an hour.
+Leave it blank unless Finite Labs support gives you a code: for an hour, it
+opens Composer's Lua tab to this driver and adds `5 - Trace` and `6 - Ultra` to
+Log Level.
 
 <!-- #endif -->
 

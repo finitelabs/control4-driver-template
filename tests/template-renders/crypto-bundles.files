@@ -63,6 +63,7 @@ test/test_http_limits.lua
 test/test_http_redact.lua
 test/test_jit_off.lua
 test/test_lib_dependencies.lua
+test/test_logging_levels.lua
 test/test_nonfinite_numbers.lua
 test/test_persist_encrypted_trace.lua
 test/test_persist_missing_key.lua
