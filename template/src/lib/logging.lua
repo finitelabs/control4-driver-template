@@ -60,11 +60,10 @@ Log.LevelPrefix = {
   [Log.LogLevel.ULTRA] = "[ULTRA]",
 }
 
---- The property the driver's log level is set from.
 local LOG_LEVEL_PROPERTY = "Log Level"
 
--- A DriverCentral build stops at Debug unless the Support Code opens the Lua window (lib/support-code.lua): Trace and
--- Ultra then show nothing the open window doesn't. Tests run the source as it is, where the second line wins.
+-- A DriverCentral build stops at Debug unless the Support Code opens the Lua window (lib/support-code.lua). Tests run
+-- the source as it is, where the second line wins.
 --#ifdef DRIVERCENTRAL
 local DEFAULT_MAX_LOG_LEVEL = Log.LogLevel.DEBUG
 --#else
