@@ -108,7 +108,8 @@ into `src/lib/drivercentral.lua`.
 `resources/Driver Icons.sketch` and `resources/drivercentral/**` except
 `resources/drivercentral/render.sh`, so existing repos never receive changes to them;
 only newly created ones do, and a repo gets any of them it lacks. `render.sh` is the
-template's tool, not driver content, so `copier update` keeps it current. This is why the template can seed `src/constants.lua`
+template's tool, not driver content, so `copier update` keeps it current.
+This is why the template can seed `src/constants.lua`
 (with the property-visibility keys its lib requires) and `.env.default` (with the
 build secrets it passes) without clobbering what a driver has since added. A repo
 without `resources/Driver Icons.sketch` gets the template's on its next `copier
