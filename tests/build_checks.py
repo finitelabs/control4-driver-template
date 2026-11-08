@@ -9,7 +9,7 @@ e.g. `uvx --from copier python tests/build_checks.py CHECK DIR`.
     tests/build_checks.py readme-images DIR     README.md links an image, and every ./images/ link resolves
     tests/build_checks.py encrypted DIR         a build that substitutes a secret packages every distribution encrypted
     tests/build_checks.py cloud-monitoring DIR  Cloud Monitoring as CONTRIBUTING.md wires it reaches only DriverCentral
-    tests/build_checks.py squish-tail DIR       each squishy ends with the tail, and the oss build drops its preload copies
+    tests/build_checks.py squish-tail DIR       each squishy ends with the tail; oss builds drop their preload copies
 
 encrypted and cloud-monitoring each wire a probe into the example driver, run `make build-nodocs` with fake
 secrets, and put the files they edit back afterwards. Neither depends on how those files are formatted.
