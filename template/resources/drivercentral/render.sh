@@ -1,21 +1,44 @@
 #!/usr/bin/env bash
 # Renders the DriverCentral banners, facts strip and listing photos at 2x with headless Chrome.
 # Usage: render.sh [out-dir]   (default: next to each source)
+# RENDER_TIMEOUT: the seconds one page may take before Chrome is stopped (default 60).
 set -euo pipefail
 here=$(cd "$(dirname "$0")" && pwd)
 out=${1:-$here}
 chrome=${CHROME:-"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"}
+limit=${RENDER_TIMEOUT:-60}
 profile=$(mktemp -d)
 trap 'command rm -rf "$profile"' EXIT
+
+# stop <pid>: ends a hung Chrome and the helpers it started, which outlive it otherwise.
+stop() {
+	local pids
+	pids="$(pgrep -P "$1" || true) $1"
+	kill -TERM $pids 2>/dev/null || true
+	sleep 2
+	kill -KILL $pids 2>/dev/null || true
+	wait "$1" 2>/dev/null || true
+}
 
 # shot <css-width,height> <output> <page>
 shot() {
 	command mkdir -p "$(dirname "$out/$2")"
 	command rm -f "$out/$2"
 	# A page opened from disk loads the assets beside it only with file access allowed.
-	# Chrome can exit non-zero after writing the file, so the file decides.
 	"$chrome" --headless=new --disable-gpu --hide-scrollbars --force-device-scale-factor=2 --default-background-color=00000000 --window-size="$1" --allow-file-access-from-files \
-		--virtual-time-budget=8000 --user-data-dir="$profile" --screenshot="$out/$2" "file://$here/$3" >/dev/null 2>&1 || true
+		--virtual-time-budget=8000 --user-data-dir="$profile" --screenshot="$out/$2" "file://$here/$3" >/dev/null 2>&1 &
+	local pid=$! waited=0
+	while kill -0 "$pid" 2>/dev/null; do
+		if [ "$waited" -ge "$limit" ]; then
+			stop "$pid"
+			echo "render.sh: $2 took longer than ${limit}s, so Chrome was stopped; run render.sh again" >&2
+			exit 1
+		fi
+		sleep 1
+		waited=$((waited + 1))
+	done
+	# Chrome can exit non-zero after writing the file, so the file decides.
+	wait "$pid" 2>/dev/null || true
 	[ -s "$out/$2" ] || { echo "render.sh: $2 was not written" >&2; exit 1; }
 	echo "$2"
 }
