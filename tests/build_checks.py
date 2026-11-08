@@ -9,6 +9,7 @@ e.g. `uvx --from copier python tests/build_checks.py CHECK DIR`.
     tests/build_checks.py readme-images DIR     README.md links an image, and every ./images/ link resolves
     tests/build_checks.py encrypted DIR         a build that substitutes a secret packages every distribution encrypted
     tests/build_checks.py cloud-monitoring DIR  Cloud Monitoring as CONTRIBUTING.md wires it reaches only DriverCentral
+    tests/build_checks.py squish-tail DIR       each squishy ends with the tail, and the oss build drops its preload copies
 
 encrypted and cloud-monitoring each wire a probe into the example driver, run `make build-nodocs` with fake
 secrets, and put the files they edit back afterwards. Neither depends on how those files are formatted.
@@ -316,6 +317,25 @@ def cloud_monitoring(render):
     return report(problems, "Cloud Monitoring: DriverCentral encrypted with the values, OSS plain without it")
 
 
+def squish_tail(render):
+    """src/squish-tail.lua ends every squishy, so a built driver holds no preload copy of a loaded module."""
+    run(["make", "build-nodocs"], render)
+    problems = []
+    for build in DISTRIBUTIONS:
+        squishy = render / "build" / build / EXAMPLE / "squishy"
+        mains = re.findall(r'^Main "([^"]+)"', squishy.read_text(encoding="utf-8"), re.M) if squishy.is_file() else []
+        if mains != ["driver.lua", "../../src/squish-tail.lua"]:
+            problems.append(f"the {build} squishy's Main files are {mains}, not driver.lua then src/squish-tail.lua")
+    # Only OSS keeps its squished Lua in plain text, so only it can be loaded and taken through its init.
+    source = render / "dist" / "oss" / "source" / "example.lua"
+    probe = Path(__file__).resolve().parent / "squish_tail.lua"
+    result = subprocess.run(
+        [str(render / "test" / "run_test.sh"), str(probe)], cwd=render, env={**os.environ, "SQUISHED": str(source)}
+    )
+    if result.returncode != 0:
+        problems.append("the oss build keeps preload copies of loaded modules after late init")
+    return report(problems, "squish tail: both squishies end with it, and the oss build drops its copies")
+
 CHECKS = {
     "doc-alerts": doc_alerts,
     "driverless": driverless,
@@ -323,6 +343,7 @@ CHECKS = {
     "readme-images": readme_images,
     "encrypted": encrypted,
     "cloud-monitoring": cloud_monitoring,
+    "squish-tail": squish_tail,
 }
 
 

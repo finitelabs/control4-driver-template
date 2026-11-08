@@ -38,6 +38,7 @@ src/lib/support-code.lua
 src/lib/update-settings.lua
 src/lib/utils.lua
 src/lib/values.lua
+src/squish-tail.lua
 test/c4_fixtures.lua
 test/c4_shim.lua
 test/dc_cloud.lua
@@ -69,6 +70,7 @@ test/test_persist_write_behind.lua
 test/test_secret_sends_trace.lua
 test/test_sensor_params.lua
 test/test_shim_bindings.lua
+test/test_squish_tail.lua
 test/test_support_code.lua
 test/test_update_property.lua
 test/test_update_settings.lua

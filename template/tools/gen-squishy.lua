@@ -98,6 +98,7 @@ end)
 -- Build squishy content
 local lines = {}
 table.insert(lines, 'Main "driver.lua"')
+table.insert(lines, 'Main "../../src/squish-tail.lua"')
 table.insert(lines, "")
 
 local last_dir = nil

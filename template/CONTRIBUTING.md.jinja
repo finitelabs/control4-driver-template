@@ -285,6 +285,11 @@ on a clean tree until something has populated `build/`.
 1. **Package**: run driverpackager to create .c4z files
 1. **Zip**: bundle the c4z and docs folders per distribution
 
+Each squishy runs `src/squish-tail.lua` after the driver's own `driver.lua`.
+Once the driver's late init returns, it drops squish's `package.preload` copy of
+each module the driver loaded, which would otherwise hold that module's chunk
+for as long as the item runs.
+
 The driver.xml step stamps today's date as the version unless `DRIVER_VERSION`
 is set. On a tag build CI sets it to the tag's date, so the tag must be
 `vYYYYMMDD` or `vYYYYMMDD-suffix` or the build fails.
