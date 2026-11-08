@@ -52,6 +52,8 @@ resources/drivercentral/render.sh
 
 This needs Google Chrome and a network connection (the pages load Inter from Google Fonts). It renders every page at 2x and overwrites the PNGs. Pass a directory to render somewhere else instead.
 
+Chrome sometimes hangs on a page. After 60 seconds on one page, `render.sh` stops Chrome and fails, naming the page; run it again. `RENDER_TIMEOUT` sets the limit in seconds.
+
 ## Listing photos
 
 Every photo is `photos/frame.html` around one screenshot from `photos/sources/`. Each line of `photos/photos.txt` is `<output name>|<query>`, and the query sets the fields below; lines starting with `#` are skipped. `crop`, `end` and `tail` are pixels of the screenshot scaled to the card's 880 px width.
