@@ -691,8 +691,11 @@ end
 back to `4 - Debug` when it shows more. At Ultra with Print on it also turns on
 drivers-common-public's own dumps (`DEBUGPRINT`, `DEBUG_TIMER`, `DEBUG_RFN`,
 `DEBUG_URL`, `DEBUG_WEBSOCKET`), which print whole HTTP requests and websocket
-frames, logins included, and turns them off otherwise. Nothing else sets them. A
-page with its own Log Level picker offers `log:getLogLevelNames()`.
+frames, logins included, and turns them off otherwise. Nothing else sets them.
+The Support Code calls `log:allowTraceAndUltra(allowed)` as the window opens and
+closes, which widens and narrows the list. A page that sets Log Level offers the
+levels `driver.xml` lists: `UpdateProperty` takes no other value, so Trace and
+Ultra during a Support Code hour are set in Composer.
 {%- if cloud_diagnostics %}
 
 ### Cloud Monitoring

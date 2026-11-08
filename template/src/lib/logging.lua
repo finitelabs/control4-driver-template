@@ -132,22 +132,8 @@ function Log:allowTraceAndUltra(allowed)
   -- The value first, so the shorter list never lacks it.
   self:_capLogLevelProperty(true)
   if type(Properties) == "table" and Properties[LOG_LEVEL_PROPERTY] ~= nil then
-    C4:UpdatePropertyList(
-      LOG_LEVEL_PROPERTY,
-      table.concat(self:getLogLevelNames(), ","),
-      Properties[LOG_LEVEL_PROPERTY]
-    )
+    C4:UpdatePropertyList(LOG_LEVEL_PROPERTY, table.concat(self:_logLevelNames(), ","), Properties[LOG_LEVEL_PROPERTY])
   end
-end
-
---- The Log Level property's values the build allows now, from `0 - Fatal` up.
---- @return string[] names
-function Log:getLogLevelNames()
-  local names = {}
-  for level = self.LogLevel.FATAL, self._maxLogLevel do
-    names[#names + 1] = self.LevelToName[level]
-  end
-  return names
 end
 
 --- Sets the log output mode.
@@ -200,6 +186,17 @@ end
 function Log:_setDumps()
   local on = self._outputPrint and self._logLevel >= self.LogLevel.ULTRA
   DEBUGPRINT, DEBUG_TIMER, DEBUG_RFN, DEBUG_URL, DEBUG_WEBSOCKET = on, on, on, on, on
+end
+
+--- The Log Level property's values allowed now, from `0 - Fatal` up.
+--- @private
+--- @return string[] names
+function Log:_logLevelNames()
+  local names = {}
+  for level = self.LogLevel.FATAL, self._maxLogLevel do
+    names[#names + 1] = self.LevelToName[level]
+  end
+  return names
 end
 
 --- Puts the Log Level property back to the highest allowed level when it shows more.
