@@ -93,6 +93,16 @@ function SupportCode:_tell(open)
   end
 end
 
+--- Lets Log Level reach Trace and Ultra, or stops it at Debug. Caught as `_tell` is, since a raise would print the
+--- typed value.
+--- @param open boolean Whether the window is now open.
+function SupportCode:_allowLevels(open)
+  local ok, err = pcall(log.allowTraceAndUltra, log, open)
+  if not ok then
+    print("The Support Code could not change Log Level: " .. tostring(err))
+  end
+end
+
 --- Calls `callback(true)` each time the code opens the Lua window and `callback(false)` each time it closes, for a
 --- driver that shows more while it is open.
 --- @param callback fun(open: boolean)
@@ -119,7 +129,7 @@ function SupportCode:enter(value)
   else
     self._open = true
     C4:AllowExecute(true)
-    log:allowTraceAndUltra(true)
+    self:_allowLevels(true)
     SetTimer("SupportCode", ONE_HOUR, function()
       self:close()
     end)
@@ -136,7 +146,7 @@ function SupportCode:close()
   CancelTimer("SupportCode")
   self._open = false
   C4:AllowExecute(false)
-  log:allowTraceAndUltra(false)
+  self:_allowLevels(false)
   print("The Lua window is closed, and Log Level stops at Debug")
   self:_tell(false)
 end

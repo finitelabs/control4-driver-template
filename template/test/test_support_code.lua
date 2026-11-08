@@ -210,5 +210,25 @@ enter(sc, "VEAFA-RSBWM")
 T.eq("entering the code again stops it at Debug too", log:getLogLevel(), log.LogLevel.DEBUG)
 T.eq("and puts the property back", Properties["Log Level"], "4 - Debug")
 
+function C4:UpdatePropertyList()
+  error("the list broke")
+end
+function OPC.Support_Code(propertyValue)
+  sc:enter(propertyValue)
+end
+Properties["Support Code"] = "VEAFA-RSBWM"
+_, _, traced = T.capture(function()
+  OnPropertyChanged("Support Code")
+end)
+T.excludes("a Log Level failure does not print the code", traced, "VEAFA")
+T.contains("its error is reported", traced, "the list broke")
+T.contains("and the window still opened", traced, "Support Code accepted")
+Properties["Support Code"] = "VEAFA-RSBWM"
+_, _, traced = T.capture(function()
+  OnPropertyChanged("Support Code")
+end)
+T.excludes("nor when the code closes it", traced, "VEAFA")
+T.contains("which still closes", traced, "is closed")
+
 os.time = realTime -- luacheck: ignore
 T.finish()
