@@ -44,7 +44,7 @@ UI_PAGE_HTML = """<!DOCTYPE html>
 <div class="panel active" id="panel-status"></div>
 <script>
 <!-- #embed ../../../../src/lib/ui/page.js -->
-initTabs();
+Kit.initTabs();
 </script>
 </body>
 </html>
