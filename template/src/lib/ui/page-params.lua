@@ -1,6 +1,5 @@
---- A web tab command's parameters. lib/ui/page.js breaks its base64 with a newline every 76 characters, since the
---- broker's cost grows with the square of an unbroken run, and only OS 4.3's decoder is known to take them, so they
---- are stripped here.
+--- A web tab command's parameters. lib/ui/page.js breaks its base64 with a newline every 76 characters, and only OS
+--- 4.3's decoder is known to take them, so they are stripped here.
 
 require("drivers-common-public.global.lib")
 

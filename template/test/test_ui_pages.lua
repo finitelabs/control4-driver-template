@@ -56,6 +56,6 @@ for _, path in ipairs(pages) do
     end
   end
 end
-T.check("every page on the kit was checked (" .. checked .. " of " .. #pages .. " pages)", true)
+print(checked .. " of " .. #pages .. " pages embed the kit")
 
 T.finish()
