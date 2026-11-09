@@ -12,6 +12,8 @@ Marketing images for the driver's DriverCentral listing. Each banner and photo i
 
 `assets/` holds what the pages share: the Finite Labs logo, `scene.js`, which draws the banners' art, and the brand's logo as `brand-mark.png`.
 
+`description.html` is the listing's description, pasted into DriverCentral as written. It starts from the docs' Overview and Features, written to sell the driver rather than document it. Its first image is the facts strip: upload the PNG through the description editor and put the URL it gives in the `src`. A GitHub URL won't load from a private repo. The Revisions tab comes from the build, as `dist/drivercentral/revisions.html`.
+
 ## Making the set
 
 1. Put the brand's logo in `assets/brand-mark.png`: the version its official kit makes for dark backgrounds, unedited, and note the kit's URL and usage terms in this README. Trim only its transparent margin. Never trace, redraw, recolor or crop the art, and never cut a mark out of a lockup the brand only supplies whole. A kit with no dark-background logo, or only one too small to stay sharp, gets a light hub (Banner art, below).
