@@ -18,6 +18,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-26.04
+    env:
+      # Pinned: a new StyLua release can reformat committed Lua with no change in the repo.
+      STYLUA_VERSION: 2.6.0
 
     steps:
       - name: Checkout
@@ -45,18 +48,15 @@ jobs:
         with:
           node-version-file: .node-version
 
-      # Pinned: a new StyLua release can reformat committed Lua with no change in the repo.
       - name: Cache stylua
         uses: actions/cache@v6
         with:
           path: {% raw %}${{ runner.temp }}{% endraw %}/stylua
-          key: stylua-2.6.0-{% raw %}${{ runner.os }}-${{ runner.arch }}{% endraw %}
+          key: stylua-{% raw %}${{ env.STYLUA_VERSION }}-${{ runner.os }}-${{ runner.arch }}{% endraw %}
 
       # GitHub's release download can answer 504 for a minute or more. The npm registry has the
       # same binary, published by StyLua's own release workflow.
       - name: Setup stylua
-        env:
-          STYLUA: 2.6.0
         run: |
           dir="$RUNNER_TEMP/stylua"
           if [ ! -x "$dir/stylua" ]; then
@@ -64,18 +64,18 @@ jobs:
             arch=$(uname -m)
             fetch="curl -fsSL --retry 6 --retry-all-errors --connect-timeout 15 --max-time 60"
             if $fetch -o "$RUNNER_TEMP/stylua.zip" \
-              "https://github.com/JohnnyMorganz/StyLua/releases/download/v$STYLUA/stylua-linux-$arch.zip"; then
+              "https://github.com/JohnnyMorganz/StyLua/releases/download/v$STYLUA_VERSION/stylua-linux-$arch.zip"; then
               unzip -q "$RUNNER_TEMP/stylua.zip" -d "$dir"
             else
               npm=$([ "$arch" = aarch64 ] && echo arm64 || echo x64)
-              $fetch "https://registry.npmjs.org/@johnnymorganz/stylua-bin-linux-$npm/-/stylua-bin-linux-$npm-$STYLUA.tgz" \
+              $fetch "https://registry.npmjs.org/@johnnymorganz/stylua-bin-linux-$npm/-/stylua-bin-linux-$npm-$STYLUA_VERSION.tgz" \
                 | tar -xzO package/stylua > "$dir/stylua"
               chmod +x "$dir/stylua"
             fi
           fi
           version=$("$dir/stylua" --version)
           echo "$version"
-          [ "$version" = "stylua $STYLUA" ]
+          [ "$version" = "stylua $STYLUA_VERSION" ]
           echo "$dir" >> "$GITHUB_PATH"
 
       - name: Install system dependencies
