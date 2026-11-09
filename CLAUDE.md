@@ -98,7 +98,7 @@ opts into, like crypto, and gating it keeps a render from conflicting with
 Essentials' own `src/lib/expressions.lua` at its next update. `ui` gates
 `src/lib/ui/`, the kit for a custom Composer tab, and its three tests, so the
 repos without a tab carry neither its page files nor tests that prove nothing
-there. A page splices `house.css` and `page.js` in with `#embed` at build time.
+there. A page splices `style.css` and `page.js` in with `#embed` at build time.
 There is no other module-to-module gating: every other `src/lib/*.lua` renders unconditionally, and
 `gen-squishy` bundles only what a driver actually requires, so a rendered-but-unused
 module is zero bytes in the `.c4z`. A new `src/lib` file needs no `_exclude` entry.

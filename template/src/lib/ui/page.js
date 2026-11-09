@@ -1,5 +1,5 @@
-// The house kit for a driver's custom Composer tab: its link to the driver, the tab bar, the properties card and
-// demo mode. A page embeds it first in its <script>, after house.css in its <style>, with the line
+// The kit for a driver's custom Composer tab: its link to the driver, the tab bar, the properties card and
+// demo mode. A page embeds it first in its <script>, after style.css in its <style>, with the line
 // "<!-- #embed ../../../../src/lib/ui/page.js -->", and then calls:
 //   connectDriver(options)      pushes from the driver, by command; property changes made in Composer
 //   sendCommand(command, params)  a command to the driver's UIR handlers

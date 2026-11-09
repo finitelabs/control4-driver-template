@@ -9,7 +9,7 @@
 local T = require("testlib")
 
 local ROOT = (debug.getinfo(1, "S").source:match("@(.*[/\\])") or "./") .. "../"
-local KIT = { "house.css", "page.js" }
+local KIT = { "style.css", "page.js" }
 
 local function read(path)
   local fh = io.open(path, "r")

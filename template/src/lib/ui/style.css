@@ -1,5 +1,5 @@
-/* The house look for a driver's custom Composer tab. A page embeds it first in its <style>, with the line
-   "<!-- #embed ../../../../src/lib/ui/house.css -->", then adds its own rules after it. */
+/* The look of a driver's custom Composer tab. A page embeds it first in its <style>, with the line
+   "<!-- #embed ../../../../src/lib/ui/style.css -->", then adds its own rules after it. */
 
 :root {
   --bg: #f5f5f7;

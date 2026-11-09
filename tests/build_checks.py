@@ -36,7 +36,7 @@ UI_PAGE_HTML = """<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <style>
-<!-- #embed ../../../../src/lib/ui/house.css -->
+<!-- #embed ../../../../src/lib/ui/style.css -->
 </style>
 </head>
 <body>
@@ -341,7 +341,7 @@ def ui_page(render):
     if not (render / UI_KIT).is_dir():
         print("This render has no lib/ui.")
         return 0
-    kit = {name: (render / UI_KIT / name).read_text(encoding="utf-8") for name in ("house.css", "page.js")}
+    kit = {name: (render / UI_KIT / name).read_text(encoding="utf-8") for name in ("style.css", "page.js")}
     problems = []
     with restored(render, UI_PAGE):
         (render / UI_PAGE).parent.mkdir(parents=True, exist_ok=True)
@@ -362,7 +362,7 @@ def ui_page(render):
                 for name, text in kit.items():
                     if text.strip() not in page:
                         problems.append(f"{c4z}'s page does not hold {name} whole")
-    return report(problems, "A page that embeds lib/ui ships house.css and page.js inline in every distribution")
+    return report(problems, "A page that embeds lib/ui ships style.css and page.js inline in every distribution")
 
 
 CHECKS = {

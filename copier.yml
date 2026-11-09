@@ -85,7 +85,7 @@ icon_style:
 
 vendor_modules:
   type: str
-  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: lib.ui.tab-properties, lib.ui.page-params, and house.css and page.js for a page to embed."
+  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: lib.ui.tab-properties, lib.ui.page-params, and style.css and page.js for a page to embed."
   default: ""
 
 cloud_diagnostics:

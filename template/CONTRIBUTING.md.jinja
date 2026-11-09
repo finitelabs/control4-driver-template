@@ -812,8 +812,8 @@ such as `drivers/tplink_light/www/documentation/index.md` in
 
 ### Custom Composer Tabs
 
-`src/lib/ui/` is the kit for a driver's custom Composer tab: the house look
-(`house.css`), the page's link to its driver, the tab bar, demo mode and a card
+`src/lib/ui/` is the kit for a driver's custom Composer tab: the shared look
+(`style.css`), the page's link to its driver, the tab bar, demo mode and a card
 of the driver's properties (`page.js`), and the driver's side of that card
 (`lib.ui.tab-properties` and `lib.ui.page-params`).
 
@@ -822,7 +822,7 @@ A page embeds the stylesheet first in its `<style>` and the script first in its
 
 ```html
 <style>
-<!-- #embed ../../../../src/lib/ui/house.css -->
+<!-- #embed ../../../../src/lib/ui/style.css -->
 </style>
 <div class="nav">
   <div class="nav-tab active" data-panel="status">Status</div>

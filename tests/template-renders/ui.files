@@ -35,9 +35,9 @@ src/lib/lru.lua
 src/lib/persist.lua
 src/lib/redact.lua
 src/lib/support-code.lua
-src/lib/ui/house.css
 src/lib/ui/page-params.lua
 src/lib/ui/page.js
+src/lib/ui/style.css
 src/lib/ui/tab-properties.lua
 src/lib/update-settings.lua
 src/lib/utils.lua

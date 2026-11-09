@@ -40,7 +40,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 - **redact.lua**: masks credentials in log lines and diagnostics reports
 - **values.lua**: value parsing, coercion, and formatting utilities
 - **expressions.lua** / **expression-sandbox.lua**: expressions over device variables: `PARAM{device,variable}` tokens, evaluation within limits on time, memory and pattern searches, and debounced watches (only with `expressions` in `vendor_modules`)
-- **ui/**: the kit for a custom Composer tab: `tab-properties.lua` and `page-params.lua` for the driver, and `house.css` and `page.js`, which a page splices in with `#embed` (only with `ui` in `vendor_modules`)
+- **ui/**: the kit for a custom Composer tab: `tab-properties.lua` and `page-params.lua` for the driver, and `style.css` and `page.js`, which a page splices in with `#embed` (only with `ui` in `vendor_modules`)
 - **logging.lua** / **utils.lua**: structured logging and general utilities (always included)
 - **github-updater.lua**: GitHub Releases-based self-updater for non-DriverCentral (`oss`) builds
 - **diagnostics.lua**: Cloud Monitoring, a DriverCentral build's hourly memory and error reports to InfluxDB (only with `cloud_diagnostics`)
