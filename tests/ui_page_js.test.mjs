@@ -1,5 +1,6 @@
 // lib/ui/page.js's parts that need no page: the body a command carries, where it goes, how a push's params read, what
-// Kit.deliver does with the properties card's two commands, and that a page's own functions leave the kit's alone.
+// Kit.deliver does with the properties card's two commands, the socket it lends a page, and that a page's own functions
+// leave the kit's alone.
 //
 // Run from the template repo, against a render's copy:
 //   make render-ui-js NAME=ui
@@ -113,6 +114,14 @@ test("deliver feeds the properties card, then the page's handler", () => {
   assert.equal(Kit._properties.errors.Mode, "Mode has no choice Slow.");
   Kit.deliver("BOOM", {});
   Kit.deliver("UNHANDLED", {});
+});
+
+test("Kit.socket gives connectDriver's connection, which a page may subscribe another item's pushes on", async () => {
+  const io = "window.io = { connect: function () { return { on: function () {}, io: { engine: { id: 'e1' } } }; } };";
+  const { Kit } = load("?apihost=ctrl.example.invalid&driverid=42&apitoken=tok", io);
+  assert.equal(Kit.socket(), null);
+  await Kit.connectDriver({});
+  assert.equal(Kit.socket().io.engine.id, "e1");
 });
 
 test("esc makes text safe for HTML", () => {
