@@ -401,7 +401,7 @@ def revisions(input_path: Path, output_path: Path) -> None:
     body = re.sub(r"^(##|###) ", r"#\1 ", body, flags=re.M)
     html = re.sub(r"\n(?!<|\Z)", " ", MarkdownIt("commonmark").render(body))
     # A link into the docs has nothing to point at on DriverCentral.
-    html = re.sub(r'<a href="(?!https?:)[^"]*">(.*?)</a>', r"\1", html)
+    html = re.sub(r'<a href="(?![a-z]+:)[^"]*">(.*?)</a>', r"\1", html)
     # A section, or a release, whose lines are all open-source only.
     html = re.sub(r"<h4>[^<]*</h4>\n(?=<h[34]>|\Z)", "", html)
     html = re.sub(r"<h3>[^<]*</h3>\n(?=<h3>|\Z)", "", html)
