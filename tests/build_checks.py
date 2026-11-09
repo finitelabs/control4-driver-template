@@ -9,8 +9,9 @@ e.g. `uvx --from copier python tests/build_checks.py CHECK DIR`.
     tests/build_checks.py readme-images DIR     README.md links an image, and every ./images/ link resolves
     tests/build_checks.py encrypted DIR         a build that substitutes a secret packages every distribution encrypted
     tests/build_checks.py cloud-monitoring DIR  Cloud Monitoring as CONTRIBUTING.md wires it reaches only DriverCentral
+    tests/build_checks.py ui-page DIR           a page that embeds lib/ui ships it inline, in every distribution
 
-encrypted and cloud-monitoring each wire a probe into the example driver, run `make build-nodocs` with fake
+encrypted, cloud-monitoring and ui-page each wire a probe into the example driver, run `make build-nodocs` with fake
 secrets, and put the files they edit back afterwards. Neither depends on how those files are formatted.
 """
 
@@ -28,6 +29,26 @@ from xml.etree import ElementTree
 EXAMPLE = Path("drivers") / "example"
 DISTRIBUTIONS = ["drivercentral", "oss"]
 DIAGNOSTICS = Path("src") / "lib" / "diagnostics.lua"
+UI_KIT = Path("src") / "lib" / "ui"
+UI_PAGE = EXAMPLE / "www" / "html" / "index.html"
+UI_PAGE_HTML = """<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+<!-- #embed ../../../../src/lib/ui/style.css -->
+</style>
+</head>
+<body>
+<div class="nav"><div class="nav-tab active" data-panel="status">Status</div></div>
+<div class="panel active" id="panel-status"></div>
+<script>
+<!-- #embed ../../../../src/lib/ui/page.js -->
+initTabs();
+</script>
+</body>
+</html>
+"""
 
 EXAMPLE_SECRET = "EXAMPLE_SECRET"
 EXAMPLE_SECRET_VALUE = "ci-secret-value"
@@ -316,6 +337,34 @@ def cloud_monitoring(render):
     return report(problems, "Cloud Monitoring: DriverCentral encrypted with the values, OSS plain without it")
 
 
+def ui_page(render):
+    if not (render / UI_KIT).is_dir():
+        print("This render has no lib/ui.")
+        return 0
+    kit = {name: (render / UI_KIT / name).read_text(encoding="utf-8") for name in ("style.css", "page.js")}
+    problems = []
+    with restored(render, UI_PAGE):
+        (render / UI_PAGE).parent.mkdir(parents=True, exist_ok=True)
+        (render / UI_PAGE).write_text(UI_PAGE_HTML, encoding="utf-8")
+        # The render's own page test finds the probe and resolves its embeds.
+        run(["test/run_test.sh", "test_ui_pages.lua"], render)
+        run(["make", "build-nodocs"], render)
+        for build in DISTRIBUTIONS:
+            if not packages(render, build):
+                problems.append(f"the {build} build made no package")
+            for c4z in packages(render, build):
+                page = members(render, c4z).get("www/html/index.html", b"").decode("utf-8")
+                if not page:
+                    problems.append(f"{c4z} has no www/html/index.html")
+                    continue
+                if re.search(r"^\s*<!--\s*#embed\s", page, re.MULTILINE):
+                    problems.append(f"{c4z}'s page still holds an #embed line")
+                for name, text in kit.items():
+                    if text.strip() not in page:
+                        problems.append(f"{c4z}'s page does not hold {name} whole")
+    return report(problems, "A page that embeds lib/ui ships style.css and page.js inline in every distribution")
+
+
 CHECKS = {
     "doc-alerts": doc_alerts,
     "driverless": driverless,
@@ -323,6 +372,7 @@ CHECKS = {
     "readme-images": readme_images,
     "encrypted": encrypted,
     "cloud-monitoring": cloud_monitoring,
+    "ui-page": ui_page,
 }
 
 

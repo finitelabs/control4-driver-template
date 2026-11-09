@@ -13,10 +13,11 @@ local root = package.path:match("([^;]+)/src/%?%.lua")
 assert(root, "LUA_PATH has no src/?.lua: run this with test/run_test.sh")
 
 local failed = {}
-local p = io.popen('ls "' .. root .. '/src/lib"')
+local p = io.popen('cd "' .. root .. '/src/lib" && find . -name "*.lua" | sort')
 for name in p:lines() do
-  local mod = name:match("^(.*)%.lua$")
+  local mod = name:match("^%./(.*)%.lua$")
   if mod then
+    mod = mod:gsub("/", ".")
     local ok, err = pcall(require, "lib." .. mod)
     if not ok then
       failed[#failed + 1] = mod .. ": " .. tostring(err)
