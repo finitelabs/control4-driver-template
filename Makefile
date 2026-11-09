@@ -63,7 +63,7 @@ render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME
 # ─── Build leg ────────────────────────────────────────────────────────────────
 # CI's build leg is `make build-checks`: the example driver, built in the render.
 
-.PHONY: build-driverless render-example build-doc-alerts build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-checks
+.PHONY: build-driverless render-example build-doc-alerts build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-squish-tail build-checks
 build-driverless: ## Check the render, before it has a driver, builds and verifies nothing
 	$(PYTHON) tests/build_checks.py driverless "$(RENDER)"
 
@@ -85,6 +85,9 @@ build-encrypted: ## Check a build that substitutes a secret is encrypted
 build-cloud-monitoring: ## Check Cloud Monitoring reaches only the DriverCentral build
 	$(PYTHON) tests/build_checks.py cloud-monitoring "$(RENDER)"
 
+build-squish-tail: ## Check each squished build drops its preload copies of loaded modules after late init
+	$(PYTHON) tests/build_checks.py squish-tail "$(RENDER)"
+
 BUILD_LEG := render build-driverless render-example in-render-init build-doc-alerts in-render-check in-render-test \
-  build-idempotent build-readme-images build-encrypted build-cloud-monitoring
+  build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-squish-tail
 build-checks: $(BUILD_LEG) ## Run CI's build leg for NAME
