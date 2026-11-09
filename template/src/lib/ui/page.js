@@ -8,7 +8,7 @@
 //   Kit.initPropertiesCard(el)      the properties card, for a driver using lib.ui.tab-properties
 //   Kit.demoMode(answer)            outside Composer: the banner, and commands answered by the page's demo data
 //   Kit.deliver(command, params)    hands a demo answer to the page as a push would arrive
-//   Kit.esc(text)                   text made safe for HTML
+//   Kit.esc(text)                   text made safe for HTML; Kit.str(value) a value as text, "" for none
 //   Kit.apiHost, Kit.driverId, Kit.apiToken: the page's address parameters
 
 var Kit = (function () {
@@ -340,6 +340,7 @@ var Kit = (function () {
     apiHost: apiHost,
     driverId: driverId,
     apiToken: apiToken,
+    str: str,
     esc: esc,
     api: api,
     encodeParams: encodeParams,

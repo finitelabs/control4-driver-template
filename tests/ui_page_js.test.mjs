@@ -119,4 +119,6 @@ test("esc makes text safe for HTML", () => {
   const { Kit } = load("");
   assert.equal(Kit.esc(`<a href="x">'&'</a>`), "&lt;a href=&quot;x&quot;&gt;&#39;&amp;&#39;&lt;/a&gt;");
   assert.equal(Kit.esc(null), "");
+  assert.equal(Kit.str(0), "0");
+  assert.equal(Kit.str(undefined), "");
 });
