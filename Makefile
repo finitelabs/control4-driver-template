@@ -41,7 +41,7 @@ invalid-combinations: ## Check every combination in tests/template-renders/inval
 # ─── Render leg ───────────────────────────────────────────────────────────────
 # CI's render leg is `make render-checks`; each of its steps is a target of its own.
 
-.PHONY: render render-snapshot render-lib-loads render-crypto render-checks
+.PHONY: render render-snapshot render-lib-loads render-crypto render-ui-js render-checks
 render: ## Render NAME into RENDER, replacing an earlier render there
 	$(PYTHON) tests/template_renders.py render $(NAME) "$(RENDER)"
 
@@ -57,13 +57,18 @@ render-lib-loads: ## Check every src/lib module in the render loads
 render-crypto: ## Check the render's c4_shim resolves its FFI crypto backend
 	"$(RENDER)/test/run_test.sh" "$(CURDIR)/tests/ffi_crypto_backend.lua"
 
-RENDER_LEG := render render-snapshot render-lib-loads render-crypto in-render-test
+render-ui-js: ## Check the render's lib/ui/page.js under Node, where the render has one
+	@if [ -f "$(RENDER)/src/lib/ui/page.js" ]; then \
+		UI_PAGE_JS="$(RENDER)/src/lib/ui/page.js" node --test tests/ui_page_js.test.mjs; \
+	else echo "This render has no lib/ui."; fi
+
+RENDER_LEG := render render-snapshot render-lib-loads render-crypto render-ui-js in-render-test
 render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME
 
 # ─── Build leg ────────────────────────────────────────────────────────────────
 # CI's build leg is `make build-checks`: the example driver, built in the render.
 
-.PHONY: build-driverless render-example build-doc-alerts build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-checks
+.PHONY: build-driverless render-example build-doc-alerts build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page build-checks
 build-driverless: ## Check the render, before it has a driver, builds and verifies nothing
 	$(PYTHON) tests/build_checks.py driverless "$(RENDER)"
 
@@ -85,6 +90,9 @@ build-encrypted: ## Check a build that substitutes a secret is encrypted
 build-cloud-monitoring: ## Check Cloud Monitoring reaches only the DriverCentral build
 	$(PYTHON) tests/build_checks.py cloud-monitoring "$(RENDER)"
 
+build-ui-page: ## Check a page that embeds lib/ui ships the kit inline
+	$(PYTHON) tests/build_checks.py ui-page "$(RENDER)"
+
 BUILD_LEG := render build-driverless render-example in-render-init build-doc-alerts in-render-check in-render-test \
-  build-idempotent build-readme-images build-encrypted build-cloud-monitoring
+  build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page
 build-checks: $(BUILD_LEG) ## Run CI's build leg for NAME
