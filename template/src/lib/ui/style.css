@@ -118,14 +118,15 @@ body {
 .kit-tile .v { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .kit-tile.config { background: var(--bg); }
 
-/* The properties card: the element Kit.initPropertiesCard is given becomes .kit-props. */
+/* The properties card: the element Kit.initPropertiesCard is given becomes .kit-props. Its fields sit two classes
+   deep, so a page's own label, input or select rule doesn't reach into the card. */
 .kit-props-note { margin: -4px 0 12px; color: var(--text-muted); font-size: 12px; }
 .kit-props .pgroup { font-size: 11px; font-weight: 600; color: var(--text); margin: 14px 0 6px; }
 .kit-props .pgroup:first-child { margin-top: 0; }
 .kit-props .pfields { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
 .kit-props .pfields > div { min-width: 0; }
-.kit-props label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 3px; font-weight: 500; }
-.kit-props input, .kit-props select {
+.kit-props .pfields label { display: block; font-size: 11px; color: var(--text-muted); margin-bottom: 3px; font-weight: 500; }
+.kit-props .pfields input, .kit-props .pfields select {
   width: 100%;
   padding: 6px 8px;
   margin: 0;
@@ -136,8 +137,8 @@ body {
   font-size: 13px;
   font-family: var(--font);
 }
-.kit-props input:focus, .kit-props select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15); }
-.kit-props input:disabled { background: var(--bg); color: var(--text-muted); }
-.kit-props .input-error { border-color: var(--danger); }
+.kit-props .pfields input:focus, .kit-props .pfields select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15); }
+.kit-props .pfields input:disabled { background: var(--bg); color: var(--text-muted); }
+.kit-props .pfields .input-error { border-color: var(--danger); }
 .kit-props .pdesc { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
 .kit-props .perror { color: var(--danger); font-size: 11px; margin-top: 3px; }
