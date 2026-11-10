@@ -30,7 +30,7 @@ Write it from the driver docs (Overview, Features, System Requirements, Compatib
 The sections come in this order, with the same headings in every listing.
 
 1. The facts strip image, in a plain paragraph. Upload `banners/facts-strip-2400x136.png` through the description editor and put the URL it gives in the `src`, at width 1200 and height 68. A GitHub URL won't load from a private repo. A beta driver's warning box follows it.
-2. `## Overview` opens with the README's disclaimer in italics, with no "Disclaimer" label. One or two short paragraphs follow, on what it controls, how it connects (local or cloud, hub or none), and what the integrator gets in Control4. Lead with the outcome.
+2. `## Overview` opens with the repo README's disclaimer in italics, with no "Disclaimer" label. One or two short paragraphs follow, on what it controls, how it connects (local or cloud, hub or none), and what the integrator gets in Control4. Lead with the outcome.
 3. `## Features` has 6 to 8 bullets, most valuable first, each a capability in integrator terms.
 4. `## Included drivers` has a `###` section of a line or two for each driver, when the product has more than one.
 5. `## System requirements` lists the minimum Control4 OS from `driver.xml` (per driver when they differ), plus accounts, hardware, firmware and network.
