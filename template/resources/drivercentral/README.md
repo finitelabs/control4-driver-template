@@ -12,7 +12,34 @@ Marketing images for the driver's DriverCentral listing. Each banner and photo i
 
 `assets/` holds what the pages share: the Finite Labs logo, `scene.js`, which draws the banners' art, and the brand's logo as `brand-mark.png`.
 
-`description.md` is the listing's description. It starts from the docs' Overview and Features, written to sell the driver rather than document it. `make build` turns it into `dist/drivercentral/description.html`, with `##` as the editor's section headings, for pasting into the listing. Its first image is the facts strip: upload the PNG through the description editor and put the URL it gives in the `src`. A GitHub URL won't load from a private repo. The Revisions tab comes from the build too, as `dist/drivercentral/revisions.html`.
+`description.md` is the listing's description, written as below. `make build` turns it into `dist/drivercentral/description.html`, with `##` as the editor's section headings, for pasting into the listing. The Revisions tab comes from the build too, as `dist/drivercentral/revisions.html`.
+
+## Writing the description
+
+The description is the product page an integrator reads before buying. Say what the driver does, what they need and why it is worth having, in plain words. Some drivers have more to say than others, and every one should read well.
+
+Read our live listings first and take their shape, the sections and what goes in each. Where an older listing breaks the rules below, follow the rules.
+
+- ESPHome has a supported-devices table and a supported-features table that fit on a page.
+- Home Connect for Apple Home explains the setup it needs up front and lists what it brings into Apple Home.
+- Zigbee 3.0 has a beta warning box, a short section for each included driver, and a pointer to the Supported Devices list in Downloads, since its device list is too long for the page.
+- MQTT is the plain minimum.
+
+Write it from the driver docs (Overview, Features, System Requirements, Compatibility), each `driver.xml` for the minimum OS, and `CHANGELOG.md` for what the coming release adds. State only what the code on main does, and check every claim against it.
+
+The sections come in this order, with the same headings in every listing.
+
+1. The facts strip image, in a plain paragraph. Upload `banners/facts-strip-2400x136.png` through the description editor and put the URL it gives in the `src`, at width 1200 and height 68. A GitHub URL won't load from a private repo. A beta driver's warning box follows it.
+2. `## Overview` opens with the repo README's disclaimer in italics, with no "Disclaimer" label. One or two short paragraphs follow, on what it controls, how it connects (local or cloud, hub or none), and what the integrator gets in Control4. Lead with the outcome.
+3. `## Features` has 6 to 8 bullets, most valuable first, each a capability in integrator terms.
+4. `## Included drivers` has a `###` section of a line or two for each driver, when the product has more than one.
+5. `## System requirements` lists the minimum Control4 OS from `driver.xml` (per driver when they differ), plus accounts, hardware, firmware and network.
+6. `## Compatibility` comes when there is something to say. Several models or features go in a short list or table, and one or two read better as a sentence. If the list is too long for the page, say how broad it is and point to the Supported Devices list in Downloads.
+7. `## Coming in future updates` and `## Known issues` appear only while the driver is in beta.
+
+Say what sets the driver apart (fully local, no extra hub, sign-in on the vendor's own page) in the Overview or Features. When something is missing because the vendor's API or cloud doesn't offer it, say so, so it reads as their limit and not ours.
+
+No counts that go stale ("thousands of devices", not a number). No "such as", "e.g." or "for example" asides. No colon inside a sentence that sets up a list or an explanation; write two sentences instead, and introduce a list or table with a full sentence. No hype words (fast, reliable, seamless, powerful) or AI-speak, and no em dashes. No internals (protocols, ports, APIs) unless the integrator has to act on them. Known issues get one line each. American spelling, and "Control4 programming", never "scripts".
 
 ## Making the set
 
