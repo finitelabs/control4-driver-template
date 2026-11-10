@@ -18,7 +18,7 @@ Marketing images for the driver's DriverCentral listing. Each banner and photo i
 
 The description is the product page an integrator reads before buying: say what the driver does, what they need, and why it is worth having, in plain words.
 
-Read our live listings first and match their voice and shape. Each repo's `resources/drivercentral/description.md` holds the same text.
+Read our live listings first and take their shape: the sections, and what goes in each. Take the wording from the rules below, where an older listing doesn't follow them.
 
 - ESPHome: a supported-devices table and a supported-features table that fit on a page.
 - Home Connect for Apple Home: the setup it needs explained up front, with a list of what it brings into Apple Home.
