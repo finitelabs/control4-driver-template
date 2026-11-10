@@ -13,8 +13,6 @@
   var DEMO_LIMIT = "Outside Composer, the preview tries only part of the syntax, and not this part.";
   var LIMIT = {};
 
-  // The devices and variables a demo preview reads, as Kit.devices.demo takes them, so a page hands both the same data.
-  // options.hold(expression, mode, answer) and options.extra(answer, mode, expression) stand in for the driver's.
   function expressionDemo(devices, variablesById, options) {
     options = options || {};
     demo = { devices: devices || [], variables: variablesById || {}, hold: options.hold, extra: options.extra };

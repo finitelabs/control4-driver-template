@@ -374,6 +374,14 @@ test("insert puts text at the cursor as the integrator's own edit", () => {
   assert.equal(editor.value(), "floor(PARAM{5,6} - 1)", "a selection is replaced");
 });
 
+test("the textarea may be given by selector too", () => {
+  const { Kit, body, ctx } = load("");
+  const box = field(body);
+  ctx.document.querySelector = (sel) => (sel === "#expr" ? box : null);
+  Kit.expressionEditor("#expr", { mode: "equation" });
+  assert.equal(box.parentNode.className, "kit-editor");
+});
+
 test("an element option may be a selector", () => {
   const { Kit, body, ctx } = load("");
   const toggle = new Element("button");

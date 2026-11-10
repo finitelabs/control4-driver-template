@@ -231,6 +231,10 @@
     field.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
+  // Every browser on the page, for the one document listener that redraws their ticks.
+  var browsers = [];
+  var typing = false;
+
   function variableBrowser(el, options) {
     options = options || {};
     trackTokenFields();
@@ -446,12 +450,23 @@
 
     search.addEventListener("input", render);
 
-    // Typing in a field the ticks read redraws them.
-    document.addEventListener("input", function (e) {
-      if (e.target !== search && usedFields().indexOf(e.target) !== -1) render();
+    // Typing in a field the ticks read redraws them; a browser a redraw took off the page stops following.
+    browsers.push({ el: el, search: search, usedFields: usedFields, render: render });
+    if (!typing) {
+      typing = true;
+      document.addEventListener("input", function (e) {
+        browsers = browsers.filter(function (b) {
+          return b.el.isConnected !== false;
+        });
+        browsers.forEach(function (b) {
+          if (e.target !== b.search && b.usedFields().indexOf(e.target) !== -1) b.render();
+        });
+      });
+    }
+    var stop = onChange(function () {
+      if (el.isConnected === false) stop();
+      else render();
     });
-
-    onChange(render);
     render();
 
     return {

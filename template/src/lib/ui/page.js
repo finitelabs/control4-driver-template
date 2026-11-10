@@ -280,6 +280,7 @@ var Kit = (function () {
   }
 
   var socket = null;
+  var polling = false;
   var round = 0; // Bumped by each connect and drop, so a retry or push from an earlier one stops.
   var links = {};
 
@@ -317,6 +318,7 @@ var Kit = (function () {
     if (!apiHost) {
       // Demo mode: the page's demo answer stands in for the driver, asked what a connect asks.
       setTimeout(function () {
+        linked = true;
         if (props.el) sendCommand("_GET_PROPERTIES");
         if (options.onConnect) options.onConnect();
       }, 0);
@@ -325,7 +327,9 @@ var Kit = (function () {
     setTimeout(function () {
       if (!live) showLink(false);
     }, 10000);
-    if (options.poll) {
+    // One poll for the page's life: a socket that fails to load calls connectDriver again.
+    if (options.poll && !polling) {
+      polling = true;
       setInterval(function () {
         sendCommand(options.poll.command);
       }, options.poll.every);
@@ -534,12 +538,11 @@ var Kit = (function () {
   var props = { el: null, list: [], errors: {}, exclude: [] };
   var linked = false; // the driver's pushes are subscribed
 
-  // options.exclude names properties the page shows elsewhere, which the card leaves out.
   function initPropertiesCard(el, options) {
     props.el = el;
     if (options && options.exclude) props.exclude = options.exclude;
     // A card set up after the connect (a page that draws it with its first state) asks for itself.
-    if (!props.list.length && (linked || !apiHost)) askProperties();
+    if (!props.list.length && linked) askProperties();
     el.classList.add("kit-props");
     el.addEventListener("change", function (e) {
       var name = e.target.dataset.prop;

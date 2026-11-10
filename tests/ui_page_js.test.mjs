@@ -311,6 +311,20 @@ test("the live-link banner shows when no push comes within 10 s of a connect and
   assert.equal(link().hidden, true);
 });
 
+test("a socket that fails to load tries again, with still one poll", async () => {
+  const { Kit, ctx, timers } = load(ON_CONTROLLER);
+  ctx.io = undefined;
+  ctx.fetch = () => Promise.reject(new Error("unreachable"));
+  await Kit.connectDriver({ poll: { command: "P", every: 5000 } });
+  for (let i = 0; i < 4; i++) {
+    const retry = timers.find((t) => t.ms === 10000 && !t.ran && t.fn.toString().includes("connectDriver"));
+    retry.ran = true;
+    await retry.fn();
+    await settle();
+  }
+  assert.equal(timers.filter((t) => t.every).length, 1);
+});
+
 test("a poll sends its command on its timer", async () => {
   const { Kit, posts, timers } = load(ON_CONTROLLER);
   await Kit.connectDriver({ poll: { command: "_GET_STATE", every: 30000 } });

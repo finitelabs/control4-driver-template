@@ -254,12 +254,12 @@
     return list;
   }
 
-  // A help panel: options { toggle, panel, wrap, sections, mode, escapes }. Returns { open(state), isOpen(), render(mode) }.
   // An element option may also be a selector.
   function element(x) {
     return typeof x === "string" ? document.querySelector(x) : x;
   }
 
+  // A help panel: options { toggle, panel, wrap, sections, mode, escapes }. Returns { open(state), isOpen(), render(mode) }.
   function expressionHelp(options) {
     var toggle = element(options.toggle);
     var panel = element(options.panel);
@@ -345,6 +345,9 @@
 
   function expressionEditor(textarea, options) {
     options = options || {};
+    textarea = element(textarea);
+    if (options.preview) options.preview = element(options.preview);
+    if (options.watch) options.watch = element(options.watch);
     var mode = options.mode || "equation";
     var minHeight = options.minHeight || (options.singleLine ? 32 : 64);
     var prefix = "x" + ++made + "-";
@@ -359,9 +362,6 @@
     box.appendChild(textarea);
     textarea.setAttribute("spellcheck", "false");
 
-    textarea = element(textarea);
-    if (options.preview) options.preview = element(options.preview);
-    if (options.watch) options.watch = element(options.watch);
     var parts = options.preview ? previewParts(options.preview) : null;
     var help = options.help && options.help.panel ? expressionHelp({
       toggle: options.help.toggle,
