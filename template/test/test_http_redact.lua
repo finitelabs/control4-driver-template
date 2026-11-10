@@ -291,6 +291,10 @@ do
   out = redact("rtsp://viewer:p@ss_LEAK@192.0.2.20/live")
   T.check("a raw @ in the password masked whole", out == "rtsp://" .. REDACTED .. "@192.0.2.20/live", out)
 
+  -- "'" and "," may stand raw in a login, so stopping at either would print this password whole.
+  out = redact("rtsp://viewer:it's,ok_LEAK@192.0.2.20/live")
+  T.check("a raw ' or , in the password masked whole", out == "rtsp://" .. REDACTED .. "@192.0.2.20/live", out)
+
   out = redact("rtsp://viewer:CAM_PASS_LEAK@192.0.2.20/live?token=QUERY_TOKEN_LEAK&channel=1")
   T.check(
     "a query token still masked beside the login",
