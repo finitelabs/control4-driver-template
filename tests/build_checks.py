@@ -31,24 +31,43 @@ DISTRIBUTIONS = ["drivercentral", "oss"]
 DIAGNOSTICS = Path("src") / "lib" / "diagnostics.lua"
 UI_KIT = Path("src") / "lib" / "ui"
 UI_PAGE = EXAMPLE / "www" / "html" / "index.html"
+# A probe page that embeds the kit and each component the render ships.
 UI_PAGE_HTML = """<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
 <style>
-<!-- #embed ../../../../src/lib/ui/style.css -->
+{styles}
 </style>
 </head>
 <body>
 <div class="nav"><div class="nav-tab active" data-panel="status">Status</div></div>
 <div class="panel active" id="panel-status"></div>
 <script>
-<!-- #embed ../../../../src/lib/ui/page.js -->
+{scripts}
 Kit.initTabs();
 </script>
 </body>
 </html>
 """
+UI_FILES = ("style.css", "variables.css", "expressions.css", "page.js", "variables.js", "expressions.js")
+
+
+def kit_as_built(text, build):
+    """A kit file as a build ships it: its directive lines go, and a DriverCentral build drops what #ifndef
+    DRIVERCENTRAL holds (the dev login)."""
+    out, skip = [], False
+    for line in text.splitlines(keepends=True):
+        directive = line.strip()
+        if directive == "// #ifndef DRIVERCENTRAL":
+            skip = build == "drivercentral"
+            continue
+        if directive == "// #endif":
+            skip = False
+            continue
+        if not skip:
+            out.append(line)
+    return "".join(out)
 
 EXAMPLE_SECRET = "EXAMPLE_SECRET"
 EXAMPLE_SECRET_VALUE = "ci-secret-value"
@@ -341,11 +360,17 @@ def ui_page(render):
     if not (render / UI_KIT).is_dir():
         print("This render has no lib/ui.")
         return 0
-    kit = {name: (render / UI_KIT / name).read_text(encoding="utf-8") for name in ("style.css", "page.js")}
+    names = [name for name in UI_FILES if (render / UI_KIT / name).exists()]
+    kit = {name: (render / UI_KIT / name).read_text(encoding="utf-8") for name in names}
+    embed = "<!-- #embed ../../../../src/lib/ui/{} -->".format
+    html = UI_PAGE_HTML.format(
+        styles="\n".join(embed(n) for n in names if n.endswith(".css")),
+        scripts="\n".join(embed(n) for n in names if n.endswith(".js")),
+    )
     problems = []
     with restored(render, UI_PAGE):
         (render / UI_PAGE).parent.mkdir(parents=True, exist_ok=True)
-        (render / UI_PAGE).write_text(UI_PAGE_HTML, encoding="utf-8")
+        (render / UI_PAGE).write_text(html, encoding="utf-8")
         # The render's own page test finds the probe and resolves its embeds.
         run(["test/run_test.sh", "test_ui_pages.lua"], render)
         run(["make", "build-nodocs"], render)
@@ -360,9 +385,11 @@ def ui_page(render):
                 if re.search(r"^\s*<!--\s*#embed\s", page, re.MULTILINE):
                     problems.append(f"{c4z}'s page still holds an #embed line")
                 for name, text in kit.items():
-                    if text.strip() not in page:
+                    if kit_as_built(text, build).strip() not in page:
                         problems.append(f"{c4z}'s page does not hold {name} whole")
-    return report(problems, "A page that embeds lib/ui ships style.css and page.js inline in every distribution")
+                if (build == "drivercentral") == ("devLogin" in page):
+                    problems.append(f"{c4z}'s page has the dev login where it shouldn't, or lacks it where it should")
+    return report(problems, "A page that embeds lib/ui ships the kit and its components inline in every distribution, the dev login in OSS only")
 
 
 CHECKS = {

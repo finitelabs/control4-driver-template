@@ -57,9 +57,13 @@ render-lib-loads: ## Check every src/lib module in the render loads
 render-crypto: ## Check the render's c4_shim resolves its FFI crypto backend
 	"$(RENDER)/test/run_test.sh" "$(CURDIR)/tests/ffi_crypto_backend.lua"
 
-render-ui-js: ## Check the render's lib/ui/page.js under Node, where the render has one
+render-ui-js: ## Check the render's lib/ui scripts under Node, each one the render ships
 	@if [ -f "$(RENDER)/src/lib/ui/page.js" ]; then \
-		UI_PAGE_JS="$(RENDER)/src/lib/ui/page.js" node --test tests/ui_page_js.test.mjs; \
+		for kit in page variables expressions; do \
+			if [ -f "$(RENDER)/src/lib/ui/$$kit.js" ]; then \
+				UI_DIR="$(RENDER)/src/lib/ui" node --test "tests/ui_$${kit}_js.test.mjs" || exit 1; \
+			fi; \
+		done; \
 	else echo "This render has no lib/ui."; fi
 
 RENDER_LEG := render render-snapshot render-lib-loads render-crypto render-ui-js in-render-test

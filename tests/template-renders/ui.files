@@ -36,10 +36,14 @@ src/lib/lru.lua
 src/lib/persist.lua
 src/lib/redact.lua
 src/lib/support-code.lua
+src/lib/ui/devices.lua
 src/lib/ui/page-params.lua
 src/lib/ui/page.js
+src/lib/ui/page.lua
 src/lib/ui/style.css
 src/lib/ui/tab-properties.lua
+src/lib/ui/variables.css
+src/lib/ui/variables.js
 src/lib/update-settings.lua
 src/lib/utils.lua
 src/lib/values.lua
@@ -75,6 +79,7 @@ test/test_secret_sends_trace.lua
 test/test_sensor_params.lua
 test/test_shim_bindings.lua
 test/test_support_code.lua
+test/test_ui_devices.lua
 test/test_ui_page_params.lua
 test/test_ui_pages.lua
 test/test_ui_tab_properties.lua
