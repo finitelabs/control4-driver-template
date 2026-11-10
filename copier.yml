@@ -38,6 +38,12 @@ _exclude:
   - "{% if 'ui' not in vendor_modules.split() %}test/test_ui_tab_properties.lua{% endif %}"
   - "{% if 'ui' not in vendor_modules.split() %}test/test_ui_page_params.lua{% endif %}"
   - "{% if 'ui' not in vendor_modules.split() %}test/test_ui_pages.lua{% endif %}"
+  - "{% if 'ui' not in vendor_modules.split() %}test/test_ui_devices.lua{% endif %}"
+  - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}src/lib/ui/expressions.js{% endif %}"
+  - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}src/lib/ui/expressions.css{% endif %}"
+  - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}src/lib/ui/expressions-demo.js{% endif %}"
+  - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}src/lib/ui/expression-tab.lua{% endif %}"
+  - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}test/test_ui_expression_tab.lua{% endif %}"
   - "{% if not cloud_diagnostics %}src/lib/diagnostics.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_reporting.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_scrub.lua{% endif %}"
@@ -85,7 +91,7 @@ icon_style:
 
 vendor_modules:
   type: str
-  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: lib.ui.tab-properties, lib.ui.page-params, and style.css and page.js for a page to embed."
+  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: the house style.css and page.js for a page to embed, the variable browser (variables.js and .css, lib.ui.devices), with expressions the expression editor (expressions.js and .css, lib.ui.expression-tab), and the driver side (lib.ui.page, lib.ui.page-params, lib.ui.tab-properties)."
   default: ""
 
 cloud_diagnostics:
