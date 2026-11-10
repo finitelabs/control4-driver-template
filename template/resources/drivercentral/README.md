@@ -12,7 +12,29 @@ Marketing images for the driver's DriverCentral listing. Each banner and photo i
 
 `assets/` holds what the pages share: the Finite Labs logo, `scene.js`, which draws the banners' art, and the brand's logo as `brand-mark.png`.
 
-`description.md` is the listing's description. It starts from the docs' Overview and Features, written to sell the driver rather than document it. `make build` turns it into `dist/drivercentral/description.html`, with `##` as the editor's section headings, for pasting into the listing. Its first image is the facts strip: upload the PNG through the description editor and put the URL it gives in the `src`. A GitHub URL won't load from a private repo. The Revisions tab comes from the build too, as `dist/drivercentral/revisions.html`.
+`description.md` is the listing's description, written as below. `make build` turns it into `dist/drivercentral/description.html`, with `##` as the editor's section headings, for pasting into the listing. The Revisions tab comes from the build too, as `dist/drivercentral/revisions.html`.
+
+## Writing the description
+
+The description is the product page an integrator reads before buying: say what the driver does, what they need, and why it is worth having, in plain words.
+
+Read our live listings first and match their voice and shape. Each repo's `resources/drivercentral/description.md` holds the same text.
+
+- ESPHome: a supported-devices table and a supported-features table that fit on a page.
+- Home Connect for Apple Home: the setup it needs explained up front, with a list of what it brings into Apple Home.
+- Zigbee 3.0: a beta warning box, a short section per included driver, and a pointer to the Supported Devices list in Downloads where the device list is too long for the page.
+- MQTT: the plain minimum, an Overview, Features and System requirements.
+
+Write it from the driver docs (Overview, Features, System Requirements, Compatibility), each `driver.xml` for the minimum OS, and `CHANGELOG.md` for what the coming release adds. State only what the code on main does, and check every claim against it.
+
+1. The facts strip image first, in a plain paragraph. Upload `banners/facts-strip-2400x136.png` through the description editor and put the URL it gives in the `src`, at width 1200 and height 68. A GitHub URL won't load from a private repo.
+2. `## Overview`: one or two short paragraphs on what it controls, how it connects (local or cloud, hub or none), and what the integrator gets in Control4. Lead with the outcome.
+3. `## Features`: 6 to 8 bullets, most valuable first, each a capability in integrator terms: what shows up in Control4 and what they can program.
+4. `## System requirements`: the minimum Control4 OS from `driver.xml` (per driver when they differ), plus accounts, hardware, firmware and network.
+5. `## Compatibility`, when it helps: supported devices or features as a short list or table if it fits on a page. If the list is long, say how broad it is in words and point to the Supported Devices list in Downloads.
+6. Anything else that sells it: a `###` section of a line or two per included companion driver, what sets it apart (fully local, no extra hub, sign-in on the vendor's own page), and a beta warning box while the driver is in beta.
+
+No counts that go stale ("thousands of devices", not a number). No "such as", "e.g." or "for example" asides. No hype words (fast, reliable, seamless, powerful) or AI-speak, and no em dashes. No internals (protocols, ports, APIs) unless the integrator has to act on them. Known issues get one line each or stay in the docs. American spelling, and "Control4 programming", never "scripts".
 
 ## Making the set
 
