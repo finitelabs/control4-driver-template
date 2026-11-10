@@ -2,6 +2,8 @@
 
 ## Overview
 
+*This software is neither affiliated with nor endorsed by Control4.*
+
 What the driver does, in a sentence or two.
 
 ## Features
