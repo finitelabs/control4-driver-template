@@ -245,6 +245,18 @@ test("the properties card asks the driver for its properties on each connect, an
   assert.deepEqual(commands(posts), ["_GET_PROPERTIES", "_GET_PROPERTIES"]);
 });
 
+test("a properties card set up after the connect asks for its list itself", async () => {
+  const { Kit, posts, socket, timers } = load(ON_CONTROLLER);
+  await Kit.connectDriver({});
+  socket.handlers.connect();
+  await settle();
+  assert.deepEqual(commands(posts), [], "no card yet, nothing asked");
+  Kit.initPropertiesCard(element("div"));
+  timers.filter((t) => t.ms === 300).forEach((t) => t.fn());
+  await settle();
+  assert.deepEqual(commands(posts), ["_GET_PROPERTIES"]);
+});
+
 test("call resolves with its answer push, with null when none comes in time, and with the refusal an ERROR push carries", async () => {
   const { Kit, posts, socket, timers } = load(ON_CONTROLLER);
   await Kit.connectDriver({});
@@ -321,7 +333,8 @@ test("with the hash option the open tab is kept in the address, its detail too, 
   Kit.initTabs((name, detail) => switched.push([name, detail]), { hash: true });
   assert.deepEqual(switched, [["measurements", "energy"]], "the address opens its tab and detail");
   Kit.switchTab("status");
-  assert.equal(ctx.location.hash, "#status", "a switch is written to the address; the hashchange shows it");
+  assert.equal(ctx.location.hash, "#status", "a switch is written to the address");
+  assert.deepEqual(switched.at(-1), ["status", ""], "and shown at once");
   Kit.setDetail("solar");
   assert.equal(ctx.location.hash, "#status/solar");
   Kit.setTabs([["device", "Device"], ["exposes", "Exposes"]], "device");

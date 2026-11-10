@@ -356,6 +356,7 @@ var Kit = (function () {
         live = false;
         subscribe(driverId, "properties", mine, onProperty);
         subscribe(driverId, "datatoui", mine, onData, function () {
+          linked = true;
           if (props.el) sendCommand("_GET_PROPERTIES");
           if (options.onConnect) options.onConnect();
         });
@@ -366,6 +367,7 @@ var Kit = (function () {
       sock.on("disconnect", function () {
         round++;
         live = false;
+        linked = false;
         showLink(false);
       });
     } catch (e) {
@@ -461,9 +463,10 @@ var Kit = (function () {
     if (!hashTabs) return;
     var open = hashTab();
     if (open.name && tabExists(open.name)) show(open.name, open.detail);
+    // Back, forward or an edited address; a switch's own change is already shown.
     window.addEventListener("hashchange", function () {
       var now = hashTab();
-      if (now.name && tabExists(now.name)) show(now.name, now.detail);
+      if (now.name && tabExists(now.name) && (now.name !== shown.name || now.detail !== shown.detail)) show(now.name, now.detail);
     });
   }
 
@@ -483,7 +486,10 @@ var Kit = (function () {
     return !!document.querySelector('.nav-tab[data-panel="' + name + '"]') || !!document.getElementById("panel-" + name);
   }
 
+  var shown = { name: null, detail: "" };
+
   function show(name, detail) {
+    shown = { name: name, detail: detail || "" };
     document.querySelectorAll(".nav-tab").forEach(function (t) {
       t.classList.toggle("active", t.dataset.panel === name);
     });
@@ -499,10 +505,7 @@ var Kit = (function () {
   function switchTab(name, detail) {
     if (hashTabs) {
       var want = "#" + name + (detail ? "/" + detail : "");
-      if (location.hash !== want) {
-        location.hash = want; // the hashchange shows it
-        return;
-      }
+      if (location.hash !== want) location.hash = want;
     }
     show(name, detail);
   }
@@ -510,8 +513,10 @@ var Kit = (function () {
   // Changes only the open tab's detail in the address, without a switch.
   function setDetail(detail) {
     if (!hashTabs) return;
-    var name = hashTab().name || (document.querySelector(".nav-tab.active") || { dataset: {} }).dataset.panel;
-    if (name) history.replaceState(null, "", "#" + name + (detail ? "/" + detail : ""));
+    var name = shown.name || hashTab().name;
+    if (!name) return;
+    shown.detail = detail || "";
+    history.replaceState(null, "", "#" + name + (detail ? "/" + detail : ""));
   }
 
   // The properties card: a page gives it an element inside a card, and the card hides until there is something to
@@ -519,9 +524,12 @@ var Kit = (function () {
   // a refusal (PROPERTY_ERROR) shows under its field, and a change made in Composer redraws the card at once. A page that redraws the
   // card's element calls initPropertiesCard again with the new one.
   var props = { el: null, list: [], errors: {} };
+  var linked = false; // the driver's pushes are subscribed
 
   function initPropertiesCard(el) {
     props.el = el;
+    // A card set up after the connect (a page that draws it with its first state) asks for itself.
+    if (!props.list.length && (linked || !apiHost)) askProperties();
     el.classList.add("kit-props");
     el.addEventListener("change", function (e) {
       var name = e.target.dataset.prop;
