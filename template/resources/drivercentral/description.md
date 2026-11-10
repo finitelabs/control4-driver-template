@@ -2,7 +2,7 @@
 
 ## Overview
 
-{{ project_description }}
+What the driver does, in a sentence or two.
 
 ## Features
 
