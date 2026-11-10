@@ -1,0 +1,204 @@
+<devicedata>
+  <name>Example Light</name>
+  <version/>
+  <manufacturer>Finite Labs</manufacturer>
+  <model>Example Light</model>
+  <creator>Finite Labs</creator>
+  <control>lua_gen</control>
+  <driver>DriverWorks</driver>
+  <copyright>Copyright 2026 Finite Labs, LLC. All rights reserved.</copyright>
+  <created>01/01/2026 12:00:00 PM</created>
+  <modified/>
+  <minimum_os_version>3.3.0</minimum_os_version>
+  <composer_categories>
+    <category>Lighting</category>
+  </composer_categories>
+  <conditionals/>
+  <events/>
+  <config>
+    <script file="driver.lua" jit="1"/>
+    <documentation file="www/documentation/index.html"/>
+    <properties>
+      <!-- #ifdef DRIVERCENTRAL -->
+      <property>
+        <name>Cloud Settings</name>
+        <type>LABEL</type>
+        <default>Cloud Settings</default>
+      </property>
+      <property>
+        <name>Cloud Status</name>
+        <default/>
+        <type>STRING</type>
+        <readonly>true</readonly>
+      </property>
+      <property>
+        <name>Automatic Updates</name>
+        <type>LIST</type>
+        <items>
+          <item>Off</item>
+          <item>On</item>
+        </items>
+        <default>On</default>
+      </property>
+      <!-- #endif -->
+      <property>
+        <name>Driver Settings</name>
+        <type>LABEL</type>
+        <default>Driver Settings</default>
+      </property>
+      <property>
+        <name>Driver Status</name>
+        <type>STRING</type>
+        <default/>
+        <readonly>true</readonly>
+      </property>
+      <property>
+        <name>Driver Version</name>
+        <type>STRING</type>
+        <default/>
+        <readonly>true</readonly>
+      </property>
+      <property>
+        <name>Log Level</name>
+        <type>DYNAMIC_LIST</type>
+        <default>3 - Info</default>
+      </property>
+      <property>
+        <name>Log Mode</name>
+        <type>LIST</type>
+        <default>Off</default>
+        <items>
+          <item>Off</item>
+          <item>Print</item>
+          <item>Log</item>
+          <item>Print and Log</item>
+        </items>
+      </property>
+      <!-- #ifdef DRIVERCENTRAL -->
+      <property>
+        <name>Support Code</name>
+        <type>STRING</type>
+        <default/>
+        <description>Enter only a code from Finite Labs support. It opens the Lua window for an hour.</description>
+        <password>true</password>
+      </property>
+      <!-- #endif -->
+    </properties>
+    <commands/>
+    <actions/>
+  </config>
+  <!-- The static block lib.light relies on: Composer's test panel reads the dimming tier from the
+       static list as well as the dynamic one, and the rest is "Dynamic Capability: No". -->
+  <capabilities>
+    <dimmer>True</dimmer>
+    <set_level>True</set_level>
+    <supports_target>True</supports_target>
+    <supports_brightness_stop>True</supports_brightness_stop>
+    <on_off>True</on_off>
+    <ramp_level>True</ramp_level>
+    <supports_default_on>True</supports_default_on>
+    <has_fixed_ramp_rate>False</has_fixed_ramp_rate>
+    <fixed_ramp_rate>0</fixed_ramp_rate>
+    <hide_proxy_properties>False</hide_proxy_properties>
+    <hide_proxy_events>False</hide_proxy_events>
+    <click_rates>True</click_rates>
+    <hold_rates>True</hold_rates>
+    <cold_start>False</cold_start>
+    <has_leds>False</has_leds>
+    <has_button_events>True</has_button_events>
+    <supports_broadcast_scenes>False</supports_broadcast_scenes>
+    <supports_multichannel_scenes>False</supports_multichannel_scenes>
+    <reduced_als_support>False</reduced_als_support>
+    <advanced_scene_support>True</advanced_scene_support>
+    <load_group_support>False</load_group_support>
+    <brightness_on_mode_preset>True</brightness_on_mode_preset>
+    <brightness_on_mode_previous>True</brightness_on_mode_previous>
+    <color_on_mode_fade>True</color_on_mode_fade>
+    <color_on_mode_preset>True</color_on_mode_preset>
+    <color_on_mode_previous>True</color_on_mode_previous>
+    <multi_click>False</multi_click>
+    <has_extras>False</has_extras>
+    <disable_flash>False</disable_flash>
+    <brightness_rate_min>0</brightness_rate_min>
+    <brightness_rate_max>65535</brightness_rate_max>
+    <brightness_rate_default>0</brightness_rate_default>
+    <click_rate_min>0</click_rate_min>
+    <click_rate_max>65535</click_rate_max>
+    <hold_rate_min>1000</hold_rate_min>
+    <hold_rate_max>86400000</hold_rate_max>
+    <supports_color>False</supports_color>
+    <supports_color_correlated_temperature>False</supports_color_correlated_temperature>
+    <supports_color_stop>False</supports_color_stop>
+    <color_correlated_temperature_min>2000</color_correlated_temperature_min>
+    <color_correlated_temperature_max>6500</color_correlated_temperature_max>
+    <color_rate_behavior>1</color_rate_behavior>
+    <color_rate_min>0</color_rate_min>
+    <color_rate_max>65535</color_rate_max>
+    <color_rate_default>0</color_rate_default>
+  </capabilities>
+  <proxies>
+    <proxy proxybindingid="5001" primary="True" name="Example Light">light_v2</proxy>
+  </proxies>
+  <connections>
+    <connection>
+      <id>300</id>
+      <facing>6</facing>
+      <connectionname>On Button Link</connectionname>
+      <type>1</type>
+      <consumer>False</consumer>
+      <audiosource>False</audiosource>
+      <videosource>False</videosource>
+      <linelevel>True</linelevel>
+      <classes>
+        <class>
+          <classname>BUTTON_LINK</classname>
+        </class>
+      </classes>
+    </connection>
+    <connection>
+      <id>301</id>
+      <facing>6</facing>
+      <connectionname>Toggle Button Link</connectionname>
+      <type>1</type>
+      <consumer>False</consumer>
+      <audiosource>False</audiosource>
+      <videosource>False</videosource>
+      <linelevel>True</linelevel>
+      <classes>
+        <class>
+          <classname>BUTTON_LINK</classname>
+        </class>
+      </classes>
+    </connection>
+    <connection>
+      <id>302</id>
+      <facing>6</facing>
+      <connectionname>Off Button Link</connectionname>
+      <type>1</type>
+      <consumer>False</consumer>
+      <audiosource>False</audiosource>
+      <videosource>False</videosource>
+      <linelevel>True</linelevel>
+      <classes>
+        <class>
+          <classname>BUTTON_LINK</classname>
+        </class>
+      </classes>
+    </connection>
+    <connection>
+      <id>5001</id>
+      <facing>6</facing>
+      <connectionname>Light</connectionname>
+      <type>2</type>
+      <consumer>False</consumer>
+      <audiosource>False</audiosource>
+      <videosource>False</videosource>
+      <linelevel>False</linelevel>
+      <classes>
+        <class>
+          <classname>LIGHT_V2</classname>
+        </class>
+      </classes>
+    </connection>
+  </connections>
+</devicedata>

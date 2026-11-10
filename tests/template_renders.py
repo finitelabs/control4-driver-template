@@ -28,6 +28,8 @@ import yaml
 
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_DRIVERS = ROOT / "example-driver" / "drivers"
+# example_light is an adapter over lib.light, so only a render with the light token gets it.
+EXAMPLE_LIGHT_DRIVERS = ROOT / "example-driver" / "light" / "drivers"
 RENDERS = ROOT / "tests" / "template-renders"
 INVALID = RENDERS / "invalid"
 FIXTURES = RENDERS / "fixtures.yml"
@@ -73,6 +75,8 @@ def add_example(name, directory):
     """A render has no driver to build; example-driver/, outside template/ so never rendered, is one."""
     drivers = Path(directory) / "drivers"
     shutil.copytree(EXAMPLE_DRIVERS, drivers)
+    if "light" in str(answers(RENDERS / f"{name}.yml").get("vendor_modules", "")).split():
+        shutil.copytree(EXAMPLE_LIGHT_DRIVERS, drivers, dirs_exist_ok=True)
     variants = RENDERS / f"{name}.example-variants.json"
     if variants.exists():
         shutil.copy(variants, drivers / "example" / "variants.json")
@@ -160,12 +164,19 @@ def check_upload_retention(data, directory):
 
 def check_contributing(data, directory):
     text = (Path(directory) / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    problems = []
     has = "\n### Cloud Monitoring\n" in text
     if has != bool(data.get("cloud_diagnostics")):
-        return [
+        problems.append(
             f"CONTRIBUTING.md's Cloud Monitoring section is {'there' if has else 'missing'} with cloud_diagnostics {data.get('cloud_diagnostics', False)}"
-        ]
-    return []
+        )
+    light = "light" in str(data.get("vendor_modules", "")).split()
+    has = "\n## Writing a Light Driver\n" in text
+    if has != light:
+        problems.append(
+            f"CONTRIBUTING.md's Writing a Light Driver section is {'there' if has else 'missing'} with the light token {'on' if light else 'off'}"
+        )
+    return problems
 
 
 def check_build_secrets(data, directory):

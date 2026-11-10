@@ -44,6 +44,11 @@ NAME=<name>` the build leg, rendered into a temp folder (`RENDER=` to move it).
 Each step is a target of its own, which `make help` lists; the build leg's
 checks are `tests/build_checks.py`.
 
+A render's `make test` runs the Light V2 fuzzer's first 300 seeded runs, as a
+light repo's CI does. The render leg's `render-light-fuzz` runs it long, 20,000
+runs from seed 1. Before a library change, run other seeds too, one job each:
+`make render-light-fuzz NAME=light LIGHT_FUZZ_SEED=<n>`.
+
 ## Rendering, and the default that lies
 
 ```bash
@@ -98,7 +103,14 @@ opts into, like crypto, and gating it keeps a render from conflicting with
 Essentials' own `src/lib/expressions.lua` at its next update. `ui` gates
 `src/lib/ui/`, the kit for a custom Composer tab, and its three tests, so the
 repos without a tab carry neither its page files nor tests that prove nothing
-there. A page splices `style.css` and `page.js` in with `#embed` at build time.
+there. `light` gates the Light V2 library (`src/lib/light.lua`, `src/lib/light/`),
+its test kit (`test/light_harness.lua`, `test/light_setup/`) and its suites
+(`test/test_light_proxy.lua`, `test/test_light_fuzz.lua`), so a light repo's
+`make test` runs them and the other repos carry none of it. Gating a module its
+siblings call would leave them calling a module the render dropped; `lib.light`
+is safe to gate because it is a leaf. It requires only modules that always
+render, and the renders without the token prove nothing that always renders
+requires it. A page splices `style.css` and `page.js` in with `#embed` at build time.
 There is no other module-to-module gating: every other `src/lib/*.lua` renders unconditionally, and
 `gen-squishy` bundles only what a driver actually requires, so a rendered-but-unused
 module is zero bytes in the `.c4z`. A new `src/lib` file needs no `_exclude` entry.

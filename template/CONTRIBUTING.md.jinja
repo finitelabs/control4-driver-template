@@ -72,6 +72,10 @@ then pull the change in with `copier update`.
 - `ui/`: the kit for a custom Composer tab (see
   [Custom Composer Tabs](#custom-composer-tabs))
 {%- endif %}
+{%- if 'light' in vendor_modules.split() %}
+- `light.lua` and `light/`: the Light V2 library, which a light driver is an
+  adapter over (see [Writing a Light Driver](#writing-a-light-driver))
+{%- endif %}
 - `github-updater.lua`: GitHub Releases self-updater (OSS builds)
 
 **Vendor libraries (`vendor/`):**
@@ -125,6 +129,9 @@ then pull the change in with `copier update`.
 - `requirements.txt`, the build-time Python dependency list
 - `test/testlib.lua`, `test/c4_fixtures.lua`, `test/c4_shim.lua`,
   `test/run_test.sh`, and the `test/test_*.lua` suites covering shared code
+{%- if 'light' in vendor_modules.split() %}
+- `test/light_harness.lua` and `test/light_setup/`, the Light V2 test kit
+{%- endif %}
 - `.copier-answers.yml`, which Copier maintains; never edit it by hand
 
 ### What's Driver-Specific (Yours to Edit)
@@ -420,6 +427,10 @@ runs `fn` with `print` collected and returns `ok, err, output`, and
 - `F.dofileBuild(path, build)` runs a Lua file as the `"drivercentral"` or
   `"oss"` build compiles it, with its `#ifdef` blocks applied. A driver loaded
   raw runs every arm.
+- `F.virtualClock(opts)` runs `C4:SetTimer` and `C4:GetTime` on a virtual clock,
+  so a test plays minutes of timers at once and in a fixed order. Drive it with
+  `run(ms)` and `at(ms, fn)`, read `now()` and `errors` (what a timer or promise
+  callback threw), then `restore()`.
 
 ### Persisted values
 
@@ -455,6 +466,28 @@ it. Neither runner needs telling about them: `make test` collects only
 resolves on its own.
 
 Promote either one into the template only once a second driver needs it.
+{%- if 'light' in vendor_modules.split() %}
+
+## Writing a Light Driver
+
+`src/lib/light.lua` owns the Light V2 proxy: its commands and notifications,
+presets, on modes, Dim-To-Warm, scenes, and the button links with their LEDs. A
+light driver is an adapter that puts the library's device commands on its
+transport and reports what the device says. The LuaDoc header of
+`src/lib/light.lua` is the contract: what the adapter writes, what it calls, and
+what it must never do.
+
+`test/light_harness.lua` is the kit that proves an adapter against it: a fake
+proxy, a reference device, and a contract run that the driver's own
+`test/test_light_adapter.lua` calls with its real adapter over a fake of its
+transport. Each check of the run is a case of its own: one that raises fails by
+name, and the run goes on.
+
+The library, the kit and their suites are the template's: a change made to them
+here is merge surface on every `copier update`, so it goes to the template,
+which runs `test/test_light_fuzz.lua` big before it. `make test` runs a few
+seconds of its seeded runs, from one fixed seed.
+{%- endif %}
 
 ### Tools tests
 
