@@ -16,25 +16,30 @@ Marketing images for the driver's DriverCentral listing. Each banner and photo i
 
 ## Writing the description
 
-The description is the product page an integrator reads before buying: say what the driver does, what they need, and why it is worth having, in plain words.
+The description is the product page an integrator reads before buying. Say what the driver does, what they need and why it is worth having, in plain words. Some drivers have more to say than others, and every one should read well.
 
-Read our live listings first and take their shape: the sections, and what goes in each. Take the wording from the rules below, where an older listing doesn't follow them.
+Read our live listings first and take their shape, the sections and what goes in each. Where an older listing breaks the rules below, follow the rules.
 
-- ESPHome: a supported-devices table and a supported-features table that fit on a page.
-- Home Connect for Apple Home: the setup it needs explained up front, with a list of what it brings into Apple Home.
-- Zigbee 3.0: a beta warning box, a short section per included driver, and a pointer to the Supported Devices list in Downloads where the device list is too long for the page.
-- MQTT: the plain minimum, an Overview, Features and System requirements.
+- ESPHome has a supported-devices table and a supported-features table that fit on a page.
+- Home Connect for Apple Home explains the setup it needs up front and lists what it brings into Apple Home.
+- Zigbee 3.0 has a beta warning box, a short section for each included driver, and a pointer to the Supported Devices list in Downloads, since its device list is too long for the page.
+- MQTT is the plain minimum.
 
 Write it from the driver docs (Overview, Features, System Requirements, Compatibility), each `driver.xml` for the minimum OS, and `CHANGELOG.md` for what the coming release adds. State only what the code on main does, and check every claim against it.
 
-1. The facts strip image first, in a plain paragraph. Upload `banners/facts-strip-2400x136.png` through the description editor and put the URL it gives in the `src`, at width 1200 and height 68. A GitHub URL won't load from a private repo.
-2. `## Overview`: one or two short paragraphs on what it controls, how it connects (local or cloud, hub or none), and what the integrator gets in Control4. Lead with the outcome.
-3. `## Features`: 6 to 8 bullets, most valuable first, each a capability in integrator terms: what shows up in Control4 and what they can program.
-4. `## System requirements`: the minimum Control4 OS from `driver.xml` (per driver when they differ), plus accounts, hardware, firmware and network.
-5. `## Compatibility`, when it helps: supported devices or features as a short list or table if it fits on a page. If the list is long, say how broad it is in words and point to the Supported Devices list in Downloads.
-6. Anything else that sells it: a `###` section of a line or two per included companion driver, what sets it apart (fully local, no extra hub, sign-in on the vendor's own page), and a beta warning box while the driver is in beta.
+The sections come in this order, with the same headings in every listing.
 
-No counts that go stale ("thousands of devices", not a number). No "such as", "e.g." or "for example" asides. No hype words (fast, reliable, seamless, powerful) or AI-speak, and no em dashes. No internals (protocols, ports, APIs) unless the integrator has to act on them. Known issues get one line each or stay in the docs. American spelling, and "Control4 programming", never "scripts".
+1. The facts strip image, in a plain paragraph. Upload `banners/facts-strip-2400x136.png` through the description editor and put the URL it gives in the `src`, at width 1200 and height 68. A GitHub URL won't load from a private repo. A beta driver's warning box follows it.
+2. `## Overview` opens with the README's disclaimer in italics, with no "Disclaimer" label. One or two short paragraphs follow, on what it controls, how it connects (local or cloud, hub or none), and what the integrator gets in Control4. Lead with the outcome.
+3. `## Features` has 6 to 8 bullets, most valuable first, each a capability in integrator terms.
+4. `## Included drivers` has a `###` section of a line or two for each driver, when the product has more than one.
+5. `## System requirements` lists the minimum Control4 OS from `driver.xml` (per driver when they differ), plus accounts, hardware, firmware and network.
+6. `## Compatibility` comes when there is something to say. Several models or features go in a short list or table, and one or two read better as a sentence. If the list is too long for the page, say how broad it is and point to the Supported Devices list in Downloads.
+7. `## Coming in future updates` and `## Known issues` appear only while the driver is in beta.
+
+Say what sets the driver apart (fully local, no extra hub, sign-in on the vendor's own page) in the Overview or Features. When something is missing because the vendor's API or cloud doesn't offer it, say so, so it reads as their limit and not ours.
+
+No counts that go stale ("thousands of devices", not a number). No "such as", "e.g." or "for example" asides. No colon inside a sentence that sets up a list or an explanation; write two sentences instead, and introduce a list or table with a full sentence. No hype words (fast, reliable, seamless, powerful) or AI-speak, and no em dashes. No internals (protocols, ports, APIs) unless the integrator has to act on them. Known issues get one line each. American spelling, and "Control4 programming", never "scripts".
 
 ## Making the set
 
