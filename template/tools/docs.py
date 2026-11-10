@@ -396,7 +396,9 @@ def _drivercentral_html(md: str) -> str:
     html = MarkdownIt("commonmark").enable("table").render(md)
     html = re.sub(r"\n(?!<|\Z)", " ", html)
     # The border DriverCentral's editor gives a table; its stylesheet draws none.
-    html = html.replace("<table>", '<table style="border-style:solid;border-color:#000000;">')
+    html = html.replace(
+        "<table>", '<table style="border-style:solid;border-color:#000000;">'
+    )
     # A link into the docs has nothing to point at on DriverCentral.
     return re.sub(r'<a href="(?![a-z]+:)[^"]*">(.*?)</a>', r"\1", html)
 
