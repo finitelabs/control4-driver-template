@@ -143,7 +143,7 @@ function load(search) {
       const b = JSON.parse(p.opts.body);
       return { command: b.command, params: JSON.parse(decodeURIComponent(escape(atob(b.tParams.DATA.replace(/\n/g, ""))))) };
     });
-  return { Kit: ctx.Kit, body, flush, sent, timers: () => timers };
+  return { Kit: ctx.Kit, ctx, body, flush, sent, timers: () => timers };
 }
 
 const LIVE = "?apihost=ctrl.example.invalid&driverid=42&apitoken=tok";
@@ -372,6 +372,19 @@ test("insert puts text at the cursor as the integrator's own edit", () => {
   editor.textarea.selectionEnd = 3;
   editor.insert("floor");
   assert.equal(editor.value(), "floor(PARAM{5,6} - 1)", "a selection is replaced");
+});
+
+test("an element option may be a selector", () => {
+  const { Kit, body, ctx } = load("");
+  const toggle = new Element("button");
+  const panel = new Element("div");
+  const row = new Element("div");
+  const named = { "#t": toggle, "#p": panel, "#row": row };
+  ctx.document.querySelector = (sel) => named[sel] ?? null;
+  Kit.expressionEditor(field(body), { mode: "condition", help: { toggle: "#t", panel: "#p", wrap: "#row" } });
+  assert.equal(row.hidden, true);
+  toggle.fire("click");
+  assert.equal(row.hidden, false, "the row a selector names shows and hides with the help");
 });
 
 test("the help follows the mode, takes a page's own sections, and opens from its toggle", () => {

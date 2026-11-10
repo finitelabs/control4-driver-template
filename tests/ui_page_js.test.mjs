@@ -274,6 +274,21 @@ test("call resolves with its answer push, with null when none comes in time, and
   assert.deepEqual(plain(await refused), { error: "Full" });
 });
 
+test("a call the controller does not take answers at once with why, not when the wait runs out", async () => {
+  const { Kit, ctx } = load(ON_CONTROLLER);
+  ctx.fetch = () => Promise.reject(new Error("refused"));
+  assert.deepEqual(plain(await Kit.call("_SAVE", {}, "SAVED", 5000)), { error: "the controller didn't take the command" });
+});
+
+test("the properties card leaves out the properties a page shows elsewhere", () => {
+  const { Kit } = load(ON_CONTROLLER);
+  const card = element("div");
+  Kit.initPropertiesCard(card, { exclude: ["Look Control"] });
+  Kit.deliver("PROPERTIES", { properties: [{ name: "Look Control", value: "Manual" }, { name: "Mode", value: "Off" }] });
+  assert.doesNotMatch(card.innerHTML, /Look Control/);
+  assert.match(card.innerHTML, /data-prop="Mode"/);
+});
+
 test("the live-link banner shows when no push comes within 10 s of a connect and on a drop, and the next push clears it", async () => {
   const { Kit, socket, timers, body } = load(ON_CONTROLLER);
   await Kit.connectDriver({});
