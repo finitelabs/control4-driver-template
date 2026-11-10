@@ -12,7 +12,7 @@ Marketing images for the driver's DriverCentral listing. Each banner and photo i
 
 `assets/` holds what the pages share: the Finite Labs logo, `scene.js`, which draws the banners' art, and the brand's logo as `brand-mark.png`.
 
-`description.md` is the listing's description, written as below. `make build` turns it into `dist/drivercentral/description.html`, with `##` as the editor's section headings, for pasting into the listing. The Revisions tab comes from the build too, as `dist/drivercentral/revisions.html`.
+`description.md` is the listing's description, written as below. `make build` turns it into `dist/drivercentral/listing/description.html`, with `##` as the editor's section headings, for pasting into the listing. The Revisions tab comes from the build too, as `listing/revisions.html`, and the build copies the product card, banners and listing photos beside them. A tag build's drivercentral artifact holds the whole upload.
 
 ## Writing the description
 
