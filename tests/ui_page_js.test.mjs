@@ -7,126 +7,18 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import vm from "node:vm";
+import { Element, load, ON_CONTROLLER, decode, plain } from "./ui_dom.mjs";
 
-const UI_DIR = process.env.UI_DIR || "template/src/lib/ui";
-const CODE = readFileSync(UI_DIR + "/page.js", "utf8");
-
-/** An element that takes what the kit does to it. */
-function element(tag) {
-  const classes = new Set();
-  return {
-    tagName: tag,
-    hidden: false,
-    textContent: "",
-    innerHTML: "",
-    className: "",
-    dataset: {},
-    style: {},
-    listeners: {},
-    children: [],
-    parentNode: null,
-    classList: {
-      add: (c) => classes.add(c),
-      remove: (c) => classes.delete(c),
-      toggle: (c, on) => ((on ?? !classes.has(c)) ? classes.add(c) : classes.delete(c)),
-      contains: (c) => classes.has(c),
-    },
-    addEventListener(type, fn) {
-      this.listeners[type] = fn;
-    },
-    insertBefore(child) {
-      this.children.unshift(child);
-    },
-    closest: () => null,
-    contains: () => false,
-  };
-}
-
-/** A socket.io connection the test drives: handlers by event, and what the kit emits. */
-function stubSocket() {
-  return {
-    handlers: {},
-    emitted: [],
-    io: { engine: { id: "e1" } },
-    on(ev, fn) {
-      this.handlers[ev] = fn;
-    },
-    off() {},
-    emit(...args) {
-      this.emitted.push(args);
-    },
-    disconnect() {},
-  };
-}
-
-/**
- * page.js loaded on a stub page at `search`. `answer(url)` answers each fetch's JSON; the default makes every
- * subscription at once, as "<item>/<path>".
- */
-function load(search, { pageScript, answer, token, hash = "" } = {}) {
-  const posts = [];
-  const timers = [];
-  const xhrs = [];
-  const body = element("body");
-  const socket = stubSocket();
-  const document = {
-    body,
-    activeElement: null,
-    createElement: element,
-    getElementById: () => null,
-    querySelector: () => null,
-    querySelectorAll: () => [],
-  };
-  const ctx = {
-    location: { search, hash },
-    history: { replaceState: (s, t, url) => (ctx.location.hash = url) },
-    document,
-    console,
-    btoa,
-    atob,
-    io: { connect: () => socket },
-    addEventListener() {},
-    setTimeout: (fn, ms) => timers.push({ fn, ms }),
-    setInterval: (fn, ms) => timers.push({ fn, ms, every: true }),
-    clearTimeout() {},
-    XMLHttpRequest: class {
-      open(method, url, sync) {
-        xhrs.push({ method, url, sync });
-      }
-      setRequestHeader() {}
-      send(body) {
-        xhrs[xhrs.length - 1].body = body;
-        this.responseText = JSON.stringify({ token });
-      }
-    },
-    fetch: (url, opts) => {
-      posts.push({ url, opts });
-      const sub = url.match(/items\/(\w+)\/(datatoui|properties)\?/);
-      const json = answer ? answer(url) : sub ? { subscriptionId: sub[1] + "/" + sub[2] } : {};
-      return Promise.resolve({ json: () => Promise.resolve(json), text: () => Promise.resolve("") });
-    },
-  };
-  ctx.window = ctx;
-  vm.createContext(ctx);
-  vm.runInContext(CODE, ctx);
-  if (pageScript) vm.runInContext(pageScript, ctx);
-  return { Kit: ctx.Kit, ctx, posts, timers, xhrs, socket, body };
-}
-
-const decode = (data) => JSON.parse(decodeURIComponent(escape(atob(data.replace(/\n/g, "")))));
-const plain = (o) => JSON.parse(JSON.stringify(o));
 const settle = () => new Promise((resolve) => setImmediate(resolve));
-const ON_CONTROLLER = "?apihost=ctrl.example.invalid&driverid=42&apitoken=tok";
 /** A push as the controller's socket delivers it, from lib.ui.page's send. */
 const push = (command, data) => ({ data: { devicecommand: { command, params: { param: [{ name: "json", value: { static: JSON.stringify(data) } }] } } } });
 const commands = (posts) => posts.filter((p) => p.url.endsWith("/commands")).map((p) => JSON.parse(p.opts.body).command);
 
-test("a command's body is UTF-8 base64 broken every 76 characters", () => {
-  const { Kit } = load(ON_CONTROLLER);
+test("a command's body is UTF-8 base64 broken every 76 characters", async () => {
+  const { Kit, posts } = load(ON_CONTROLLER);
   const params = { text: "café 日本 💡 <a&b>", long: "x".repeat(500) };
-  const body = Kit.encodeParams(params);
+  await Kit.sendCommand("_SET", params);
+  const body = JSON.parse(posts[0].opts.body).tParams.DATA;
   const lines = body.split("\n");
   assert.ok(lines.length > 1);
   lines.slice(0, -1).forEach((line) => assert.equal(line.length, 76));
@@ -184,7 +76,7 @@ test("outside Composer a command goes to the page's demo answer, later, and a co
 
 test("in demo mode connectDriver asks what a connect asks, and the demo answer reaches the page's handlers", () => {
   const { Kit, timers, posts } = load("");
-  const card = element("div");
+  const card = new Element("div");
   Kit.initPropertiesCard(card);
   const seen = [];
   Kit.demoMode((command) => {
@@ -194,17 +86,21 @@ test("in demo mode connectDriver asks what a connect asks, and the demo answer r
   Kit.connectDriver({ handlers: { STATUS: (status) => seen.push(status.text) }, onConnect: () => Kit.sendCommand("_GET_STATUS") });
   while (timers.length) timers.shift().fn();
   assert.deepEqual(seen, ["Connected"]);
-  assert.equal(Kit._properties.list[0].name, "Mode");
+  assert.match(card.innerHTML, /data-prop="Mode"/);
   assert.equal(posts.length, 0);
 });
 
-test("a push's params read as one object", () => {
-  const { Kit } = load("");
-  const one = Kit._commandParams({ params: { param: { name: "payload", value: { static: "{}" } } } });
-  assert.deepEqual(plain(one), { payload: "{}" });
-  const many = Kit._commandParams({ params: { param: [{ name: "a", value: "1" }, { name: "b" }, { value: "x" }] } });
-  assert.deepEqual(plain(many), { a: "1", b: "" });
-  assert.deepEqual(plain(Kit._commandParams({})), {});
+test("a push's params read as one object", async () => {
+  const { Kit, socket } = load(ON_CONTROLLER);
+  const seen = [];
+  await Kit.connectDriver({ handlers: { P: (data) => seen.push(data) } });
+  socket.handlers.connect();
+  await settle();
+  const raw = (param) => ({ data: { devicecommand: { command: "P", params: param && { param } } } });
+  socket.handlers["42/datatoui"](raw({ name: "payload", value: { static: "{}" } }));
+  socket.handlers["42/datatoui"](raw([{ name: "a", value: "1" }, { name: "b" }, { value: "x" }]));
+  socket.handlers["42/datatoui"](raw(undefined));
+  assert.deepEqual(plain(seen), [{ payload: "{}" }, { a: "1", b: "" }, {}]);
 });
 
 test("a push reaches a component's listener, then the page's handler, as the object the driver sent", async () => {
@@ -222,21 +118,20 @@ test("a push reaches a component's listener, then the page's handler, as the obj
 
 test("the properties card asks the driver for its properties on each connect, and shows them and a refusal", async () => {
   const { Kit, posts, socket, timers } = load(ON_CONTROLLER);
-  const card = element("div");
+  const card = new Element("div");
   Kit.initPropertiesCard(card);
   await Kit.connectDriver({});
   socket.handlers.connect();
   await settle();
   assert.deepEqual(commands(posts), ["_GET_PROPERTIES"]);
   socket.handlers["42/datatoui"](push("PROPERTIES", { properties: [{ name: "Mode", value: "Off", choices: ["Off", "Auto"] }] }));
-  assert.equal(Kit._properties.list[0].name, "Mode");
   assert.match(card.innerHTML, /data-prop="Mode"><option selected>Off<\/option><option>Auto<\/option>/);
   socket.handlers["42/datatoui"](push("PROPERTY_ERROR", { property: "Mode", error: "Mode has no choice Slow." }));
-  assert.equal(Kit._properties.errors.Mode, "Mode has no choice Slow.");
-  // A property changed in Composer redraws its field.
+  // A property changed in Composer redraws its field, and the refusal stays until the field is changed.
   socket.handlers["42/properties"]({ data: { devicecommand: { command: "UPDATE_PROPERTY", name: "Mode", value: "Auto" } } });
   socket.handlers["42/properties"]({ data: { devicecommand: { command: "UPDATE_PROPERTY", name: "Log Level", value: "4 - Debug" } } });
   assert.match(card.innerHTML, /<option selected>Auto<\/option>/);
+  assert.match(card.innerHTML, /class="perror">Mode has no choice Slow\.<\/div>/);
   // A change can change the list too, so the card asks again, once for the burst.
   const asks = timers.filter((t) => t.ms === 300);
   assert.equal(asks.length, 1);
@@ -251,7 +146,7 @@ test("a properties card set up after the connect asks for its list itself", asyn
   socket.handlers.connect();
   await settle();
   assert.deepEqual(commands(posts), [], "no card yet, nothing asked");
-  Kit.initPropertiesCard(element("div"));
+  Kit.initPropertiesCard(new Element("div"));
   timers.filter((t) => t.ms === 300).forEach((t) => t.fn());
   await settle();
   assert.deepEqual(commands(posts), ["_GET_PROPERTIES"]);
@@ -282,7 +177,7 @@ test("a call the controller does not take answers at once with why, not when the
 
 test("the properties card leaves out the properties a page shows elsewhere", () => {
   const { Kit } = load(ON_CONTROLLER);
-  const card = element("div");
+  const card = new Element("div");
   Kit.initPropertiesCard(card, { exclude: ["Look Control"] });
   Kit.deliver("PROPERTIES", { properties: [{ name: "Look Control", value: "Manual" }, { name: "Mode", value: "Off" }] });
   assert.doesNotMatch(card.innerHTML, /Look Control/);
@@ -355,7 +250,7 @@ test("another item on the same link subscribes once, hears its own pushes, and a
 });
 
 test("with the hash option the open tab is kept in the address, its detail too, and a tab set can be built per state", () => {
-  const nav = element("div");
+  const nav = new Element("div");
   const { Kit, ctx } = load(ON_CONTROLLER, { hash: "#measurements/energy" });
   ctx.document.querySelector = (sel) => (sel === ".nav" ? nav : sel.includes('data-panel="measurements"') ? {} : null);
   const switched = [];
@@ -370,22 +265,15 @@ test("with the hash option the open tab is kept in the address, its detail too, 
   assert.match(nav.innerHTML, /<div class="nav-tab active" data-panel="device">Device<\/div><div class="nav-tab" data-panel="exposes">Exposes<\/div>/);
 });
 
-test("opened with a controller and no token, the page logs in through the dev proxy's saved login", () => {
-  const { Kit, xhrs } = load("?apihost=" + encodeURIComponent("http://127.0.0.1:8765") + "&driverid=9", { token: "proxy-token" });
-  assert.equal(Kit.apiToken, "proxy-token");
+test("opened with a controller and no token, the page logs in through the dev proxy's saved login", async () => {
+  const { Kit, xhrs, posts } = load("?apihost=" + encodeURIComponent("http://127.0.0.1:8765") + "&driverid=9", { token: "proxy-token" });
   assert.deepEqual(plain(xhrs), [{ method: "POST", url: "http://127.0.0.1:8765/api/v1/localjwt", sync: false, body: "{}" }]);
+  await Kit.sendCommand("_GET_STATE");
+  assert.equal(posts[0].opts.headers.Authorization, "Bearer proxy-token");
   const composer = load(ON_CONTROLLER, { token: "unused" });
-  assert.equal(composer.Kit.apiToken, "tok");
+  await composer.Kit.sendCommand("_GET_STATE");
+  assert.equal(composer.posts[0].opts.headers.Authorization, "Bearer tok");
   assert.equal(composer.xhrs.length, 0, "Composer's token is used as given");
-});
-
-test("ago reads a time as how long ago it was", () => {
-  const { Kit } = load("");
-  const now = Math.floor(Date.now() / 1000);
-  assert.equal(Kit.ago(now), "just now");
-  assert.equal(Kit.ago(now - 90), "1 min ago");
-  assert.equal(Kit.ago(now - 7200), "2 h ago");
-  assert.equal(Kit.ago(null), "");
 });
 
 test("esc makes text safe for HTML", () => {

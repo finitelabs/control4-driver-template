@@ -41,7 +41,6 @@ _exclude:
   - "{% if 'ui' not in vendor_modules.split() %}test/test_ui_devices.lua{% endif %}"
   - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}src/lib/ui/expressions.js{% endif %}"
   - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}src/lib/ui/expressions.css{% endif %}"
-  - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}src/lib/ui/expressions-demo.js{% endif %}"
   - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}src/lib/ui/expression-tab.lua{% endif %}"
   - "{% if 'ui' not in vendor_modules.split() or 'expressions' not in vendor_modules.split() %}test/test_ui_expression_tab.lua{% endif %}"
   - "{% if not cloud_diagnostics %}src/lib/diagnostics.lua{% endif %}"

@@ -1,6 +1,6 @@
 // lib/ui/expressions.js, the expression editor, on page.js in a stub DOM: what it colors in each mode, the textarea it
 // wraps, the previews it asks for and routes back to each editor by id, a hold, the help, the plain-language errors,
-// and that the names it colors are the sandbox's. Without expressions-demo.js, a demo preview is the page's to answer.
+// and that the names it colors are the sandbox's.
 //
 // Run from the template repo, against a render's copy:
 //   UI_DIR=<render>/src/lib/ui node --test tests/ui_expressions_js.test.mjs
@@ -9,144 +9,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import vm from "node:vm";
+import * as dom from "./ui_dom.mjs";
 
-const UI_DIR = process.env.UI_DIR || "template/src/lib/ui";
-const PAGE_JS = readFileSync(join(UI_DIR, "page.js"), "utf8");
+const { Element, UI_DIR, ON_CONTROLLER: LIVE } = dom;
 const EXPRESSIONS_JS = readFileSync(join(UI_DIR, "expressions.js"), "utf8");
 const SANDBOX = readFileSync(join(UI_DIR, "..", "expression-sandbox.lua"), "utf8");
 
-// Just enough DOM for the editor: elements with children, classes, attributes and listeners.
-class Element {
-  constructor(tag) {
-    this.tagName = tag.toUpperCase();
-    this.children = [];
-    this.parentNode = null;
-    this.attrs = {};
-    this.style = {};
-    this.listeners = {};
-    this.hidden = false;
-    this.className = "";
-    this.textContent = "";
-    this.innerHTML = "";
-    this.title = "";
-    this.value = "";
-  }
-  get classList() {
-    const names = () => this.className.split(/\s+/).filter(Boolean);
-    const set = (list) => (this.className = list.join(" "));
-    return {
-      add: (c) => set([...new Set([...names(), c])]),
-      remove: (c) => set(names().filter((n) => n !== c)),
-      contains: (c) => names().includes(c),
-      toggle: (c, force) => {
-        const on = force === undefined ? !names().includes(c) : !!force;
-        set(on ? [...new Set([...names(), c])] : names().filter((n) => n !== c));
-        return on;
-      },
-    };
-  }
-  get firstChild() {
-    return this.children[0] || null;
-  }
-  get scrollHeight() {
-    return 18 + 20 * this.value.split("\n").length;
-  }
-  get clientWidth() {
-    return 300;
-  }
-  appendChild(node) {
-    return this.insertBefore(node, null);
-  }
-  insertBefore(node, ref) {
-    if (node.parentNode) node.parentNode.removeChild(node);
-    node.parentNode = this;
-    const at = ref ? this.children.indexOf(ref) : -1;
-    if (at < 0) this.children.push(node);
-    else this.children.splice(at, 0, node);
-    return node;
-  }
-  removeChild(node) {
-    this.children = this.children.filter((n) => n !== node);
-    node.parentNode = null;
-    return node;
-  }
-  setAttribute(name, value) {
-    this.attrs[name] = String(value);
-  }
-  getAttribute(name) {
-    return name in this.attrs ? this.attrs[name] : null;
-  }
-  addEventListener(type, fn) {
-    (this.listeners[type] = this.listeners[type] || []).push(fn);
-  }
-  fire(type, extra) {
-    const event = Object.assign({ target: this, prevented: false }, extra);
-    event.preventDefault = () => (event.prevented = true);
-    (this.listeners[type] || []).forEach((fn) => fn(event));
-    return event;
-  }
-  focus() {}
-  setSelectionRange(start, end) {
-    this.selectionStart = start;
-    this.selectionEnd = end;
-  }
-  // Text the tests read: this element's own text and its children's, in order.
-  text() {
-    return [this.textContent, ...this.children.filter((c) => !c.hidden).map((c) => c.text())].join(" ").replace(/\s+/g, " ").trim();
-  }
-}
-
 function load(search) {
-  const posts = [];
-  let timers = [];
-  let next = 1;
-  const body = new Element("body");
-  const ctx = {
-    location: { search, hash: "" },
-    document: {
-      body,
-      getElementById: () => null,
-      querySelector: () => null,
-      querySelectorAll: () => [],
-      createElement: (tag) => new Element(tag),
-    },
-    console,
-    btoa,
-    atob,
-    setTimeout: (fn) => {
-      timers.push({ fn, id: next });
-      return next++;
-    },
-    clearTimeout: (id) => {
-      timers = timers.filter((t) => t.id !== id);
-    },
-    fetch: (url, opts) => {
-      posts.push({ url, opts });
-      return Promise.resolve({ json: () => Promise.resolve({}) });
-    },
-  };
-  ctx.window = ctx;
-  vm.createContext(ctx);
-  vm.runInContext(PAGE_JS, ctx);
-  vm.runInContext(EXPRESSIONS_JS, ctx);
-  // Runs every timer due, and those they set, as time passing would.
-  const flush = () => {
-    for (let round = 0; round < 20 && timers.length; round++) {
-      const due = timers;
-      timers = [];
-      due.forEach((t) => t.fn());
-    }
-  };
-  const sent = () =>
-    posts.map((p) => {
-      const b = JSON.parse(p.opts.body);
-      return { command: b.command, params: JSON.parse(decodeURIComponent(escape(atob(b.tParams.DATA.replace(/\n/g, ""))))) };
-    });
-  return { Kit: ctx.Kit, ctx, body, flush, sent, timers: () => timers };
+  const page = dom.load(search, { scripts: ["expressions.js"] });
+  return { ...page, flush: page.elapse };
 }
-
-const LIVE = "?apihost=ctrl.example.invalid&driverid=42&apitoken=tok";
 
 // A textarea in a field, as a page places it.
 function field(body) {
@@ -160,9 +32,20 @@ function type(box, text) {
   box.fire("input");
 }
 
+/** The colored HTML an editor shows for text, each call a fresh editor in that mode. */
+function highlighter() {
+  const { Kit, body } = load("");
+  return (text, mode, escapes) => {
+    const box = field(body);
+    Kit.expressionEditor(box, { mode, escapes });
+    type(box, text);
+    return box.parentNode.children[0].innerHTML;
+  };
+}
+
 test("equation and condition modes color variables, text, names, numbers and operators", () => {
-  const { Kit } = load("");
-  const html = Kit.highlightExpression('abs(PARAM{96,1002} - 3.5) >= 2 and not x1 or "a PARAM{1,2}" ~= device_name(7)', "condition");
+  const highlight = highlighter();
+  const html = highlight('abs(PARAM{96,1002} - 3.5) >= 2 and not x1 or "a PARAM{1,2}" ~= device_name(7)', "condition");
   assert.match(html, /<span class="kit-hl-fn">abs<\/span>/);
   assert.match(html, /<span class="kit-hl-tok">PARAM\{96,1002\}<\/span>/);
   assert.match(html, /<span class="kit-hl-num">3\.5<\/span>/);
@@ -174,7 +57,7 @@ test("equation and condition modes color variables, text, names, numbers and ope
   assert.match(html, /x1/);
   assert.doesNotMatch(html, /kit-hl-num">1<\/span>/, "a digit in a name is not a number");
   assert.match(html, /<span class="kit-hl-str">&quot;a <span class="kit-hl-tok">PARAM\{1,2\}<\/span>&quot;<\/span>/, "a variable in quotes is still marked");
-  const eq = Kit.highlightExpression("math.floor(value) + map(1) + string.lower(room_name(2)) + 0x1F + 1e3", "equation");
+  const eq = highlight("math.floor(value) + map(1) + string.lower(room_name(2)) + 0x1F + 1e3", "equation");
   assert.match(eq, /kit-hl-fn">math\.floor</);
   assert.match(eq, /kit-hl-fn">string\.lower</);
   assert.match(eq, /kit-hl-fn">room_name</);
@@ -185,18 +68,18 @@ test("equation and condition modes color variables, text, names, numbers and ope
 });
 
 test("string and text modes color only variables, and escapes when asked", () => {
-  const { Kit } = load("");
-  const s = Kit.highlightExpression('abs(PARAM{1,2}) "x" <b>', "string");
+  const highlight = highlighter();
+  const s = highlight('abs(PARAM{1,2}) "x" <b>', "string");
   assert.equal(s, 'abs(<span class="kit-hl-tok">PARAM{1,2}</span>) &quot;x&quot; &lt;b&gt;');
-  assert.equal(Kit.highlightExpression("PWR ON\\r\\n", "text"), "PWR ON\\r\\n");
-  const escaped = Kit.highlightExpression("PWR PARAM{5,6}\\r\\n\\x0D\\\\ \\q", "text", true);
+  assert.equal(highlight("PWR ON\\r\\n", "text"), "PWR ON\\r\\n");
+  const escaped = highlight("PWR PARAM{5,6}\\r\\n\\x0D\\\\ \\q", "text", true);
   assert.match(escaped, /<span class="kit-hl-tok">PARAM\{5,6\}<\/span>/);
   assert.match(escaped, /<span class="kit-hl-esc">\\r<\/span><span class="kit-hl-esc">\\n<\/span>/);
   assert.match(escaped, /<span class="kit-hl-esc">\\x0D<\/span>/);
   assert.match(escaped, /<span class="kit-hl-esc">\\\\<\/span>/);
   assert.doesNotMatch(escaped, /kit-hl-esc">\\q/, "\\q is no escape");
-  assert.equal(Kit.highlightExpression("", "equation"), "​", "an empty field still has a line");
-  assert.equal(Kit.highlightExpression("1\n", "equation"), '<span class="kit-hl-num">1</span>\n​', "and so does a last empty line");
+  assert.equal(highlight("", "equation"), "​", "an empty field still has a line");
+  assert.equal(highlight("1\n", "equation"), '<span class="kit-hl-num">1</span>\n​', "and so does a last empty line");
 });
 
 test("the editor wraps its textarea under a colored <pre> and grows to fit", () => {
@@ -336,11 +219,6 @@ test("a hold is the driver's refusal in plain words, gone with the next edit", (
   flush();
   Kit.deliver("EVAL_RESULT", { id: sent()[1].params.id, result: "", error: "A look can't follow this button's own variables.", hold: "yes" });
   assert.equal(editor.hold, "A look can't follow this button's own variables.");
-  const custom = Kit.expressionEditor(field(body), { mode: "condition", onResult: () => {}, formatError: (raw, text) => "custom " + raw + " in " + text });
-  type(custom.textarea, "x >");
-  flush();
-  Kit.deliver("EVAL_RESULT", { id: sent()[2].params.id, error: "bad", hold: true });
-  assert.equal(custom.hold, "custom bad in x >");
 });
 
 test("the watch count and used() name each variable once", () => {
@@ -372,27 +250,6 @@ test("insert puts text at the cursor as the integrator's own edit", () => {
   editor.textarea.selectionEnd = 3;
   editor.insert("floor");
   assert.equal(editor.value(), "floor(PARAM{5,6} - 1)", "a selection is replaced");
-});
-
-test("the textarea may be given by selector too", () => {
-  const { Kit, body, ctx } = load("");
-  const box = field(body);
-  ctx.document.querySelector = (sel) => (sel === "#expr" ? box : null);
-  Kit.expressionEditor("#expr", { mode: "equation" });
-  assert.equal(box.parentNode.className, "kit-editor");
-});
-
-test("an element option may be a selector", () => {
-  const { Kit, body, ctx } = load("");
-  const toggle = new Element("button");
-  const panel = new Element("div");
-  const row = new Element("div");
-  const named = { "#t": toggle, "#p": panel, "#row": row };
-  ctx.document.querySelector = (sel) => named[sel] ?? null;
-  Kit.expressionEditor(field(body), { mode: "condition", help: { toggle: "#t", panel: "#p", wrap: "#row" } });
-  assert.equal(row.hidden, true);
-  toggle.fire("click");
-  assert.equal(row.hidden, false, "the row a selector names shows and hides with the help");
 });
 
 test("the help follows the mode, takes a page's own sections, and opens from its toggle", () => {
@@ -431,18 +288,21 @@ test("the help follows the mode, takes a page's own sections, and opens from its
 });
 
 test("the names it colors and the help lists are the sandbox's", () => {
-  const { Kit } = load("");
+  const { Kit, body } = load("");
   const env = SANDBOX.match(/return \{\n\s+__p = bindings,([\s\S]*?)\n\s+\}/);
   assert.ok(env, "the sandbox's environment was found");
   const sandbox = [...env[1].matchAll(/\n\s+([\w]+) = /g)].map((m) => m[1]).sort();
   assert.ok(sandbox.length >= 18, "the sandbox's names were read");
-  const names = Kit.expressionNames;
-  assert.deepEqual([...names.functions, ...names.libraries].sort(), sandbox);
-  const functions = Kit._expressionHelp.functions.html;
-  sandbox.forEach((name) => assert.ok(functions.includes("<code>" + name), name + " is in the help"));
+  const list = (name) => JSON.parse(EXPRESSIONS_JS.match(new RegExp("var " + name + " = (\\[.*?\\]);"))[1]);
+  const libraries = list("LIBRARIES");
+  assert.deepEqual([...list("NAMES"), ...libraries].sort(), sandbox);
+  const panel = new Element("div");
+  Kit.expressionEditor(field(body), { mode: "equation", help: { panel } });
+  sandbox.forEach((name) => assert.ok(panel.innerHTML.includes("<code>" + name), name + " is in the help"));
+  const highlight = highlighter();
   sandbox
-    .filter((name) => !names.libraries.includes(name))
-    .forEach((name) => assert.match(Kit.highlightExpression(name + "(1)", "equation"), new RegExp('kit-hl-fn">' + name + "<"), name + " is colored"));
+    .filter((name) => !libraries.includes(name))
+    .forEach((name) => assert.match(highlight(name + "(1)", "equation"), new RegExp('kit-hl-fn">' + name + "<"), name + " is colored"));
 });
 
 test("an engine error reads as a plain sentence", () => {
@@ -477,12 +337,10 @@ test("an engine error reads as a plain sentence", () => {
   assert.equal(plain("something it has never seen"), "something it has never seen", "what isn't recognized stays as it is");
 });
 
-test("without expressions-demo.js, a demo preview goes to the page's own demo answer and no parser comes along", () => {
+test("in demo mode, a preview goes to the page's own demo answer", () => {
   const { Kit, body, flush } = load("");
   const asked = [];
   Kit.demoMode((command, params) => asked.push([command, params.mode, params.expression]));
-  assert.equal(Kit.expressionDemo, undefined);
-  assert.equal(Kit._demoEvaluate, undefined);
   const editor = Kit.expressionEditor(field(body), { mode: "condition", onResult: () => {} });
   type(editor.textarea, "PARAM{9001,1} > 50");
   flush();

@@ -40,7 +40,6 @@ src/lib/redact.lua
 src/lib/support-code.lua
 src/lib/ui/devices.lua
 src/lib/ui/expression-tab.lua
-src/lib/ui/expressions-demo.js
 src/lib/ui/expressions.css
 src/lib/ui/expressions.js
 src/lib/ui/page-params.lua

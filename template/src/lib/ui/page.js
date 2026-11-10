@@ -14,7 +14,7 @@
 //   Kit.deliver(command, data)        hands a demo answer to the page as a push would arrive
 //   Kit.esc, Kit.str, Kit.ago         text made safe for HTML; a value as text; a time as "5 min ago"
 //   Kit.listen(command, fn), Kit.demoAnswer(command, fn): a component's own pushes and demo answers, before the page's
-//   Kit.apiHost, Kit.driverId, Kit.apiToken: the page's address parameters
+//   Kit.apiHost, Kit.driverId         the page's address parameters
 // A driver's pushes come from lib.ui.page's send: one `json` parameter, which the kit decodes for the handler.
 
 var Kit = (function () {
@@ -84,7 +84,6 @@ var Kit = (function () {
   // #endif
 
   function api(method, path, body) {
-    if (!apiHost) return Promise.resolve(null);
     var opts = { method: method, headers: { Authorization: "Bearer " + apiToken, "Content-Type": "application/json" } };
     if (body) opts.body = JSON.stringify(body);
     return fetch(apiOrigin() + path, opts)
@@ -298,7 +297,7 @@ var Kit = (function () {
       return;
     }
     var ev = String(sub.subscriptionId);
-    if (sock.off) sock.off(ev);
+    sock.off(ev);
     sock.on(ev, function (evt) {
       if (mine === round) listener(evt);
     });
@@ -653,12 +652,9 @@ var Kit = (function () {
   return {
     apiHost: apiHost,
     driverId: driverId,
-    apiToken: apiToken,
     str: str,
     esc: esc,
     ago: ago,
-    api: api,
-    encodeParams: encodeParams,
     sendCommand: sendCommand,
     call: call,
     follow: follow,
@@ -673,9 +669,5 @@ var Kit = (function () {
     setDetail: setDetail,
     initPropertiesCard: initPropertiesCard,
     showProperties: showProperties,
-    markPropertyError: markPropertyError,
-    // For the kit's own tests.
-    _commandParams: commandParams,
-    _properties: props,
   };
 })();

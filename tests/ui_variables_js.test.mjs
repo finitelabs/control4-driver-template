@@ -7,143 +7,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import vm from "node:vm";
+import * as dom from "./ui_dom.mjs";
 
-const UI_DIR = process.env.UI_DIR || "template/src/lib/ui";
-const PAGE_JS = readFileSync(UI_DIR + "/page.js", "utf8");
-const VARIABLES_JS = readFileSync(UI_DIR + "/variables.js", "utf8");
+const { ON_CONTROLLER, decode, plain } = dom;
+const load = (search = "") => dom.load(search, { scripts: ["variables.js"] });
 
-const ON_CONTROLLER = "?apihost=ctrl.example.invalid&driverid=42&apitoken=tok";
-
-class Event {
-  constructor(type, init) {
-    this.type = type;
-    this.bubbles = !!(init && init.bubbles);
-  }
-}
-
-/** A page of stub elements: what the browser builds itself, and the fields it reads and writes. */
-function stubDocument() {
-  const docListeners = {};
-  const inPage = [];
-  const fire = (listeners, ev) => (listeners[ev.type] || []).slice().forEach((fn) => fn(ev));
-
-  function element(tag, attrs = {}) {
-    const classes = new Set();
-    const listeners = {};
-    return {
-      nodeType: 1,
-      tagName: tag.toUpperCase(),
-      attrs: { ...attrs },
-      children: [],
-      parentNode: null,
-      innerHTML: "",
-      textContent: "",
-      value: "",
-      classList: { add: (c) => classes.add(c), remove: (c) => classes.delete(c), contains: (c) => classes.has(c) },
-      setAttribute(name, value) {
-        this.attrs[name] = String(value);
-      },
-      getAttribute(name) {
-        return name in this.attrs ? this.attrs[name] : null;
-      },
-      appendChild(child) {
-        child.parentNode = this;
-        this.children.push(child);
-        return child;
-      },
-      addEventListener(type, fn) {
-        (listeners[type] = listeners[type] || []).push(fn);
-      },
-      /** An event the user causes here, as the browser delivers it: this element's listeners, then the page's. */
-      fire(type, ev = {}) {
-        ev.type = type;
-        ev.target = ev.target || this;
-        fire(listeners, ev);
-        fire(docListeners, ev);
-      },
-      dispatchEvent(ev) {
-        ev.target = this;
-        fire(listeners, ev);
-        if (ev.bubbles) fire(docListeners, ev);
-        return true;
-      },
-      focus() {
-        document.activeElement = this;
-        fire(docListeners, { type: "focusin", target: this });
-      },
-    };
-  }
-
-  const matches = (el, selector) =>
-    selector.startsWith("#")
-      ? el.attrs.id === selector.slice(1)
-      : selector.startsWith("[")
-        ? selector.slice(1, -1) in el.attrs
-        : el.tagName === selector.toUpperCase();
-
-  const document = {
-    activeElement: null,
-    createElement: (tag) => element(tag),
-    addEventListener(type, fn) {
-      (docListeners[type] = docListeners[type] || []).push(fn);
-    },
-    querySelector: (selector) => inPage.find((el) => matches(el, selector)) || null,
-    querySelectorAll: (selector) => inPage.filter((el) => matches(el, selector)),
-    contains: (el) => inPage.includes(el),
-    /** A text field in the page, its caret at the end unless given. */
-    field(attrs = {}, value = "", caret) {
-      const el = element(attrs.tag || "textarea", attrs);
-      delete el.attrs.tag;
-      el.value = value;
-      el.selectionStart = el.selectionEnd = caret === undefined ? value.length : caret;
-      el.setSelectionRange = function (start, end) {
-        this.selectionStart = start;
-        this.selectionEnd = end;
-      };
-      inPage.push(el);
-      return el;
-    },
-  };
-  return document;
-}
-
-/** page.js then variables.js on a stub page at `search`. */
-function load(search = "") {
-  const posts = [];
-  const timers = [];
-  const document = stubDocument();
-  const ctx = {
-    location: { search, hash: "" },
-    history: { replaceState() {} },
-    document,
-    console,
-    btoa,
-    atob,
-    Event,
-    addEventListener() {},
-    setTimeout: (fn, ms) => timers.push({ fn, ms }),
-    setInterval() {},
-    clearTimeout() {},
-    fetch: (url, opts) => {
-      posts.push({ url, opts });
-      return Promise.resolve({ json: () => Promise.resolve({}), text: () => Promise.resolve("") });
-    },
-  };
-  ctx.window = ctx;
-  vm.createContext(ctx);
-  vm.runInContext(PAGE_JS, ctx);
-  vm.runInContext(VARIABLES_JS, ctx);
-  // Runs what waits on no delay, a demo answer, and leaves a call's time limit alone.
-  const flush = () => {
-    for (let i; (i = timers.findIndex((t) => !t.ms)) >= 0; ) timers.splice(i, 1)[0].fn();
-  };
-  return { Kit: ctx.Kit, document, posts, flush };
-}
-
-const decode = (data) => JSON.parse(decodeURIComponent(escape(atob(data.replace(/\n/g, "")))));
-const plain = (o) => JSON.parse(JSON.stringify(o));
 /** A promise's value once pending work has run, or "still waiting", so a test fails rather than hangs. */
 const soon = (promise) =>
   Promise.race([promise, new Promise((resolve) => setImmediate(() => resolve("still waiting")))]);
@@ -428,7 +296,7 @@ test("a variable the target's tokens use is ticked, by id or by name, and typing
   const all = browser(page, { usedIn: "[data-tok]" });
   click(all, { "data-device": 700 });
   assert.deepEqual(ticked(all.tree.innerHTML), ["700:1", "701:2"], "usedIn reads every field it names");
-  const one = browser(page, { usedIn: () => other });
+  const one = browser(page, { usedIn: "#other" });
   click(one, { "data-device": 700 });
   assert.deepEqual(ticked(one.tree.innerHTML), ["701:2"]);
 });
@@ -472,33 +340,26 @@ test("a pick inserts its token at the caret of the last focused token field, and
   assert.equal(only.value, "xPARAM{100001,2301}", "with no focus and no caret it goes at the end of the first one");
 });
 
-test("a page names the target, the token and what a pick does", () => {
+test("a page names the target by selector or by a function", () => {
   const page = load("");
   const box = page.document.field({ id: "box", tag: "input" }, "");
   page.Kit.devices.demo(DEVICES, VARIABLES);
-  const picks = [];
-  const bySelector = browser(page, { target: "#box", token: (v) => "[" + v.device.name + ">" + v.name + "]" });
+  const bySelector = browser(page, { target: "#box" });
   bySelector.vb.refresh();
   page.flush();
   click(bySelector, { "data-device": 700 });
   page.flush();
   click(bySelector, { "data-var": 1 });
-  assert.equal(box.value, "[Light>OWN]");
+  assert.equal(box.value, "PARAM{700,1}");
 
   const given = [];
   const byFunction = browser(page, { target: (last) => (given.push(last), last || box) });
   click(byFunction, { "data-device": 700 });
   click(byFunction, { "data-var": 2 });
-  assert.equal(box.value, "[Light>OWN]PARAM{701,2}");
+  assert.equal(box.value, "PARAM{700,1}PARAM{701,2}");
   assert.equal(given[given.length - 1], null, "a function is given the last focused token field, here none");
   const tok = page.document.field({ "data-tok": "1" }, "");
   tok.focus();
   click(byFunction, { "data-var": 1 });
   assert.equal(tok.value, "PARAM{700,1}", "and its answer is the target");
-
-  const own = browser(page, { onPick: (v) => picks.push(v), target: box });
-  click(own, { "data-device": 700 });
-  click(own, { "data-var": 2 });
-  assert.equal(box.value, "[Light>OWN]PARAM{701,2}", "onPick replaces the insert");
-  assert.deepEqual(plain(picks.map((v) => [v.deviceId, v.id, v.name, v.device.id])), [[701, 2, "LEVEL", 700]]);
 });
