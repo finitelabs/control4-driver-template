@@ -26,7 +26,7 @@ function find(root, cls) {
 
 function mount(page, key, { search = true } = {}) {
   const doc = page.document;
-  const root = doc.field({ tag: "div", "data-combo": key });
+  const root = doc.field({ tag: "div", "data-kit-combo": key });
   root.className = "kit-combo";
   const part = (tag, cls, parent) => {
     const el = parent.appendChild(new Element(tag, {}, doc));
@@ -60,7 +60,7 @@ const key = (page, target, name) => {
 test("the markup is a trigger, a search box and an empty list, the label escaped and the placeholder shown with none", () => {
   const { Kit } = load();
   const html = Kit.combobox("dev", { label: "", placeholder: "Device...", items: () => DEVICES, style: "width:180px", className: "wide" });
-  assert.match(html, /^<div class="kit-combo wide" data-combo="dev" style="width:180px">/);
+  assert.match(html, /^<div class="kit-combo wide" data-kit-combo="dev" style="width:180px">/);
   assert.match(html, /<button type="button" class="kit-combo-trigger placeholder"[^>]*aria-expanded="false"[^>]*>Device\.\.\.<\/button>/);
   assert.match(html, /<input type="text" class="kit-combo-search"/);
   assert.match(html, /<div class="kit-combo-list" role="listbox"><\/div>/);
