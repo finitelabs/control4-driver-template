@@ -111,6 +111,38 @@ local PROXY_BINDING_END = 5999
 --- @field displayName string
 --- @field class string
 
+--- Whether a saved entry is a table holding each named field.
+--- @param entry any
+--- @param ... string The fields it must hold.
+--- @return boolean
+local function holds(entry, ...)
+  if type(entry) ~= "table" then
+    return false
+  end
+  for i = 1, select("#", ...) do
+    if entry[select(i, ...)] == nil then
+      return false
+    end
+  end
+  return true
+end
+
+--- Calls `fn` with each saved binding that has its ID, and `skipped` with the namespace and key of any other entry.
+--- @param saved table<string, table<string, Binding>> The saved bindings.
+--- @param fn fun(binding: Binding)
+--- @param skipped? fun(namespace: any, key: any)
+local function eachBinding(saved, fn, skipped)
+  for namespace, keys in pairs(saved) do
+    for key, binding in pairs(holds(keys) and keys or {}) do
+      if holds(binding, "bindingId") then
+        fn(binding)
+      elseif skipped then
+        skipped(namespace, key)
+      end
+    end
+  end
+end
+
 --- Creates a new Bindings instance.
 --- @return Bindings bindings A new Bindings instance.
 function Bindings:new()
@@ -141,8 +173,9 @@ function Bindings:getOrAddDynamicBinding(namespace, key, type, provider, display
   local bindings = self:getBindings()
   --- @type Binding|nil
   local binding = Select(bindings, namespace, key)
-  if binding == nil then
-    local bindingId = self:_getNextBindingId(type)
+  if not holds(binding, "bindingId", "type", "class") then
+    -- A saved record missing a field the restore needs is replaced, keeping its ID if it has one.
+    local bindingId = Select(binding, "bindingId") or self:_getNextBindingId(type)
     if bindingId == nil then
       return nil
     end
@@ -156,7 +189,7 @@ function Bindings:getOrAddDynamicBinding(namespace, key, type, provider, display
     }
     --- @cast binding Binding
 
-    bindings[namespace] = bindings[namespace] or {}
+    bindings[namespace] = holds(bindings[namespace]) and bindings[namespace] or {}
     bindings[namespace][key] = binding
     self:_saveBindings(bindings)
     C4:AddDynamicBinding(bindingId, type, provider, displayName, class, false, false)
@@ -292,25 +325,28 @@ end
 function Bindings:restoreBindings()
   log:trace("Binding:restoreBindings()")
   local deviceBindings = GetDeviceBindings(tointeger(C4:GetDeviceID()))
-  for _, keys in pairs(self:getBindings()) do
-    for _, binding in pairs(keys) do
-      deviceBindings[binding.bindingId] = nil
-      -- AddDynamicBinding raises on a nil name, which an older driver build could save; the
-      -- record keeps its id, and the driver's next getOrAddDynamicBinding for it adds it named.
-      if binding.displayName ~= nil then
-        log:debug("Restoring %s binding %s", binding.class, binding.displayName)
-        C4:AddDynamicBinding(
-          binding.bindingId,
-          binding.type,
-          binding.provider,
-          binding.displayName,
-          binding.class,
-          false,
-          false
-        )
-      end
+  eachBinding(self:getBindings(), function(binding)
+    deviceBindings[binding.bindingId] = nil
+    -- AddDynamicBinding raises on a nil name, which an older driver build could save, and a record without its
+    -- type or class can't be added as it was. Either keeps its id, and the driver's next getOrAddDynamicBinding
+    -- for it adds it whole.
+    if not holds(binding, "type", "class") then
+      log:warn("Skipping saved binding %s: it has no type or class", binding.bindingId)
+    elseif binding.displayName ~= nil then
+      log:debug("Restoring %s binding %s", binding.class, binding.displayName)
+      C4:AddDynamicBinding(
+        binding.bindingId,
+        binding.type,
+        binding.provider,
+        binding.displayName,
+        binding.class,
+        false,
+        false
+      )
     end
-  end
+  end, function(namespace, key)
+    log:warn("Skipping saved binding %s/%s: it has no binding ID", namespace, key)
+  end)
   -- Delete unknown bindings inside our managed ranges, but never the driver's own
   -- static driver.xml connections, which share the id space (see staticConnectionIds).
   local static = staticConnectionIds()
@@ -331,11 +367,9 @@ function Bindings:_getNextBindingId(type)
   log:trace("Binding:_getNextBindingId(%s)", type)
   --- @type table<integer, boolean>
   local currentBindings = {}
-  for _, keys in pairs(self:getBindings()) do
-    for _, binding in pairs(keys) do
-      currentBindings[binding.bindingId] = true
-    end
-  end
+  eachBinding(self:getBindings(), function(binding)
+    currentBindings[binding.bindingId] = true
+  end)
   local nextId, maxId = CONTROL_BINDING_START, CONTROL_BINDING_END
   if type == "PROXY" then
     nextId, maxId = PROXY_BINDING_START, PROXY_BINDING_END
@@ -371,14 +405,12 @@ end
 --- This does not affect static bindings defined in driver.xml.
 function Bindings:reset()
   log:trace("Bindings:reset()")
-  for _, nsBindings in pairs(self:getBindings()) do
-    for _, binding in pairs(nsBindings) do
-      log:debug("Removing binding '%s' (id=%s)", binding.displayName, binding.bindingId)
-      C4:RemoveDynamicBinding(binding.bindingId)
-      RFP[binding.bindingId] = nil
-      OBC[binding.bindingId] = nil
-    end
-  end
+  eachBinding(self:getBindings(), function(binding)
+    log:debug("Removing binding '%s' (id=%s)", binding.displayName, binding.bindingId)
+    C4:RemoveDynamicBinding(binding.bindingId)
+    RFP[binding.bindingId] = nil
+    OBC[binding.bindingId] = nil
+  end)
   self:_saveBindings(nil)
 end
 
