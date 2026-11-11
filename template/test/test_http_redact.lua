@@ -328,4 +328,22 @@ do
   end
 end
 
+--------------------------------------------------------------------------------
+T.section("A PIN is masked, and a word that only holds pin is not")
+--------------------------------------------------------------------------------
+do
+  local out = redact({ pin = "031-45-154", PIN = "1234", bridge_pin = "5678", userPin = "2468" })
+  for _, key in ipairs({ "pin", "PIN", "bridge_pin", "userPin" }) do
+    T.eq("masks " .. key, out[key], REDACTED)
+  end
+  out = redact('{"pin":"031-45-154","name":"Living Room Bridge"}')
+  T.excludes("a JSON body's setup code masked", out, "031-45-154")
+  T.contains("its other members kept", out, "Living Room Bridge")
+  local readable = { ping = "pong", spinner = "on", pinned = "yes", mapping = "rooms" }
+  out = redact(readable)
+  for key, value in pairs(readable) do
+    T.eq("keeps " .. key, out[key], value)
+  end
+end
+
 T.finish()

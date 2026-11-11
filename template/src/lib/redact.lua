@@ -38,6 +38,7 @@ local SENSITIVE_LAST_WORDS = {
   "cookie",
   "sig",
   "stok", -- TP-Link's session token, sent in the URL path as "/stok=<token>/".
+  "pin", -- a HomeKit setup code or a lock PIN.
 }
 
 --- Nouns that turn a generic fragment anywhere in the key into a credential.
