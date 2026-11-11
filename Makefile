@@ -59,7 +59,7 @@ render-crypto: ## Check the render's c4_shim resolves its FFI crypto backend
 
 render-ui-js: ## Check the render's lib/ui scripts under Node, each one the render ships
 	@if [ -f "$(RENDER)/src/lib/ui/page.js" ]; then \
-		for kit in page variables expressions; do \
+		for kit in page variables expressions collapse menu combobox color pickgrid; do \
 			if [ -f "$(RENDER)/src/lib/ui/$$kit.js" ]; then \
 				UI_DIR="$(RENDER)/src/lib/ui" node --test "tests/ui_$${kit}_js.test.mjs" || exit 1; \
 			fi; \
