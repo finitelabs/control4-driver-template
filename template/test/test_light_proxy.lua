@@ -396,7 +396,7 @@ case(function()
     { still.supports_brightness_stop, still.supports_color_stop },
     { false, false }
   )
-  T.eq("one rate for brightness and color", still.color_rate_behavior, 1)
+  T.eq("and its color rate cannot change (color_rate_behavior 0, where T3 told 1)", still.color_rate_behavior, 0)
   T.eq("the trace tolerance all three send", still.color_trace_tolerance, 2)
   local w = world({ offline = true })
   w.m.connect()
@@ -407,25 +407,25 @@ case(function()
   w.restore()
 end)
 
-T.section("a capability change during a connection waits for the next one; a policy change resets at once")
+T.section(
+  "a capability change during a connection is told at once (N9; T3 waited for the next one); a policy change resets at once"
+)
 case(function()
   local w = world({}, 50)
-  w.light:declare({
-    dims = true,
-    color = false,
-    levelSteps = 254,
-    fade = { by = "device" },
-    reports = { policy = "settle", settleMs = 2500 },
-  })
+  w.m.o.color = false
+  w.light:declare(w.m.declaration())
+  T.eq("the proxy is told the new set at once", #w.proxy:told("DYNAMIC_CAPABILITIES_CHANGED"), 1)
+  T.eq("and it has no color", w.proxy.caps.supports_color, false)
+  w.m.sent = {}
   w.proxy:send(
     "SET_COLOR_TARGET",
     { LIGHT_COLOR_TARGET_X = 0.6, LIGHT_COLOR_TARGET_Y = 0.3, LIGHT_COLOR_TARGET_COLOR_RATE = 0 }
   )
-  T.check("a color still goes: the declaration in force has color", (w.m.sent[#w.m.sent] or {}).color ~= nil)
-  T.eq("and the proxy is told nothing new", #w.proxy:told("DYNAMIC_CAPABILITIES_CHANGED"), 0)
+  T.eq("a color no longer goes: the declaration in force has none", w.m.sent, {})
+  w.light:declare(w.m.declaration())
+  T.eq("the same declaration again tells nothing", #w.proxy:told("DYNAMIC_CAPABILITIES_CHANGED"), 1)
   w.run(10000)
   w.m.drop()
-  w.m.o.color = false
   w.m.back()
   w.run(10000)
   T.eq("at the next connection the proxy is told the light has no color", w.proxy.caps.supports_color, false)
@@ -436,20 +436,21 @@ case(function()
   w.restore()
 end)
 
-T.section("a report before start() is dropped")
+T.section("a report before start() is kept, the last one, and taken at start (T3 dropped it)")
 case(function()
   forget()
   local clock = require("c4_fixtures").virtualClock()
   local proxy = H.proxy(clock)
   local m = H.memoryLight(clock, { dims = true, policy = "trust" })
+  m.online = false
   m.light:declare(m.declaration())
-  T.eq("its verdict is none", m.light:report({ on = true, level = 0.5 }, {}), nil)
-  T.eq("and the proxy hears nothing", #proxy.notes, 0)
+  T.eq("its verdict is none", m.light:report({ on = true, level = 0.3 }, {}), nil)
+  m.light:report({ on = true, level = 0.5 }, {})
+  T.eq("and the proxy hears nothing before start", #proxy.notes, 0)
   m.light:start()
-  m.device.on, m.device.level = true, 0.5
-  m.connect()
-  T.eq("after start the first report brings it online", proxy.online, true)
-  T.eq("and is told", proxy.level, 50)
+  T.eq("at start the kept report brings it online", proxy.online, true)
+  T.eq("and the last one is told", proxy.level, 50)
+  T.eq("once", #proxy:told("LIGHT_BRIGHTNESS_CHANGED"), 1)
   proxy:restore()
   clock.restore()
 end)
@@ -525,7 +526,7 @@ case(function()
   end
 end)
 
-T.section("a new declaration's pre-on and fade wait for the next connection")
+T.section("a new declaration's pre-on and fade take effect at once (N9; T3 waited for the next connection)")
 case(function()
   local w = world({}, 0)
   w.proxy:send("OFF")
@@ -534,13 +535,13 @@ case(function()
   w.light:declare(w.m.declaration())
   w.m.sent = {}
   w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 60, RATE = 2000 })
-  T.eq("a rated on from off still goes after the pre-on in force", (w.m.sent[1] or {}).preOn, true)
+  T.eq("a rated on from off goes with no pre-on: the declaration has none", (w.m.sent[1] or {}).preOn, nil)
   w.run(10000)
   w.m.o.fade = "none"
   w.light:declare(w.m.declaration())
   w.m.sent = {}
   w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 30, RATE = 2000 })
-  T.eq("and a fade none waits too: a level still goes at its rate", (w.m.sent[1] or {}).ms, 2000)
+  T.eq("and a fade none at once: the level goes with no rate", (w.m.sent[1] or {}).ms or 0, 0)
   w.run(10000)
   w.restore()
 end)
@@ -906,7 +907,8 @@ case(function()
 end)
 
 T.section(
-  "an unbind and a bind tell the proxy only that the light is offline, its LEDs off; its first report tells the rest"
+  "via: an unbind tells the proxy only that the light is offline, its LEDs off; the bind tells nothing; "
+    .. "its first report tells the rest, the LEDs always (T3 told offline at the bind too)"
 )
 case(function()
   --- The LED notifies since the mark.
@@ -921,7 +923,7 @@ case(function()
   for _, policy in ipairs({ "settle", "trust", "echo" }) do
     for _, how in ipairs({ "on", "off", "in a ramp" }) do
       local name = policy .. ", " .. how .. ": "
-      local w = world({ policy = policy }, how == "off" and 0 or 70)
+      local w = world({ policy = policy, via = 5002 }, how == "off" and 0 or 70)
       w.proxy:send(
         "SET_COLOR_TARGET",
         { LIGHT_COLOR_TARGET_X = 0.3, LIGHT_COLOR_TARGET_Y = 0.6, LIGHT_COLOR_TARGET_COLOR_RATE = 0 }
@@ -933,17 +935,11 @@ case(function()
       end
       local prev = persist:get("previous_color")
       w.proxy:mark()
-      w.light:forget() -- the unbind
-      w.light:forget() -- the bind
-      T.eq(
-        name .. "an unbind and a bind tell the proxy offline",
-        w.proxy:said(),
-        { "ONLINE_CHANGED", "ONLINE_CHANGED" }
-      )
+      w.m.unbind()
+      w.m.bind()
+      T.eq(name .. "an unbind and a bind tell the proxy offline once", w.proxy:said(), { "ONLINE_CHANGED" })
       T.eq(name .. "and no level and no color", w.proxy.online, false)
       T.eq(name .. "with the LEDs off", w.proxy.leds[H.LINKS.top] == true, false)
-      local told = w.light.told
-      T.check(name .. "its color is D65 in CCT again", near(told.x, 0.3127) and told.mode == CCT, T.show(told))
       w.proxy:mark()
       -- The device's report as its own ramp lands, else its snapshot, is the first.
       w.run(10000)
@@ -954,24 +950,37 @@ case(function()
       local levels = w.proxy:changed()
       T.eq(name .. "its first report tells the level the light is at", levels[#levels], level)
       T.check(name .. "and its color", near(toldColor(w).x, 0.3) and near(toldColor(w).y, 0.6), T.show(toldColor(w)))
-      T.eq(
-        name .. "with its LEDs",
-        { w.proxy.leds[H.LINKS.top] == true, ledNotes(w) },
-        { level > 0, level > 0 and 3 or 0 }
-      )
+      T.eq(name .. "with its LEDs, which a bind left unknown", { w.proxy.leds[H.LINKS.top] == true, ledNotes(w) }, {
+        level > 0,
+        3,
+      })
       T.eq(name .. "and no Previous Color is written", persist:get("previous_color"), prev)
       w.restore()
     end
     -- A light found off at its first report after the bind is told off then, with its LEDs.
-    local w = world({ policy = policy }, 70)
-    w.light:forget()
+    local w = world({ policy = policy, via = 5002 }, 70)
+    w.m.unbind()
     w.m.other({ on = false })
+    w.m.bind()
     w.proxy:mark()
     w.run(10000)
     T.eq(policy .. ": a light found off is told off at its first report", w.proxy:changed(), { 0 })
     T.eq(policy .. ": with its LEDs", { w.proxy.leds[H.LINKS.top], w.proxy.leds[H.LINKS.bottom] }, { false, true })
     w.restore()
   end
+  -- A direct light whose device is replaced is forgotten: offline once, its color D65 in CCT again.
+  local w = world({}, 70)
+  w.proxy:send(
+    "SET_COLOR_TARGET",
+    { LIGHT_COLOR_TARGET_X = 0.3, LIGHT_COLOR_TARGET_Y = 0.6, LIGHT_COLOR_TARGET_COLOR_RATE = 0 }
+  )
+  w.run(10000)
+  w.proxy:mark()
+  w.light:forget()
+  T.eq("forget: the proxy is told offline once", w.proxy:said(), { "ONLINE_CHANGED" })
+  local told = w.light.told
+  T.check("forget: its color is D65 in CCT again", near(told.x, 0.3127) and told.mode == CCT, T.show(told))
+  w.restore()
 end)
 
 T.section("under settle, a report from before a newer command is held, and never shown over it")
@@ -2102,13 +2111,17 @@ case(function()
   w.restore()
 end)
 
-T.section("settle: a command sent offline opens no window, so the first report back stands")
+T.section(
+  "settle: a scene asked while the device is lost is dropped and opens no window, so the first report back stands"
+)
 case(function()
-  -- A scene's step keeps its rate offline, where it is judged as for an on/off light.
+  -- T3 sent its step judged as for an on/off light; the gate drops it.
   local w = world({}, 60)
   scene(w, 9, { { level = 0, rate = 1000 } })
   w.m.drop()
+  w.m.sent = {}
   w.proxy:send("ACTIVATE_SCENE", { SCENE_ID = 9 })
+  T.eq("nothing is sent", w.m.sent, {})
   w.run(100)
   w.m.back()
   w.run(10000)
@@ -2809,7 +2822,7 @@ case(function()
 end)
 
 T.section(
-  "the outbox: an offline or a forget inside send leaves the command as one sent while offline; a report or a declaration is refused"
+  "the outbox: a lost or a forget inside send leaves the command as one sent while lost; a report or a declaration is refused"
 )
 case(function()
   -- The adapter calls `call` inside its next send that `which` picks.
@@ -2824,7 +2837,7 @@ case(function()
     end
   end
   for _, ack in ipairs({ "send", "done" }) do
-    for _, how in ipairs({ "offline", "forget" }) do
+    for _, how in ipairs({ "lost", "forget" }) do
       local name = ack .. ", " .. how
       local w = world({ ack = ack }, 0)
       w.proxy:send("OFF")
@@ -2862,7 +2875,7 @@ case(function()
   inSend(w, function()
     return true
   end, function()
-    w.light:offline()
+    w.light:lost()
   end)
   w.m.sent = {}
   w.run(10000)
@@ -2883,7 +2896,7 @@ case(function()
   local refresh = w.m.adapter.refresh
   w.m.adapter.refresh = function(self)
     w.m.adapter.refresh = refresh
-    w.light:offline()
+    w.light:lost()
     return refresh(self)
   end
   w.m.sent = {}
@@ -2906,7 +2919,7 @@ case(function()
   inSend(w, function()
     return true
   end, function()
-    w.light:offline()
+    w.light:lost()
   end)
   w.m.sent = {}
   w.m.o.ack = "send"
@@ -3247,7 +3260,7 @@ case(function()
   w.run(1500)
   dev = w.light.device
   raising(w, function()
-    w.light:offline()
+    w.light:lost()
   end)
   ok = pcall(w.proxy.send, w.proxy, "SET_COLOR_TARGET", color)
   T.check("an offline inside a send that raises leaves no read out", not ok and dev.read == nil, T.show(dev.read))
@@ -3544,21 +3557,25 @@ case(function()
   w.restore()
 end)
 
-T.section("MemoryLight's transport drops what it is sent while offline, under either ack")
+T.section("a command while the device is lost is dropped before the transport, under either ack (T3 sent it)")
 case(function()
   for _, ack in ipairs({ "send", "done" }) do
     local w = world({ ack = ack }, 0)
     w.m.drop()
+    w.m.sent = {}
+    w.proxy:mark()
     w.proxy:send("ON")
     w.run(10000)
+    T.eq(ack .. ": nothing reaches send", w.m.sent, {})
+    T.eq(ack .. ": the proxy is told nothing", w.proxy:said(), {})
     T.eq(ack .. ": the light stays off", w.device:state(w.clock.now()).on, false)
     w.restore()
   end
 end)
 
-T.section("the outbox is emptied at offline and at forget: nothing waiting goes later")
+T.section("the outbox is emptied at lost and at forget: nothing waiting goes later")
 case(function()
-  for _, how in ipairs({ "offline", "forget" }) do
+  for _, how in ipairs({ "lost", "forget" }) do
     -- A short ackMs: the run passes the timeout at which a unit left in flight would send what waits.
     local w = held({ hold = true, ackMs = 1000 }, 0)
     w.proxy:send("OFF")
@@ -3590,8 +3607,8 @@ case(function()
     { dev.awayAt, dev.movedAt },
     { away, moved }
   )
-  w.light:offline()
-  T.eq("is heard away no longer once offline", { dev.awayAt, dev.movedAt }, {})
+  w.light:lost()
+  T.eq("is heard away no longer once lost", { dev.awayAt, dev.movedAt }, {})
   w.restore()
 end)
 
@@ -5973,7 +5990,9 @@ case(function()
   w.restore()
 end)
 
-T.section("a rated level to a light that does not dim switches it at once, and so does one to a light offline")
+T.section(
+  "a rated level to a light that does not dim switches it at once; one to a lost light is dropped (T3 switched it)"
+)
 case(function()
   local w = world({ dims = false, color = false, cct = false, fade = "none", keepsLevel = false })
   w.m.sent = {}
@@ -5987,13 +6006,14 @@ case(function()
   })
   w.run(10000)
   w.restore()
-  -- Offline the command is judged as for an on/off light, and no ramp is left to end after the return.
+  -- Lost, the command is dropped, and no ramp is left to end after the return.
   w = world({}, 40)
   w.m.drop()
   w.m.sent = {}
+  w.proxy:mark()
   w.proxy:send("RAMP_TO_LEVEL", { LEVEL = 60, TIME = 750 })
-  cmd = w.m.sent[1] or {}
-  T.eq("offline: an on, with no level and no ms", { cmd.on, cmd.level, cmd.ms }, { true })
+  T.eq("lost: nothing is sent and nothing told", { w.m.sent, w.proxy:said() }, { {}, {} })
+  T.eq("and no ramp is left", w.light.aim.level, nil)
   w.m.back()
   w.run(10000)
   T.eq("and back, the proxy shows the device", { w.proxy.level, w.devicePercent() }, { 40, 40 })
@@ -7222,39 +7242,45 @@ case(function()
   w.restore()
 end)
 
-T.section("colorAt: dark between color modes, a stop eases back up over the stop time, in one command")
+T.section(
+  "darkBetweenModes: a stop while a color ramp crosses color modes eases back up over it, in one command "
+    .. "(T3 took the stop time from colorAt)"
+)
 case(function()
-  local dark = { false }
-  local w = retimed({
-    colorAt = function()
-      return nil, dark[1] and 500 or nil
-    end,
-  }, 20)
-  onMode(w, WARM, DIM)
-  w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 80, RATE = 4000 })
-  w.run(1000)
-  dark[1] = true
-  w.m.sent = {}
-  w.proxy:mark()
-  w.proxy:send("SET_BRIGHTNESS_STOP")
-  local stop = w.m.sent[1] or {}
-  T.eq("a level stop with its own color in flight stops both, held over the stop time", {
-    stop.stop,
-    stop.level ~= nil,
-    stop.color ~= nil,
-    stop.ms,
-  }, { "color", true, true, 500 })
-  T.eq(
-    "the proxy is told the color, then the level",
-    w.proxy:said(),
-    { "LIGHT_COLOR_CHANGED", "LIGHT_BRIGHTNESS_CHANGED" }
-  )
-  w.restore()
-  w = retimed({
-    colorAt = function()
-      return nil, 500
-    end,
-  }, 20)
+  for _, dark in ipairs({ 500, false }) do
+    local name = dark and "dark between modes: " or "control, no darkBetweenModes: "
+    local w = retimed({ darkBetweenModes = dark or nil }, 20)
+    -- A full color first, so the Dim-To-Warm color the level carries crosses into color temperature.
+    w.proxy:send(
+      "SET_COLOR_TARGET",
+      { LIGHT_COLOR_TARGET_X = 0.6, LIGHT_COLOR_TARGET_Y = 0.3, LIGHT_COLOR_TARGET_COLOR_RATE = 0 }
+    )
+    w.run(1000)
+    onMode(w, WARM, DIM)
+    w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 80, RATE = 4000 })
+    w.run(1000)
+    w.m.sent = {}
+    w.proxy:mark()
+    w.proxy:send("SET_BRIGHTNESS_STOP")
+    local stop = w.m.sent[1] or {}
+    if dark then
+      T.eq(name .. "a level stop with its own color in flight stops both, held over the stop time", {
+        stop.stop,
+        stop.level ~= nil,
+        stop.color ~= nil,
+        stop.ms,
+      }, { "color", true, true, 500 })
+      T.eq(
+        name .. "the proxy is told the color, then the level",
+        w.proxy:said(),
+        { "LIGHT_COLOR_CHANGED", "LIGHT_BRIGHTNESS_CHANGED" }
+      )
+    else
+      T.eq(name .. "the stop is not held", stop.ms or 0, 0)
+    end
+    w.restore()
+  end
+  local w = retimed({ darkBetweenModes = 500 }, 20)
   w.proxy:send(
     "SET_COLOR_TARGET",
     { LIGHT_COLOR_TARGET_X = 0.6, LIGHT_COLOR_TARGET_Y = 0.3, LIGHT_COLOR_TARGET_COLOR_RATE = 4000 }
@@ -7262,29 +7288,31 @@ case(function()
   w.run(1000)
   w.m.sent = {}
   w.proxy:send("SET_COLOR_STOP")
-  T.eq("a color stop is held at least the stop time", (w.m.sent[1] or {}).ms, 500)
+  T.eq(
+    "a color stop on a ramp from a white to a full color is held at least the stop time",
+    (w.m.sent[1] or {}).ms,
+    500
+  )
   w.restore()
 end)
 
-T.section("colorAt: dark between color modes, a level stop is held over the stop time, unless its ramp keeps a color")
+T.section(
+  "darkBetweenModes: with no color ramp crossing modes a level stop goes at once (T3 held it over colorAt's "
+    .. "time), and a ramp that keeps a color holds the level alone"
+)
 case(function()
-  local w = retimed({
-    colorAt = function()
-      return nil, 500
-    end,
-  }, 20)
+  local w = retimed({ darkBetweenModes = 500 }, 20)
   w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 80, RATE = 4000 })
   w.run(1000)
   w.m.sent = {}
   w.proxy:send("SET_BRIGHTNESS_STOP")
   local stop = w.m.sent[1] or {}
-  T.eq("with no color in flight, the level alone is held over the stop time", { stop.ms, stop.color }, { 500 })
+  T.eq("with no color in flight the light is not between modes: the level stops at once", {
+    stop.ms or 0,
+    stop.color,
+  }, { 0 })
   w.restore()
-  w = retimed({
-    colorAt = function()
-      return nil, 500
-    end,
-  }, 20)
+  w = retimed({ darkBetweenModes = 500 }, 20)
   w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 80, RATE = 4000 })
   w.run(1000)
   w.proxy:send(
@@ -7303,10 +7331,10 @@ case(function()
   w.restore()
 end)
 
-T.section("colorAt: its color stands for the library's estimate at a stop")
+T.section("channelsAt: its color stands for the library's estimate at a stop (colorAt in T3)")
 case(function()
   local w = retimed({
-    colorAt = function()
+    channelsAt = function()
       return { x = 0.25, y = 0.25, mode = FULL }
     end,
   }, 20)
@@ -7321,27 +7349,31 @@ case(function()
   w.restore()
 end)
 
-T.section("takeColor: the adapter's form of a color, with what it came from")
+T.section("shows: the adapter's form of a color, given the color alone (T3's takeColor also had a context)")
 case(function()
-  local ctxs = {}
+  local calls = {}
   local mute = { false }
   local w = retimed({
     mute = mute,
-    takeColor = function(_, color, ctx)
-      ctxs[#ctxs + 1] = ctx
-      if ctx.held then
-        return color
-      end
+    shows = function(_, color, ...)
+      calls[#calls + 1] = { x = color.x, y = color.y, mode = color.mode, extra = select("#", ...) }
       return { x = color.x, y = color.y, mode = color.mode == FULL and 2 or color.mode }
     end,
   }, 20)
-  local function has(field)
-    for _, ctx in ipairs(ctxs) do
-      if ctx[field] then
-        return true
+  local function since(n)
+    local out = {}
+    for i = n + 1, #calls do
+      out[#out + 1] = calls[i]
+    end
+    return out
+  end
+  local function pure()
+    for _, c in ipairs(calls) do
+      if c.extra ~= 0 then
+        return false
       end
     end
-    return false
+    return true
   end
   -- The device reports no mode of the adapter's own, so its echoes are kept out of the case.
   mute[1] = true
@@ -7351,19 +7383,25 @@ case(function()
     LIGHT_COLOR_TARGET_MODE = 0,
     LIGHT_COLOR_TARGET_COLOR_RATE = 4000,
   })
-  T.check("a color the proxy sets comes with the color as asked", has("asked"), T.show(ctxs))
+  local asked = false
+  for _, c in ipairs(calls) do
+    asked = asked or (near(c.x, 0.6) and near(c.y, 0.3))
+  end
+  T.check("a color the proxy sets goes through shows as asked", asked, T.show(calls))
   local changing = w.proxy:told("LIGHT_COLOR_CHANGING")[1] or {}
   T.eq("an adapter's own mode is told as a full color", changing.LIGHT_COLOR_TARGET_COLOR_MODE, FULL)
   w.run(1000)
+  local n = #calls
   w.proxy:send("SET_COLOR_STOP")
-  T.check("a stop's estimate comes marked as one", has("stop"), T.show(ctxs))
-  T.check("and the ends of its fade as the light holds them", has("held"), T.show(ctxs))
+  T.check("a stop's estimate goes through shows too", #since(n) > 0, T.show(calls))
   T.eq("its mode is told as 0", (toldColor(w) or {}).mode, FULL)
   w.proxy:send("OFF")
   T.eq("and kept as given for Previous On", persist:get("previous_color").mode, 2)
   onMode(w, WARM, DIM)
+  n = #calls
   w.proxy:send("SET_LEVEL", { LEVEL = 50 })
-  T.check("a Dim-To-Warm color comes with the presets it lies between", has("ends"), T.show(ctxs))
+  T.check("a Dim-To-Warm color goes through shows", #since(n) > 0, T.show(calls))
+  T.check("and every call has the color alone", pure(), T.show(calls))
   w.restore()
 end)
 
@@ -7586,5 +7624,484 @@ H.contract(
     retimes = true,
   })
 )
+
+--------------------------------------------------------------------------------
+-- The v4 contract (TL-2): API, profile, static capabilities, lifecycle and hooks
+--------------------------------------------------------------------------------
+
+local Light = require("lib.light")
+
+--- The static block a profile derives, by capability.
+local function staticOf(profile, links)
+  local out = {}
+  for _, row in ipairs(Caps.static(assert(Caps.profile(profile)), links ~= false)) do
+    out[row[1]] = row[2]
+  end
+  return out
+end
+
+--- Collect what log:error logs while `fn` runs.
+local function logged(fn)
+  local log = require("lib.logging")
+  local logError, errors = log.error, {}
+  log.error = function(self, fmt, ...)
+    errors[#errors + 1] = string.format(tostring(fmt), ...)
+    return logError(self, fmt, ...)
+  end
+  local ok, err = pcall(fn)
+  log.error = logError
+  if not ok then
+    error(err, 0)
+  end
+  return errors
+end
+
+T.section("Light.new: opts.api must be Light.API, and the profile must be checked (T3 took any opts)")
+case(function()
+  local adapter = { send = function() end }
+  local ok, err = pcall(Light.new, adapter, { profile = { dims = true } })
+  T.check("no api raises", not ok, err)
+  T.check("naming both numbers", tostring(err):find("API nil", 1, true) and tostring(err):find("API 1", 1, true), err)
+  ok, err = pcall(Light.new, adapter, { api = 2, profile = { dims = true } })
+  T.check("api 2 raises, naming both", not ok and tostring(err):find("API 2", 1, true) ~= nil, err)
+  ok, err = pcall(Light.new, adapter, { api = Light.API })
+  T.check("no profile raises", not ok and tostring(err):find("opts.profile is required", 1, true) ~= nil, err)
+  ok, err = pcall(Light.new, adapter, { api = Light.API, profile = { dims = "yes" } })
+  T.check("a bad profile field raises", not ok and tostring(err):find("profile.dims", 1, true) ~= nil, err)
+  ok, err = pcall(Light.new, adapter, { api = Light.API, profile = { dimz = true } })
+  T.check("an unknown profile field raises", not ok and tostring(err):find("profile.dimz", 1, true) ~= nil, err)
+  ok, err = pcall(Light.new, { refresh = function() end }, { api = Light.API, profile = {} })
+  T.check("an adapter with no send raises", not ok and tostring(err):find("send", 1, true) ~= nil, err)
+  T.eq("Light.API is 1", Light.API, 1)
+end)
+
+T.section("Caps.static: the static block from the profile (T3 checked one fixed block); Rule 3.9's color stop")
+case(function()
+  local rgb = staticOf({ fixed = true, dims = true, color = true })
+  T.eq(
+    "a fixed RGB light declares its real set",
+    { rgb.dimmer, rgb.supports_color, rgb.supports_color_correlated_temperature, rgb.supports_color_stop },
+    { "True", "True", "False", "True" }
+  )
+  local fixedCct = staticOf({ fixed = true, dims = true, cct = { min = 2700, max = 5000 } })
+  T.eq(
+    "a fixed white light its range",
+    { fixedCct.color_correlated_temperature_min, fixedCct.color_correlated_temperature_max },
+    { "2700", "5000" }
+  )
+  local dim = staticOf({ dims = true, color = true, cct = true })
+  T.eq("a light whose devices vary: dimming True, color False and raised at run time, 2000 to 6500", {
+    dim.dimmer,
+    dim.supports_color,
+    dim.supports_color_correlated_temperature,
+    dim.color_correlated_temperature_min,
+    dim.color_correlated_temperature_max,
+  }, { "True", "False", "False", "2000", "6500" })
+  local dimOnly = staticOf({ dims = true })
+  T.eq("a dim-only light has a color stop, so its stops reach it", dimOnly.supports_color_stop, "True")
+  T.eq("and no color on modes", dimOnly.color_on_mode_fade, "False")
+  local relay = staticOf({})
+  T.eq(
+    "an on/off relay: no dimming",
+    { relay.dimmer, relay.set_level, relay.ramp_level },
+    { "False", "False", "False" }
+  )
+  T.eq(
+    "no stops, no click or hold rates",
+    { relay.supports_brightness_stop, relay.supports_color_stop, relay.click_rates, relay.hold_rates },
+    { "False", "False", "False", "False" }
+  )
+  T.eq("and no brightness on modes", relay.brightness_on_mode_preset, "False")
+  local still = staticOf({ dims = true, color = true, fades = false })
+  T.eq(
+    "fades = false: the color rate cannot change and nothing stops",
+    { still.color_rate_behavior, still.supports_brightness_stop, still.supports_color_stop, still.click_rates },
+    { "0", "False", "False", "False" }
+  )
+  local legs = staticOf({ dims = true, fades = { maxMs = 60000 } })
+  T.eq(
+    "fades = { maxMs }: the rate maxima run to 24 h, as legs carry them",
+    { legs.brightness_rate_max, legs.color_rate_max },
+    { "86400000", "86400000" }
+  )
+  T.eq("and otherwise 65535", { dim.brightness_rate_max, dim.color_rate_max }, { "65535", "65535" })
+  local unlinked = staticOf({ dims = true }, false)
+  T.eq(
+    "links false: no button events and no LEDs",
+    { unlinked.has_button_events, unlinked.has_leds },
+    { "False", "False" }
+  )
+  T.eq("links: both", { dim.has_button_events, dim.has_leds }, { "True", "True" })
+  local extras = staticOf({ dims = true, extras = true, flash = false, scenes = false })
+  T.eq(
+    "extras, flash and scenes",
+    { extras.has_extras, extras.disable_flash, extras.advanced_scene_support, dim.advanced_scene_support },
+    { "True", "True", "False", "True" }
+  )
+  T.eq("reduced_als_support is False", dim.reduced_als_support, "False")
+  local fixedCctTrue = { Caps.profile({ fixed = true, cct = true }) }
+  T.eq("a fixed profile with cct true is refused: it names its range", fixedCctTrue[1], nil)
+end)
+
+T.section(
+  "Caps.write: make light-caps replaces a marked block, an empty one or an unmarked one, and again changes nothing"
+)
+case(function()
+  local profile = assert(Caps.profile({ dims = true }))
+  local block = Caps.block(profile, true)
+  local head, tail = "<devicedata>\n  <config/>\n", "  <proxies/>\n</devicedata>\n"
+  for _, c in ipairs({
+    { "an empty <capabilities/>", "  <capabilities/>\n" },
+    { "an unmarked block", "  <capabilities>\n    <dimmer>False</dimmer>\n  </capabilities>\n" },
+    { "a marked block", "  " .. Caps.BEGIN .. "\n  <capabilities>\n  </capabilities>\n  " .. Caps.END .. "\n" },
+  }) do
+    local out = assert(Caps.write(head .. c[2] .. tail, profile, true))
+    T.eq(c[1] .. ": replaced by the block", out, head .. block .. "\n" .. tail)
+    T.eq(c[1] .. ": a second write changes nothing", Caps.write(out, profile, true), out)
+  end
+  local none = { Caps.write("<devicedata/>", profile, true) }
+  T.eq("a driver.xml with no capabilities is an error", { none[1], none[2] ~= nil }, { nil, true })
+  local relay = assert(Caps.write(head .. "  <capabilities/>\n" .. tail, assert(Caps.profile({})), true))
+  T.check("the written block is the profile's", relay:find("<dimmer>False</dimmer>", 1, true) ~= nil, relay)
+end)
+
+T.section("a declaration beyond the profile is refused whole, and a fixed profile's must equal it (T3 took any)")
+case(function()
+  local dimOnly = assert(Caps.profile({ dims = true }))
+  local decl, errors = Caps.check({ dims = true, color = true, reports = { policy = "trust" } }, dimOnly)
+  T.eq("color beyond a dim-only profile: refused", decl, nil)
+  T.check("naming the claim", (errors[#errors] or ""):find("color", 1, true) ~= nil, T.show(errors))
+  T.check(
+    "a fade beyond fades = false: refused",
+    Caps.check({ dims = true, reports = { policy = "trust" } }, assert(Caps.profile({ dims = true, fades = false })))
+      == nil
+  )
+  T.check(
+    "the same with fade none stands",
+    Caps.check(
+      { dims = true, fade = { by = "none" }, reports = { policy = "trust" } },
+      assert(Caps.profile({ dims = true, fades = false }))
+    ) ~= nil
+  )
+  local fixed = assert(Caps.profile({ fixed = true, dims = true, color = true }))
+  T.eq(
+    "a fixed profile: a declaration with less is refused",
+    Caps.check({ dims = true, reports = { policy = "trust" } }, fixed),
+    nil
+  )
+  T.check(
+    "and its own set stands",
+    Caps.check({ dims = true, color = true, reports = { policy = "trust" } }, fixed) ~= nil
+  )
+  local w = world({ profile = { dims = true, color = true, cct = true } }, 50)
+  local errs = logged(function()
+    T.eq(
+      "declare takes one within the light's profile",
+      w.light:declare({ dims = true, color = true, cct = { min = 2000, max = 6500 }, reports = { policy = "trust" } }),
+      true
+    )
+  end)
+  T.eq("a declaration within it stands, with no error", errs, {})
+  w.restore()
+  w = world({ profile = { dims = true, cct = true } }, 50)
+  local before = w.light.device.decl
+  errs = logged(function()
+    T.eq(
+      "declare returns false for color on a profile with none",
+      w.light:declare({ dims = true, color = true, reports = { policy = "trust" } }),
+      false
+    )
+  end)
+  T.check("and logs it", #errs > 0, T.show(errs))
+  T.eq("the last accepted stays in force", w.light.device.decl, before)
+  w.restore()
+end)
+
+T.section("the gate: a command, button or link before the device's first state sends and tells nothing (T3 sent it)")
+case(function()
+  local w = world({ offline = true })
+  w.proxy:mark()
+  w.m.sent = {}
+  for _, c in ipairs({
+    { "ON" },
+    { "SET_LEVEL", { LEVEL = 40 } },
+    { "SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 60, RATE = 1000 } },
+    {
+      "SET_COLOR_TARGET",
+      { LIGHT_COLOR_TARGET_X = 0.3, LIGHT_COLOR_TARGET_Y = 0.6, LIGHT_COLOR_TARGET_COLOR_RATE = 0 },
+    },
+    { "GET_LIGHT_LEVEL" },
+    { "BUTTON_ACTION", { BUTTON_ID = 0, ACTION = 2 } },
+  }) do
+    w.proxy:send(c[1], c[2])
+  end
+  RFP.DO_CLICK(H.LINKS.toggle, "DO_CLICK", {})
+  T.eq("nothing reaches send", w.m.sent, {})
+  T.eq("and the proxy is told nothing", w.proxy:said(), {})
+  w.proxy:send("SET_MAX_ON_LEVEL", { LEVEL = 80 })
+  T.eq("a setting still applies", tonumber(persist:get("max_on_level")), 80)
+  w.m.connect()
+  w.run(10000)
+  T.eq("after the first report", w.proxy.online, true)
+  w.m.sent = {}
+  w.proxy:send("ON")
+  T.check("a command goes", #w.m.sent > 0)
+  w.restore()
+end)
+
+T.section(
+  "lost: suspended keeps the level, unbound turns the LEDs off, a real loss reads off; once per outage (T3 always read off)"
+)
+case(function()
+  local w = world({}, 70)
+  w.proxy:mark()
+  w.m.drop({ suspended = true })
+  T.eq("suspended: offline only", w.proxy:said(), { "ONLINE_CHANGED" })
+  T.eq("the level kept", w.proxy.level, 70)
+  T.eq("and the LEDs", w.proxy.leds[H.LINKS.top], true)
+  T.eq("Connected is false", require("lib.values"):getValue("Connected").value, false)
+  w.restore()
+  w = world({}, 70)
+  w.proxy:mark()
+  w.m.drop({ unbound = true })
+  T.eq("unbound: offline", w.proxy:said(), { "ONLINE_CHANGED" })
+  T.eq("the level kept", w.proxy.level, 70)
+  T.eq("the LEDs off", w.proxy.leds[H.LINKS.top], false)
+  w.restore()
+  w = world({}, 70)
+  w.proxy:mark()
+  w.m.drop()
+  T.eq("a real loss: offline, then off", w.proxy:said(), { "ONLINE_CHANGED", "LIGHT_BRIGHTNESS_CHANGED" })
+  T.eq("at 0", w.proxy:changed(), { 0 })
+  w.proxy:mark()
+  w.light:lost()
+  w.light:lost({ suspended = true })
+  T.eq("again in the same outage: nothing", w.proxy:said(), {})
+  w.m.back()
+  w.run(10000)
+  T.eq("back, online", w.proxy.online, true)
+  T.eq("and Connected true", require("lib.values"):getValue("Connected").value, true)
+  T.eq("a lost light keeps the declaration in force", w.light.device.decl ~= nil, true)
+  w.restore()
+end)
+
+T.section(
+  "via: the library owns the device binding; a bind before start tells nothing, after it keeps the state (T3 had no via)"
+)
+case(function()
+  forget()
+  local clock = require("c4_fixtures").virtualClock()
+  local proxy = H.proxy(clock)
+  local m = H.memoryLight(clock, { dims = true, policy = "trust", via = 5002 })
+  OnBindingChanged(5002, "LIGHT", true, 0, 0)
+  T.eq("a bind before start tells nothing", #proxy.notes, 0)
+  m.light:start()
+  m.connect()
+  clock.run(10000)
+  T.eq("start brings it online", proxy.online, true)
+  proxy:restore()
+  clock.restore()
+  local bound = 0
+  local w = world({
+    via = 5002,
+    bound = function()
+      bound = bound + 1
+    end,
+  }, 70)
+  local reads = w.m.reads
+  w.proxy:mark()
+  OnBindingChanged(5002, "LIGHT", true, 0, 0)
+  T.eq("a bind after start tells nothing", w.proxy:said(), {})
+  T.eq("asks the device again", w.m.reads, reads + 1)
+  T.eq("and calls adapter:bound", bound, 1)
+  w.m.sent = {}
+  w.proxy:send("SET_LEVEL", { LEVEL = 30 })
+  T.check("the light still takes a command", #w.m.sent > 0)
+  w.run(10000)
+  w.proxy:mark()
+  OnBindingChanged(5002, "LIGHT", false, 0, 0)
+  T.eq("an unbind tells offline", w.proxy:said(), { "ONLINE_CHANGED" })
+  T.eq("with no level", w.proxy:changed(), {})
+  T.eq("and the LEDs off", w.proxy.leds[H.LINKS.top], false)
+  w.m.sent = {}
+  w.proxy:send("ON")
+  T.eq("unbound, it takes no command", w.m.sent, {})
+  w.restore()
+  w = world({ via = 5002 }, 40)
+  w.light:via(5003)
+  T.eq("a change of device binding loses the light as unbound", w.proxy.online, false)
+  T.eq("and the old binding is the library's no longer", OBC[5002], nil)
+  T.check("the new one is", type(OBC[5003]) == "function")
+  OBC[5003] = nil
+  w.restore()
+end)
+
+T.section("reset: offline once as suspended, the proxy's settings kept, GET_SETUP read again (T3 had no reset)")
+case(function()
+  local w = world({ setup = H.setupFile("setup-607.xml") }, 70)
+  scene(w, 9, { { level = 30, rate = 0 } })
+  w.proxy:send("UPDATE_BRIGHTNESS_PRESET", { COMMAND = "ADDED", ID = 4, NAME = "Reading", LEVEL = 35 })
+  w.run(1000)
+  w.proxy:mark()
+  w.light:reset()
+  T.eq("offline once, no level", w.proxy:said(), { "ONLINE_CHANGED" })
+  T.check("the setup is read again", w.proxy.setupReads >= 1, tostring(w.proxy.setupReads))
+  T.check("its scenes kept", next(persist:get("scenes") or {}) ~= nil)
+  T.check("and its presets", next(persist:get("brightness_presets") or {}) ~= nil)
+  local told = w.light.told
+  T.check("its color D65 again", near(told.x, 0.3127) and told.mode == CCT, T.show(told))
+  w.run(10000)
+  T.eq("the device's next state brings it back", w.proxy.online, true)
+  w.restore()
+end)
+
+T.section("destroy: no Light timer is left, and nothing is taken after it (T3 had no destroy)")
+case(function()
+  local w = world({}, 20)
+  scene(w, 3, { { level = 80, rate = 3000 }, { delay = 2000, level = 10, rate = 0 } })
+  w.proxy:send("ACTIVATE_SCENE", { SCENE_ID = 3 })
+  w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 90, RATE = 4000 })
+  local function pending()
+    local out = {}
+    for k, v in pairs(Timer or {}) do
+      if type(k) == "string" and k:match("^Light%.") and v then
+        out[#out + 1] = k
+      end
+    end
+    table.sort(out)
+    return out
+  end
+  T.check("a ramp's timer is pending before", #pending() > 0, T.show(pending()))
+  w.light:destroy()
+  T.eq("none after", pending(), {})
+  w.proxy:mark()
+  w.m.sent = {}
+  w.proxy:send("ON")
+  T.eq("a command after it sends nothing", w.m.sent, {})
+  T.eq("a report after it is dropped", w.light:report({ on = true, level = 0.5 }, {}), nil)
+  w.run(10000)
+  T.eq("and nothing is told", w.proxy:said(), {})
+  w.restore()
+end)
+
+T.section("pass-through: a command on a binding the light does not own reaches the driver's RFP[id] (T3 dropped it)")
+case(function()
+  local w = world({}, 20)
+  local got = {}
+  RFP[400] = function(idBinding, strCommand)
+    got[#got + 1] = idBinding .. " " .. strCommand
+  end
+  w.proxy:mark()
+  w.m.sent = {}
+  ReceivedFromProxy(400, "SET_LEVEL", { LEVEL = 50 })
+  ReceivedFromProxy(400, "DO_CLICK", {})
+  T.eq("both reach RFP[400]", got, { "400 SET_LEVEL", "400 DO_CLICK" })
+  T.eq("and none of the light's", { w.m.sent, w.proxy:said() }, { {}, {} })
+  RFP[400] = nil
+  ReceivedFromProxy(400, "SET_LEVEL", { LEVEL = 50 })
+  T.eq("with no RFP[400], nothing happens", w.m.sent, {})
+  w.restore()
+end)
+
+T.section("a family the profile leaves out has no handlers; buttons are told only with links (T3 registered all)")
+case(function()
+  local SCENES = { "PUSH_SCENE", "ACTIVATE_SCENE", "RAMP_SCENE_UP", "STOP_SCENE_RAMP", "STOP_RAMP_SCENE" }
+  local ON_MODES = { "UPDATE_BRIGHTNESS_ON_MODE", "UPDATE_COLOR_ON_MODE", "SET_COLOR_ON_MODE" }
+  local clock = require("c4_fixtures").virtualClock()
+  local proxy = H.proxy(clock, { links = false })
+  H.memoryLight(
+    clock,
+    { dims = true, policy = "trust", profile = { dims = true, scenes = false, onModes = false }, links = false }
+  )
+  for _, c in ipairs(SCENES) do
+    T.eq("scenes = false: no " .. c, RFP[c], nil)
+  end
+  for _, c in ipairs(ON_MODES) do
+    T.eq("onModes = false: no " .. c, RFP[c], nil)
+  end
+  T.eq("links = false: no DO_CLICK", RFP.DO_CLICK, nil)
+  T.check("and the rest are there", type(RFP.SET_LEVEL) == "function")
+  proxy:restore()
+  clock.restore()
+  local w = world({ links = false, offline = true })
+  w.m.connect()
+  T.eq("with no links NUMBER_BUTTONS is not told", w.proxy:told("NUMBER_BUTTONS"), {})
+  w.restore()
+  w = world({ offline = true })
+  w.m.connect()
+  T.eq("with links it is, once", #w.proxy:told("NUMBER_BUTTONS"), 1)
+  w.restore()
+end)
+
+T.section("has_extras from the profile, and a dim-only light's dynamic color stop (Rule 3.9; T3 told both False)")
+case(function()
+  local w = world({ profile = { dims = true, color = true, cct = true, extras = true } })
+  T.eq("has_extras", w.proxy.caps.has_extras, true)
+  w.restore()
+  forget()
+  w = H.world({ dims = true, policy = "trust" })
+  T.eq("a dim-only light tells a color stop", w.proxy.caps.supports_color_stop, true)
+  T.eq(
+    "and has neither color nor cct",
+    { w.proxy.caps.supports_color, w.proxy.caps.supports_color_correlated_temperature },
+    {
+      false,
+      false,
+    }
+  )
+  w.restore()
+end)
+
+T.section("the Connected variable follows online (lib.values, BOOL; T3 had none)")
+case(function()
+  local w = world({ offline = true })
+  local values = require("lib.values")
+  T.eq("offline at start", (values:getValue("Connected") or {}).value, false)
+  T.eq("a BOOL", (values:getValue("Connected") or {}).varType, "BOOL")
+  w.m.connect()
+  T.eq("online at the first report", values:getValue("Connected").value, true)
+  w.m.drop({ suspended = true })
+  T.eq("offline when lost", values:getValue("Connected").value, false)
+  w.restore()
+end)
+
+T.section(
+  "shown: the adapter hears what the proxy shows after each level and color tell; a raise is logged (T3 had none)"
+)
+case(function()
+  local heard = {}
+  local w = world({
+    shown = function(_, s)
+      heard[#heard + 1] = s
+    end,
+  }, 20)
+  heard = {}
+  w.proxy:send("SET_LEVEL", { LEVEL = 50 })
+  w.run(10000)
+  local last = heard[#heard] or {}
+  T.eq("a level tell: the level", last.level, 50)
+  T.check("with the color", last.color ~= nil and last.color.x ~= nil, T.show(last))
+  w.proxy:send(
+    "SET_COLOR_TARGET",
+    { LIGHT_COLOR_TARGET_X = 0.3, LIGHT_COLOR_TARGET_Y = 0.6, LIGHT_COLOR_TARGET_COLOR_RATE = 0 }
+  )
+  w.run(10000)
+  last = heard[#heard] or {}
+  T.check("a color tell: the color", near((last.color or {}).x, 0.3) and near((last.color or {}).y, 0.6), T.show(last))
+  w.restore()
+  w = world({
+    shown = function()
+      error("the page is gone", 0)
+    end,
+  }, 20)
+  local errs = logged(function()
+    local ok = pcall(w.proxy.send, w.proxy, "SET_LEVEL", { LEVEL = 60 })
+    T.check("a raising shown does not raise out of the command", ok)
+    w.run(10000)
+  end)
+  T.check("it is logged", #errs > 0 and errs[1]:find("the page is gone", 1, true) ~= nil, T.show(errs))
+  T.eq("and the level is still told", w.proxy.level, 60)
+  w.restore()
+end)
 
 T.finish()

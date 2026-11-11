@@ -335,6 +335,14 @@ test: ## Run the Lua test suite (test/test_*.lua) and the tools' tests (tools/te
 		python3 "$$f" || exit 1; \
 	done
 
+{%- if 'light' in vendor_modules.split() %}
+
+.PHONY: light-caps
+light-caps: ## Write each light_v2 driver's <capabilities> in driver.xml from its lib.light profile
+	@LUA_PATH="$(CURDIR)/test/?.lua;$(CURDIR)/src/?.lua;$(CURDIR)/src/?/init.lua;$(CURDIR)/vendor/?.lua;$(CURDIR)/vendor/?/init.lua;;" \
+		luajit -e "require('c4_shim')" tools/light-caps.lua
+{%- endif %}
+
 .PHONY: support-code
 support-code: ## Print today's Support Code, which opens a DriverCentral build's Lua window
 	@python3 tools/support_code.py

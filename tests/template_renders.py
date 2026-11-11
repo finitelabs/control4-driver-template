@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_DRIVERS = ROOT / "example-driver" / "drivers"
 # example_light is an adapter over lib.light, so only a render with the light token gets it.
 EXAMPLE_LIGHT_DRIVERS = ROOT / "example-driver" / "light" / "drivers"
+EXAMPLE_LIGHT_RIGS = ROOT / "example-driver" / "light" / "test" / "light_rigs.lua"
 RENDERS = ROOT / "tests" / "template-renders"
 INVALID = RENDERS / "invalid"
 FIXTURES = RENDERS / "fixtures.yml"
@@ -77,6 +78,7 @@ def add_example(name, directory):
     shutil.copytree(EXAMPLE_DRIVERS, drivers)
     if "light" in str(answers(RENDERS / f"{name}.yml").get("vendor_modules", "")).split():
         shutil.copytree(EXAMPLE_LIGHT_DRIVERS, drivers, dirs_exist_ok=True)
+        shutil.copy(EXAMPLE_LIGHT_RIGS, Path(directory) / "test" / "light_rigs.lua")
     variants = RENDERS / f"{name}.example-variants.json"
     if variants.exists():
         shutil.copy(variants, drivers / "example" / "variants.json")

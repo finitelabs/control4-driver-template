@@ -67,7 +67,8 @@ local INVARIANTS = {
   { "sends", "a command goes only for a proxy command, a word, a timeout or a scene step" },
   {
     "binds",
-    "a bind or an unbind tells the proxy only that the light is offline, its LEDs off, and its first report the rest",
+    "an unbind tells the proxy only that the light is offline, its LEDs off, a bind tells it nothing, and the first "
+      .. "report after them the rest",
   },
 }
 
@@ -156,6 +157,8 @@ local function draw(r)
   end
   cfg.preset = r.chance(0.3) and r.int(10, 100) or nil
   cfg.raise = r.chance(0.15) and { hook = r.pick({ "send", "refresh" }), at = r.int(1, 6) } or nil
+  -- A light on a device binding the library owns, or a direct one the driver forgets at an unbind.
+  o.via = r.chance(0.5) and 5002 or nil
   return o, cfg
 end
 
@@ -233,6 +236,7 @@ local function describe(o, cfg)
     "hold",
     "holdShare",
     "setupName",
+    "via",
   }
   for _, k in ipairs(fields) do
     if o[k] then
@@ -477,9 +481,9 @@ local function watch(run)
       -- "A light that does not dim switches with no ms, but for a scene step, which keeps its rate."
       shape(o.dims or cmd.color ~= nil or cmd.ms == nil or run.sceneMayAsk(t), "a rate on a relay's switch")
     else
-      -- "It is also called while offline and before any declaration, the command judged as for an on/off
-      -- light"
-      shape(cmd.level == nil and cmd.color == nil and not cmd.preOn, "offline, a command not judged on/off")
+      -- "The light takes no command until its device's next state": nothing goes while it is offline
+      -- (T3 sent the command judged as for an on/off light).
+      shape(false, "a command while the light is offline")
     end
     -- "A level only with on = true"
     shape(cmd.level == nil or (cmd.on == true and cmd.level >= 0 and cmd.level <= 1), "a level without on = true")
@@ -1456,9 +1460,10 @@ local function judgeRamps(run)
   end
 end
 
---- "`light:forget()` when the device binding is bound, unbound or replaced: Director binds it at every
---- controller start, so the proxy is told only that the light is offline, with the button LEDs off, and the
---- light's first report then tells it where the light is."
+--- "`unbound`: the device binding is gone, so the LEDs go off and the proxy keeps the level"; a bind after
+--- start "keeps what the device already told, and asks again". So an unbind, through `via` or a direct
+--- light's forget, tells the proxy only that the light is offline, with the button LEDs off; a bind tells it
+--- nothing; and the light's first report after them tells it where the light is.
 local function judgeBinds(run)
   for i, a in ipairs(run.actions) do
     if a.binding then

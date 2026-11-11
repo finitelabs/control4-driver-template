@@ -2,33 +2,13 @@
 -- reference device and adapter (MemoryLight) whose every part is selectable, and H.contract, which
 -- proves a driver's real adapter against the library's contract over a rig of its own transport.
 --
--- A light driver's test/test_light_adapter.lua calls it with a rig over its real adapter and a fake
--- of its own transport:
+-- A light repo's test/light_rigs.lua returns its rigs, one or more for each light_v2 driver folder,
+-- and the template's test/test_light_contract.lua runs H.contract over each:
 --
---   local H = require("light_harness")
---   H.contract(T, {
---     name = "my light",
---     load = function(h) ... end, -- dofile the driver, run late init on h.clock, return the device
---     declarations = { ... },     -- every declaration the adapter can make
---     driverXml = "drivers/my_light/driver.xml",
---     settleMs = 11500,           -- how long the run waits for the light to settle, less 5 s
---     setup = H.setupFile("setup-607.xml"), -- the proxy's GET_SETUP answer; none when left out
---     holds = true,               -- with ack = "done": the outbox and ledger checks run on the hooks below
---   })
+--   return { version = H.RIG_VERSION, rigs = { my_light = { { name = "my light", load = ... } } } }
 --
--- The device a rig's load returns: state() gives { on, level (0 to 1), color = { x, y } }, the
--- color with kelvin, or { kelvin } alone, for a white the device holds by its kelvin; set(state,
--- quiet) is another hand's change, and with quiet the device reports its on or off alone, so only a
--- read shows its level; drop() and back() lose and restore the device; dims, color, cct and stops
--- (false for a light that does not fade) say what it is; declaration() is what it declares. For an
--- adapter that declares ack = "done": hold(on) makes the device hold its word on a rated on from
--- off to the transition's end; loseWord() loses the next command's word; foreignWord() gives it
--- with another load's epoch instead; failWord() has the transport give up on the next command, which
--- never reaches the device, and its word says so; dropReads(on) has the device answer no read; and
--- taken() lists the level (0 to 1) of every command the device took that set one, oldest first. The
--- runner judges what the device does and what the fake proxy is told, never wire bytes. H.memoryRig
--- builds a rig over MemoryLight, the reference. Each check runs as a case (H.case): one that raises
--- fails by name, and the run goes on.
+-- The rig interface is documented above H.contract. H.memoryRig builds a rig over MemoryLight, the
+-- reference. Each check runs as a case (H.case): one that raises fails by name, and the run goes on.
 
 local F = require("c4_fixtures")
 local Caps = require("lib.light.caps")
@@ -37,6 +17,10 @@ local Fade = require("lib.light.fade")
 local Range = require("lib.light.range")
 
 local H = {}
+
+--- The version of the rig interface H.contract takes: the fields of a rig and of the device handle its
+--- load returns. A rig file names it, and a change to either set of fields raises it.
+H.RIG_VERSION = 1
 
 H.PROXY = 5001
 H.LINKS = { top = 300, toggle = 301, bottom = 302 }
@@ -623,9 +607,10 @@ end
 ---   dims, color, cct ({ min, max }), levelSteps;
 ---   fade "device" (default) or "none"; keepsLevel (an off light keeps its last level, so it needs a pre-on);
 ---   policy "trust", "echo" or "settle" (required); settleMs; waitMs (echo); ack "send" or "done";
----   ackMs; match; curve and retimes (fade.curve and fade.retimes); the adapter's hooks takeColor,
----   colorAt and echoes, and token(cmd), what its send returns; sendMs (the clock moves this much in
----   each send, as on a controller slow to pass a message on);
+---   ackMs; match; curve and retimes (fade.curve and fade.retimes); darkBetweenModes
+---   (fade.darkBetweenModes); the adapter's hooks shows, channelsAt, echoes, shown and bound, and
+---   token(cmd), what its send returns; sendMs (the clock moves this much in each send, as on a
+---   controller slow to pass a message on);
 ---   latency (ms each way, default 40); readbackMs (settle's read after a transition, default 1500);
 ---   levelMinMs (settle: a level report at most this often in a transition, default 1000);
 ---   slow (a fade this many times slower than asked); news (trust: another hand's report says so);
@@ -635,7 +620,9 @@ end
 ---   hold (with ack "done": a rated on from off has its word at its transition's end, as the 3RCB01057Z);
 ---   holdShare (0 to 1: that share of rated commands, every so many, has its word at its transition's end);
 ---   reportLag (ms a report after a transition's end lands late, up to, telling the device as it is then);
----   links (Light.new's opts.links).
+---   links (Light.new's opts.links); profile (Light.new's opts.profile, by default the most the
+---   declaration makes: dims, color, cct and fades); via (the device binding the library owns: unbind
+---   and bind go through its OnBindingChanged; without it the light is direct, and an unbind forgets it).
 --- On the result, loseNext, failNext and foreignNext lose the next command's word, give it as not
 --- delivered, or give it with another load's epoch; dropNext loses the next command on its way to the
 --- device; dropReads has the device answer no read.
@@ -673,6 +660,7 @@ function H.memoryLight(clock, o)
         curve = o.curve,
         retimes = o.retimes,
         preOn = o.dims and o.fade == "device" and o.keepsLevel and 0.0039 or nil,
+        darkBetweenModes = o.darkBetweenModes,
       },
       reports = {
         policy = o.policy,
@@ -916,7 +904,8 @@ function H.memoryLight(clock, o)
     end
     return o.token and o.token(c) or nil
   end
-  adapter.takeColor, adapter.colorAt, adapter.echoes = o.takeColor, o.colorAt, o.echoes
+  adapter.shows, adapter.channelsAt, adapter.echoes = o.shows, o.channelsAt, o.echoes
+  adapter.shown, adapter.bound = o.shown, o.bound
 
   function adapter:refresh()
     m.reads = m.reads + 1
@@ -941,7 +930,12 @@ function H.memoryLight(clock, o)
     m.range = { lo, hi }
   end
 
-  m.light = Light.new(adapter, { links = o.links })
+  local profile = o.profile
+    or { dims = o.dims == true, color = o.color == true, cct = o.cct ~= nil, fades = o.fade ~= "none" }
+  m.light = Light.new(adapter, { api = Light.API, profile = profile, links = o.links })
+  if o.via then
+    m.light:via(o.via)
+  end
 
   -- A provider that relays its device pushes the whole state now and then, its polls among them.
   local pushing = false
@@ -991,25 +985,32 @@ function H.memoryLight(clock, o)
     device:set(state, clock.now(), quiet)
   end
 
-  --- The device is lost, and back.
-  function m.drop()
+  --- The device is lost, as `kind` says (Light:lost's), by default a real loss; and back.
+  function m.drop(kind)
     m.online = false
     queue, busy, untaken = {}, false, 0
-    m.light:offline()
+    m.light:lost(kind)
   end
   function m.back()
     m.connect()
   end
 
-  --- The device binding is unbound, and bound: the light is forgotten at each, as an adapter does in
-  --- OnBindingChanged. Unbound the device cannot be reached; bound, its whole state is its first report.
+  --- The device binding is unbound, and bound. With `via` both go through its OnBindingChanged, which
+  --- the library owns; a direct light is forgotten at the unbind, as a driver does when its device is
+  --- replaced. Unbound the device cannot be reached; bound, its whole state is its first report.
   function m.unbind()
     m.online = false
     queue, busy, untaken = {}, false, 0
-    m.light:forget()
+    if o.via then
+      OnBindingChanged(o.via, "LIGHT", false, 0, 0)
+    else
+      m.light:forget()
+    end
   end
   function m.bind()
-    m.light:forget()
+    if o.via then
+      OnBindingChanged(o.via, "LIGHT", true, 0, 0)
+    end
     m.online = true
     clock.at(o.latency, function()
       if m.online then
@@ -1194,9 +1195,35 @@ function H.memoryRig(name, o)
 end
 
 --- Prove a driver's adapter against the contract. Each check loads the driver afresh through
---- `rig.load(h)`, which gets { clock, proxy } and returns the device handle.
+--- `rig.load(h)`. The runner judges what the device does and what the fake proxy is told, never
+--- wire bytes.
+---
+--- A rig (version H.RIG_VERSION):
+--- - `name`: what its checks are named by.
+--- - `load(h)`: load the driver on `h.clock` behind `h.proxy`, run its late init, set `h.light` to the
+---   light its chunk made, and return the device handle below.
+--- - `declarations`: every declaration the adapter can make.
+--- - `links`: false for a light with no button links.
+--- - `settleMs`: how long the run waits for the light to settle, less 5 s (default 12000).
+--- - `setup`: the proxy's GET_SETUP answer, such as H.setupFile("setup-607.xml"); none when left out.
+--- - `holds`: with ack = "done", the outbox and ledger checks run on the handle's extras.
+--- - `folder`: the driver folder the rig is for, which the runner sets.
+---
+--- The device handle:
+--- - `state()`: { on, level (0 to 1), color = { x, y } }, the color with kelvin, or { kelvin } alone
+---   for a white the device holds by its kelvin.
+--- - `set(state, quiet)`: another hand's change; with quiet the device reports its on or off alone,
+---   so only a read shows its level.
+--- - `drop()` and `back()`: lose and restore the device.
+--- - `dims`, `color`, `cct` and `stops` (false for a light that does not fade): what it is.
+--- - `declaration()`: what it declares.
+--- - With ack = "done": `hold(on)` makes the device hold its word on a rated on from off to the
+---   transition's end; `loseWord()` loses the next command's word; `foreignWord()` gives it with
+---   another load's epoch instead; `failWord()` has the transport give up on the next command, which
+---   never reaches the device, and its word says so; `dropReads(on)` has the device answer no read;
+---   and `taken()` lists the level (0 to 1) of every command the device took that set one, oldest first.
 --- @param T table testlib
---- @param rig table { name, load, declarations, driverXml, links, settleMs, setup, holds }
+--- @param rig table A rig, as above.
 function H.contract(T, rig)
   local name = rig.name or "light"
   local wait = (rig.settleMs or 12000) + 5000
@@ -1245,27 +1272,18 @@ function H.contract(T, rig)
     end
   end)
 
-  if rig.driverXml then
-    T.section(name .. ": driver.xml declares the static block the library relies on")
-    case(function()
-      local f = assert(io.open(rig.driverXml, "rb"))
-      local xml = f:read("*a")
-      f:close()
-      T.eq(
-        name .. ": every static capability as the library relies on it",
-        Caps.staticMismatches(xml, rig.links ~= false),
-        {}
-      )
-    end)
-  end
-
   T.section(name .. ": online, the proxy is told the capabilities of the declaration in force, once")
   case(function()
     local h = fresh()
     local caps = h.proxy.caps
     T.check(name .. ": the capabilities were told", caps ~= nil)
     if caps and h.device.declaration then
-      T.eq(name .. ": as the declaration derives them", caps, Caps.dynamic((Caps.check(h.device.declaration()))))
+      local profile = h.light and h.light.profile
+      T.eq(
+        name .. ": as the declaration derives them",
+        caps,
+        Caps.dynamic((Caps.check(h.device.declaration(), profile)), profile)
+      )
     end
     T.eq(name .. ": declare logged no error", h.errors, {})
     h.done()

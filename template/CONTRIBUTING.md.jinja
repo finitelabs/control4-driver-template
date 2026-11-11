@@ -130,7 +130,9 @@ then pull the change in with `copier update`.
 - `test/testlib.lua`, `test/c4_fixtures.lua`, `test/c4_shim.lua`,
   `test/run_test.sh`, and the `test/test_*.lua` suites covering shared code
 {%- if 'light' in vendor_modules.split() %}
-- `test/light_harness.lua` and `test/light_setup/`, the Light V2 test kit
+- `test/light_harness.lua`, `test/light_drivers.lua` and `test/light_setup/`,
+  the Light V2 test kit, `test/test_light_contract.lua`, its contract run, and
+  `tools/light-caps.lua`
 {%- endif %}
 - `.copier-answers.yml`, which Copier maintains; never edit it by hand
 
@@ -471,17 +473,35 @@ Promote either one into the template only once a second driver needs it.
 ## Writing a Light Driver
 
 `src/lib/light.lua` owns the Light V2 proxy: its commands and notifications,
-presets, on modes, Dim-To-Warm, scenes, and the button links with their LEDs. A
-light driver is an adapter that puts the library's device commands on its
-transport and reports what the device says. The LuaDoc header of
-`src/lib/light.lua` is the contract: what the adapter writes, what it calls, and
-what it must never do.
+presets, on modes, Dim-To-Warm, scenes, the button links with their LEDs, the
+light's online state and its Connected variable. A light driver is an adapter
+that states facts about its device and moves bytes. The LuaDoc header of
+`src/lib/light.lua` is the contract.
 
-`test/light_harness.lua` is the kit that proves an adapter against it: a fake
-proxy, a reference device, and a contract run that the driver's own
-`test/test_light_adapter.lua` calls with its real adapter over a fake of its
-transport. Each check of the run is a case of its own: one that raises fails by
-name, and the run goes on.
+- **The profile**, given to `Light.new` in the driver's main chunk with the API
+  the adapter is written for: the most any device behind the driver can do
+  (`dims`, `color`, `cct`), whether every device is the same (`fixed`), and the
+  families it offers (`fades`, `scenes`, `onModes`, `flash`, `extras`). An
+  adapter written for another API makes `Light.new` raise, so `make test` and
+  `make build` fail.
+- **The declaration**, at each connection and on any change: what this device
+  can do, how it fades and how to read its reports. One beyond the profile is
+  refused.
+- **The hooks**: `send(cmd)` puts a command on the wire, `refresh()` asks for
+  the whole state, and the optional ones answer device questions only.
+- **The calls**: `report` for every state the device gives, `lost` when it
+  cannot be reached, `via` for a device binding the library then owns,
+  `forget`, `reset` from Reset Driver, and `destroy` from `OnDriverDestroyed`.
+
+`make light-caps` writes each light driver's `<capabilities>` block in
+`driver.xml` from its profile, between the two `lib.light` comments. Nothing in
+the block is written by hand.
+
+`test/test_light_contract.lua` proves every light_v2 driver in the repo: its
+chunk makes one light at the library's API, its `driver.xml` holds the block
+`make light-caps` writes, and each rig the driver's own `test/light_rigs.lua`
+gives passes the kit's contract. A rig loads the driver as it ships and fakes
+only its transport; `test/light_harness.lua` documents the rig interface.
 
 The library, the kit and their suites are the template's: a change made to them
 here is merge surface on every `copier update`, so it goes to the template,

@@ -7,33 +7,59 @@
 --- ## What you write
 ---
 --- An adapter table with `send(cmd)`, `refresh()` under the settle policy, and any other hook below
---- that your transport needs.
+--- that your transport needs, and the profile of what the devices behind the driver may be.
 ---
 --- ```lua
 --- local Light = require("lib.light")
 --- local adapter = {}
 --- function adapter:send(cmd) end -- put a LightCommand on the wire, or queue it, and return
---- local light = Light.new(adapter) -- once, in the driver chunk
+--- local light = Light.new(adapter, { api = 1, profile = { dims = true, color = true, cct = true } })
 --- function OnDriverLateInit()
 ---   light:start()
 --- end
+--- function OnDriverDestroyed()
+---   light:destroy()
+--- end
 --- ```
+---
+--- ## The profile
+---
+--- `opts.profile`, the most any device behind this driver can do. make light-caps writes driver.xml's
+--- <capabilities> block from it, and a declaration beyond it is refused.
+---
+--- - `dims`, `color`, `cct`: level control, full color, color temperature (true, or `{ min, max }`
+---   in kelvin with `fixed`). Default false.
+--- - `fixed`: every device is the same, so the profile is its real set and the declaration must equal
+---   it. Default false: the static block shows no color and the declaration raises it at run time.
+--- - `fades`: some device may fade (default true); false for one that changes at once; `{ maxMs }`
+---   when longer fades run as legs.
+--- - `scenes`, `onModes`: offer Advanced Lighting Scenes and the on modes (default true). A family not
+---   offered has no handlers.
+--- - `flash` (default true), `extras` (default false): `disable_flash` and `has_extras`.
 ---
 --- ## What you call
 ---
---- - `Light.new(adapter, opts)` once, at the top level of driver.lua. `opts.proxy` is the proxy
----   binding (5001); `opts.links` is `{ top = 300, toggle = 301, bottom = 302 }`, or false for none.
---- - `light:start()` from OnDriverLateInit.
+--- - `Light.new(adapter, opts)` once, at the top level of driver.lua. `opts.api` is the API the adapter
+---   is written for, `Light.API`, and any other raises. `opts.proxy` is the proxy binding (5001);
+---   `opts.links` is `{ top = 300, toggle = 301, bottom = 302 }`, or false for none.
+--- - `light:start()` from OnDriverLateInit. A report the device gave before it is kept and taken then.
 --- - `light:declare(caps)` on every connection before its first report, and whenever the device's
----   capabilities change. Name the report policy every time (`reports.policy`): there is no default.
+---   capabilities change, which takes effect at once. Name the report policy every time
+---   (`reports.policy`): there is no default.
 --- - `light:report(state, meta)` for every state the device gives, in the order it gave them. A color
 ---   the device took comes back in the terms it was sent, xy or kelvin, within `reports.match` of it:
 ---   one that differs is told as another hand's change. Under `echo` the color may be a function of
 ---   its verdict's kind, for a reading that depends on whose the report is; `echoes` then judges it.
---- - `light:offline()` when the device cannot be reached: it drops the declaration, so declare again
----   before the next report. `light:forget()` when the device binding is bound, unbound or replaced:
----   Director binds it at every controller start, so the proxy is told only that the light is offline,
----   with the button LEDs off, and the light's first report then tells it where the light is.
+--- - `light:lost(kind)` when the device cannot be reached: `{ suspended = true }` when the link was
+---   dropped on purpose (a license lapse, a device driver update), `{ unbound = true }` when its
+---   binding is gone, nothing when the device dropped off. The light takes no command until the
+---   device's next state, and the declaration in force is kept.
+--- - `light:via(binding)` names the device binding, whose binds the library then handles: Director
+---   binds every light at a controller start, which tells nothing, and an unbind is the light lost as
+---   unbound. With nil the light is direct; then `light:forget()` when its device is replaced.
+--- - `light:reset()` from Reset Driver: lost as suspended, the device's state forgotten, the proxy's
+---   setup read again. The proxy's presets, scenes, on modes and rates are kept.
+--- - `light:destroy()` from OnDriverDestroyed: every timer stops, and the light takes nothing after.
 --- - `light:done(seq, ok, epoch)` with your transport's word on each command, only if you declared
 ---   `reports.ack = "done"`: once for every command `send` was given, with the seq and epoch it carried,
 ---   and none for one whose send raised; `ok` false when the transport gave up. A command that put nothing
@@ -47,40 +73,37 @@
 --- ## What you never do
 ---
 --- - Send to the Light V2 proxy binding or the button link bindings, or define a handler for a proxy
----   command: the library registers the proxy's 41 commands, STOP_RAMP_SCENE and the links' DO_PUSH,
----   DO_CLICK and DO_RELEASE on RFP. One light per driver: handlers are global by command name.
+---   command: the library registers the proxy's commands, STOP_RAMP_SCENE and the links' DO_PUSH,
+---   DO_CLICK and DO_RELEASE on RFP. One light per driver: handlers are global by command name. A
+---   command on a binding the light does not own goes to your RFP[idBinding].
 --- - Keep light state: levels, ramps, presets, on modes, or the colors the proxy was told.
 --- - Call light:done from a timer of your own: the library's timeout covers a word that never comes.
 ---
 --- ## Hooks the library calls
 ---
---- - `adapter:send(cmd)` (required): every device command, as the outbox lets it go. It is also called
----   while offline and before any declaration, the command judged as for an on/off light: drop what
----   your transport cannot send. Inside it call only light:done, light:offline and light:forget: an
----   offline there leaves the command as one sent while offline, and a report or a declaration there is
----   refused, with an error. Under `echo` it may return a token, a table: `token.level`, the brightness
----   that went on the wire (0 for an off), and `token.color`, set when a color or color mode did, say
----   which lists the command joins; with none it joins those of the aspects the outbox holds it by, so a
----   color's on joins no level list. The token is what `echoes` and the verdict's `since` give back.
+--- - `adapter:send(cmd)` (required): every device command, as the outbox lets it go, and never while
+---   the device has given no state. Inside it call only light:done, light:lost and light:forget: a report
+---   or a declaration there is refused, with an error. Under `echo` it may return a token, a table:
+---   `token.level`, the brightness that went on the wire (0 for an off), and `token.color`, set when a
+---   color or color mode did, say which lists the command joins; with none it joins those of the aspects
+---   the outbox holds it by, so a color's on joins no level list. The token is what `echoes` and the
+---   verdict's `since` give back.
 --- - `adapter:refresh()` (required under `settle`): ask the device for its whole state. Its answer
 ---   comes later, through report from your transport's own events: inside refresh, as inside send,
----   call only light:done, light:offline and light:forget. Called at start(), and under `settle` after
----   a turn-on by another hand, for an unasked off while a command's target is above 0, and with
----   `ack = "done"` for the core's reads.
+---   call only light:done, light:lost and light:forget. Called at start(), at a bind, under `settle`
+---   after a turn-on by another hand and for an unasked off while a command's target is above 0, and
+---   with `ack = "done"` for the core's reads.
 --- - `adapter:rangeChanged(lo, hi)`: at start() and every Min or Max On Level change, with the range
 ---   light:range() returns. A device driver that shows a level as the proxy does maps a brightness to
 ---   the Control4 levels 1 to 100 with `lib.light.range`, which it can bundle alone.
---- - `adapter:takeColor(color, ctx)`: the color the device will show, { x, y, mode }, for a color the
----   library is about to send or tell. Return it as given, or in your own form: a mode above 1 is your
----   own kind of full color, told as 0 and kept as given. `ctx.asked` is the color as the proxy asked
----   it, `ctx.ends` the Dim-To-Warm presets a point between them comes from, `ctx.stop` a stop's
----   estimate, and `ctx.held` asks where the device holds a color, such as a color temperature past
----   its range at the range's end, for a fade's ends. Without it the library applies Color.taken.
---- - `adapter:colorAt(now, to)`: where the device's color is when the library's estimate would mislead,
----   { x, y, mode } or nil, and as a second value the least time in ms a stop must take now, while the
----   light is dark between color modes, or nil. `to` is the color the ramp in flight heads to. With a
----   stop time, a level stop above 0 whose ramp keeps no color of its own also stops the color it
----   carries, in one command, and every stop is held over at least that time.
+--- - `adapter:shows(color)`: pure, the color the device shows for one asked, { x, y, mode }, such as a
+---   color temperature past its range held at the range's end. A mode above 1 is your own kind of full
+---   color, told as 0 and kept as given. Without it the library applies Color.taken.
+--- - `adapter:channelsAt(now)`: where the device's color is mid-fade, { x, y, mode } or nil, when the
+---   library's straight line would misdescribe it.
+--- - `adapter:shown(told)`: after each level or color the proxy is told, `{ level, color }`, the color
+---   with its `kelvin` when it is a white: for a device page that mirrors Control4.
+--- - `adapter:bound()`: at a bind of the device binding, for transport state of your own.
 --- - `adapter:echoes(aspect, token, raw)`: under `echo`, whether a report matches one entry of an
 ---   aspect's list, on your own wire fields; nil leaves it to the library's reading. `aspect` is "level"
 ---   or "color", `token` what send returned (for the list's head, the last report's `meta.raw`), and
@@ -103,6 +126,8 @@
 --- - `fade.by = "device"`: the device fades itself over each command's `ms`, along its `curve`,
 ---   "linear" (default) or "eased". With `preOn`, a light that keeps its last level while off is first
 ---   lit at that brightness, at once and in its on color, ahead of a rated on from off.
+--- - `fade.darkBetweenModes`: the ms a stop takes while a color fade crosses between color modes, which
+---   the device runs through dark.
 --- - `fade.retimes`: the device runs one transition for every channel, and each command restarts them
 ---   all from where they are. A command that names one aspect takes the other on to its target over its
 ---   own time, told again; a stop holds the other over the time it has left; a color for a light off or
@@ -131,13 +156,14 @@
 ---   waiting to go has no word yet, and sets its aspect when it goes.
 --- - `reports.match`: the color match tolerance in xy (default 5e-3).
 ---
---- A declaration without a policy is refused whole, with an error, and the last one accepted stays in
---- force. An unknown field or a bad value is logged as an error and ignored. A declaration takes effect
---- at the connection's first report. During a connection a change of capabilities, or of `ack` to
---- "done", waits for the next one, and the rest of `reports` takes effect at once: a change of policy
---- resets the old one's state, though what waits still goes; a change of `ack` to "send" stops waiting;
---- and a new `settleMs`, `match` or `ackMs` judges what comes next. The policy of the last declaration
---- accepted stays in force through offline and forget.
+--- A declaration without a policy, or beyond the profile, is refused whole, with an error, and the last
+--- one accepted stays in force; with a fixed profile it must equal the profile. An unknown field or a
+--- bad value is logged as an error and ignored. A declaration takes effect at the connection's first
+--- report. During a connection a change of what the device can do takes effect at once, and the proxy
+--- is told the full set again when it differs; a change of `ack` to "done" waits for the next one; a
+--- change of policy resets the old one's state, though what waits still goes; a change of `ack` to
+--- "send" stops waiting; and a new `settleMs`, `match` or `ackMs` judges what comes next. The last
+--- declaration accepted stays in force through lost and forget.
 ---
 --- ## Shapes
 ---
@@ -156,7 +182,10 @@
 ---   no ms, but for a scene step, which keeps its rate.
 --- - At most one command in flight per aspect with ack = "done"; what waits goes with the time its
 ---   rate has left. With ack = "send" every command goes at once.
---- - A ramp's end sends nothing. A report before start() is dropped, and so is one with no declaration.
+--- - A ramp's end sends nothing. A report with no declaration is dropped; the last one before start()
+---   is taken at start().
+--- - No command reaches send while the device has given no state since a load, a bind, a change of
+---   device binding or a loss.
 --- - An error raised in send or refresh reaches the caller once, and leaves nothing refusing: a command
 ---   whose send raised went nowhere, and what waits after it still goes.
 --- - Control4 is told only from the library's model, never straight from a report.
@@ -191,6 +220,7 @@ require("drivers-common-public.global.timer")
 --- @field curve "linear"|"eased"|nil
 --- @field retimes boolean|nil
 --- @field preOn number|nil
+--- @field darkBetweenModes number|nil
 
 --- @class LightReports
 --- @field policy "trust"|"echo"|"settle" Required.

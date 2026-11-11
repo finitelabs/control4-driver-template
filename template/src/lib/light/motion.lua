@@ -132,9 +132,18 @@ end
 --- @private
 --- @return number|nil stopMs
 function Motion:_darkStopMs()
-  local decl, ramp = self.device.live, self.aim.color
+  local decl, aim = self.device.live, self.aim
   local dark = decl and decl.fade.darkBetweenModes
-  if dark and ramp and ramp.startMode ~= ramp.targetMode then
+  if not dark then
+    return nil
+  end
+  local ramp = aim.color
+  if ramp and ramp.startMode ~= ramp.targetMode then
+    return dark
+  end
+  -- A color riding the level ramp, as Dim-To-Warm's or an on's does, until a stop moves it out.
+  local merged = aim.level and aim.level.mergedColor
+  if merged and merged.mode ~= self.told.mode then
     return dark
   end
   return nil

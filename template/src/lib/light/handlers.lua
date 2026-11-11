@@ -167,6 +167,7 @@ end
 function Handlers:_register()
   local proxy = self.opts.proxy
   for command, method in pairs(PROXY_COMMANDS) do
+    RFP[command] = nil
     if self:_offers(FAMILY[command]) then
       RFP[command] = function(idBinding, strCommand, tParams)
         log:trace("RFP.%s(%s, %s, %s)", command, idBinding, strCommand, tParams)
@@ -187,6 +188,7 @@ function Handlers:_register()
   -- The published name is STOP_RAMP_SCENE; older code sends STOP_SCENE_RAMP. Both reach the light.
   RFP.STOP_RAMP_SCENE = RFP.STOP_SCENE_RAMP
   for command, family in pairs(IGNORED) do
+    RFP[command] = nil
     if self:_offers(family) then
       RFP[command] = function(idBinding, strCommand, tParams)
         log:trace("RFP.%s(%s, %s, %s)", command, idBinding, strCommand, tParams)
@@ -195,6 +197,9 @@ function Handlers:_register()
         end
       end
     end
+  end
+  for command in pairs(LINK_COMMANDS) do
+    RFP[command] = nil
   end
   if not self.opts.links then
     return
