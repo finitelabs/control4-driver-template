@@ -41,6 +41,21 @@ local SENSITIVE_LAST_WORDS = {
   "pin", -- a HomeKit setup code or a lock PIN.
 }
 
+--- Compound credential names, matched against the end of the key with every non-alphanumeric character stripped,
+--- so "setupCode", "USER_CODES", "TP_SESSIONID" and "Encryption_Key" match while "passcode_type", "MaxPINCodeLength"
+--- and "error_code" stay readable. A plural matches too.
+--- @type string[]
+local SENSITIVE_SUFFIXES = {
+  "passcode",
+  "pincode",
+  "setupcode",
+  "accesscode",
+  "usercode",
+  "lockcode",
+  "sessionid",
+  "encryptionkey",
+}
+
 --- Nouns that turn a generic fragment anywhere in the key into a credential.
 --- Last-word anchoring alone drops "X-Auth-Key" (Cloudflare's global API key
 --- header), "auth_key" and "authKey", whose final word is the noun rather than
@@ -74,6 +89,11 @@ local function isSensitiveKey(key)
   local normalized = tostring(key):lower():gsub("[^%a%d]", "")
   for _, fragment in ipairs(SENSITIVE_SUBSTRINGS) do
     if normalized:find(fragment, 1, true) then
+      return true
+    end
+  end
+  for _, suffix in ipairs(SENSITIVE_SUFFIXES) do
+    if normalized:sub(-#suffix) == suffix or normalized:sub(-#suffix - 1) == suffix .. "s" then
       return true
     end
   end

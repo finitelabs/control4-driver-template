@@ -346,4 +346,53 @@ do
   end
 end
 
+--------------------------------------------------------------------------------
+T.section("A compound credential name is masked where it ends the key")
+--------------------------------------------------------------------------------
+do
+  local secret = {
+    "setupCode",
+    "SetupCode",
+    "setup_code",
+    "USER_CODES",
+    "userCode",
+    "PASSCODE",
+    "user_passcode",
+    "pin_code",
+    "PinCode",
+    "access_code",
+    "lockCode",
+    "sessionid",
+    "SessionId",
+    "TP_SESSIONID",
+    "X-Session-Id",
+    "encryptionKey",
+    "Encryption_Key",
+  }
+  local body = {}
+  for i, key in ipairs(secret) do
+    body[key] = "CODE_LEAK_" .. i
+  end
+  local out = redact(body)
+  for _, key in ipairs(secret) do
+    T.eq("masks " .. key, out[key], REDACTED)
+  end
+  local readable = {
+    passcode_type = "userpw",
+    MaxPINCodeLength = 8,
+    error_code = 3,
+    code = 200,
+    status_code = 404,
+    sessionTimeout = 300,
+    encryption_type = "AES",
+  }
+  out = redact(readable)
+  for key, value in pairs(readable) do
+    T.eq("keeps " .. key, out[key], value)
+  end
+  out = redact("https://example.com/api/thermostats?sessionid=SESSION_LEAK&serialnumber=123456")
+  T.excludes("a session id in a query masked", out, "SESSION_LEAK")
+  T.contains("the other query values kept", out, "serialnumber=123456")
+end
+
 T.finish()
