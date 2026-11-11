@@ -672,8 +672,10 @@ end
 The library clears the property at once, keeps its value out of the dispatcher's
 Trace output, and prints its answer to the Lua output whatever Log Mode is.
 While the window is open, Log Level also offers Trace and Ultra (see
-[Log Level](#log-level)). A driver that shows more while the window is open
-(extra properties) passes `supportCode:onChange(function(open) ... end)`.
+[Log Level](#log-level)). A web tab's properties card follows the window by
+itself, once the driver calls `lib.ui.tab-properties`' `serve()`. A driver that
+shows more elsewhere while the window is open passes
+`supportCode:onChange(function(open) ... end)`.
 
 ### Log Level
 
