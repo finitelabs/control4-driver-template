@@ -781,7 +781,7 @@ function H.memoryLight(clock, o)
     end
   end
 
-  -- The device side's read after a command's transition, as zigbee3's device driver reads one back.
+  -- The device side reads the light back once a command's transition has run.
   local readbackSeq = 0
   local function readAfter(mine, ms)
     clock.at(ms + o.readbackMs, function()

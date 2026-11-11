@@ -708,8 +708,7 @@ end
 -- s 0-100 / v 0-100, and neither is clamped. A kelvin is taken in 10 K steps
 -- from 1000 to 20000 K, on Krystek's fit of the Planckian locus, which lies
 -- within 0.001 of the controller's. A missing argument raises, and a numeric
--- string passes as its number. ColorRGBtoXY and ColorXYtoRGB stay out until
--- zigbee3's light suites stop stubbing them only where the shim has none.
+-- string passes as its number.
 ---------------------------------------------------------------------------
 
 local GAMUT_PRIMARIES = {
