@@ -1376,8 +1376,6 @@ ShimResetDevices()
 --------------------------------------------------------------------------------
 T.section("C4:SendToDevice and C4:SendToProxy")
 --------------------------------------------------------------------------------
--- Measured on dev, against ids that do not exist: the controller checks each argument it is handed by its place,
--- so a nil before the last one, or a trailing nil passed on, is refused like a value of the wrong type.
 do
   --- The message a call is refused with, or nil if it is accepted.
   local function refusal(fn)

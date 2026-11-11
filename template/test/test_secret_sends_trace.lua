@@ -17,8 +17,7 @@ local log = require("lib.logging")
 -- An obviously fake secret: a trace that shows it has leaked it.
 local CODE = "FAKE-CODE-0000"
 
--- What reached C4, as each call handed it over. Each is passed on to the shim's own, which refuses an argument
--- the controller refuses.
+-- What reached C4, as each call handed it over.
 local sent = {}
 local shimSendToProxy, shimSendToDevice = C4.SendToProxy, C4.SendToDevice
 function C4:SendToProxy(...)
@@ -84,7 +83,6 @@ T.excludes("nothing is redacted", output, "***REDACTED***")
 T.contains("the call is traced", output, "C4:SendToProxy(5001, LOCK_STATUS_CHANGED, ")
 
 T.section("an argument left out before one that is given reaches C4 as its default")
--- The controller refuses a nil handed in place of a flag or a message type.
 sent = {}
 local calls = {
   {
