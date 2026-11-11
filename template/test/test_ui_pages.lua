@@ -114,6 +114,15 @@ for _, selector in ipairs({
   ".note code",
   ".hint code",
   ".mono",
+  ".btn-link",
+  ".btn-link:hover",
+  ".input-valid",
+  ".chip.blue",
+  ".chip.green",
+  ".chip.yellow",
+  ".chip.purple",
+  ".chip.gray",
+  ".chip.red",
 }) do
   BASE[selector] = true
 end
@@ -138,7 +147,16 @@ local function selectors(css)
   return out
 end
 
-local KIT_CSS = { "style.css", "variables.css", "expressions.css" }
+local KIT_CSS = {
+  "style.css",
+  "variables.css",
+  "expressions.css",
+  "collapse.css",
+  "menu.css",
+  "combobox.css",
+  "color.css",
+  "pickgrid.css",
+}
 local kitSelectors = {}
 for _, name in ipairs(KIT_CSS) do
   local css = read(ROOT .. "src/lib/ui/" .. name)
@@ -169,6 +187,9 @@ listing:close()
 
 -- Each component's script comes with its stylesheet.
 local PAIRS = { ["variables.js"] = "variables.css", ["expressions.js"] = "expressions.css" }
+for _, name in ipairs({ "collapse", "menu", "combobox", "color", "pickgrid" }) do
+  PAIRS[name .. ".js"] = name .. ".css"
+end
 
 local checked = 0
 for _, path in ipairs(pages) do
