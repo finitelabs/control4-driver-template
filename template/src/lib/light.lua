@@ -285,6 +285,11 @@ require("lib.light.range")
 local Light = {}
 Light.__index = Light
 
+--- The adapter contract's version. An adapter names the one it was written for in `opts.api`, and
+--- Light.new raises at any other, so make test and make build fail before a driver can ship over a
+--- library it disagrees with.
+Light.API = 1
+
 Light.FULL, Light.CCT = Color.FULL, Color.CCT
 
 --- Color helpers for adapters.
@@ -307,12 +312,34 @@ local loads = 0
 
 local DEFAULT_LINKS = { top = 300, toggle = 301, bottom = 302 }
 
+--- The lights made in this Lua process, in order: the contract run and make light-caps read the one a
+--- driver's chunk made.
+--- @type Light[]
+Light.made = {}
+
 --- Create the light and register its proxy and link handlers. Call it once, in the driver chunk.
 --- @param adapter table The adapter: send(cmd), and any optional hooks.
---- @param opts table|nil { proxy = 5001, links = { top = 300, toggle = 301, bottom = 302 } or false }
+--- @param opts table { api, profile, proxy = 5001, links = { top = 300, toggle = 301, bottom = 302 } or false }
 --- @return Light light
 function Light.new(adapter, opts)
+  if type(adapter) ~= "table" or type(adapter.send) ~= "function" then
+    error("lib.light: Light.new needs an adapter with send(cmd)", 2)
+  end
   opts = opts or {}
+  if opts.api ~= Light.API then
+    error(
+      string.format(
+        "lib.light: the adapter is written for API %s and this library is API %d; update the adapter",
+        tostring(opts.api),
+        Light.API
+      ),
+      2
+    )
+  end
+  local profile, errors = Caps.profile(opts.profile)
+  if not profile then
+    error("lib.light: " .. table.concat(errors, "; "), 2)
+  end
   loads = loads + 1
   local links = opts.links
   if links == nil then
@@ -321,6 +348,7 @@ function Light.new(adapter, opts)
   local self = setmetatable({
     adapter = adapter,
     opts = { proxy = opts.proxy or 5001, links = links },
+    profile = profile,
     started = false,
     told = {
       level = 0,
@@ -343,16 +371,26 @@ function Light.new(adapter, opts)
     scenes = { generation = 0, progress = {} },
   }, Light)
   self:_register()
+  Light.made[#Light.made + 1] = self
   return self
 end
 
---- Start the light, from OnDriverLateInit: it is offline until its first report.
+--- Start the light, from OnDriverLateInit: it is offline until its device's first state. A report
+--- the device gave before it is taken now, after the start's own tells.
 function Light:start()
+  if self.destroyed then
+    return
+  end
   self.started = true
   self:_notifyOnline(false)
   self:_refresh()
   self:_tellRange()
   self:_readSetup()
+  local early = self.early
+  self.early = nil
+  if early then
+    self:report(early.state, early.meta)
+  end
 end
 
 --- Declare what the device can do, and how it fades and reports.
@@ -364,7 +402,7 @@ function Light:declare(caps)
     log:error("Light:declare: inside %s, so it is refused; declare from your transport's own events", inside)
     return false
   end
-  local decl, errors = Caps.check(caps)
+  local decl, errors = Caps.check(caps, self.profile)
   for _, err in ipairs(errors) do
     log:error("Light:declare: %s", err)
   end
@@ -388,15 +426,29 @@ function Light:declare(caps)
     dev.ack = "send"
     self:_stopWaiting()
   end
+  if dev.live then
+    -- What the device can do changes at once, and the proxy hears it when what it is told differs.
+    -- A word the device now waits for (ack = "done") starts at the next connection.
+    local before = Caps.dynamic(dev.live, self.profile)
+    dev.live = decl
+    if self.told.online and not Caps.same(before, Caps.dynamic(decl, self.profile)) then
+      self:_notifyCapabilities(decl)
+    end
+  end
   return true
 end
 
 --- Report a state the device gave.
 --- @param state table A LightState.
 --- @param meta table|nil A LightReportMeta.
---- @return table|nil verdict A LightVerdict; nil for a report dropped.
+--- @return table|nil verdict A LightVerdict; nil for a report dropped, or kept for start().
 function Light:report(state, meta)
+  if self.destroyed then
+    return nil
+  end
   if not self.started then
+    -- The last one is kept, and taken at start().
+    self.early = { state = state, meta = meta }
     return nil
   end
   local dev = self.device
@@ -412,6 +464,7 @@ function Light:report(state, meta)
   local first = not self.told.online
   if first then
     -- The first report on a connection brings the light online: ONLINE_CHANGED before the capabilities.
+    dev.present = true
     self.told.online = true
     dev.live = dev.decl
     dev.ack = dev.live.reports.ack
@@ -425,25 +478,113 @@ function Light:report(state, meta)
   return verdict
 end
 
---- The device cannot be reached: the proxy is told it is offline and off, with the LEDs off.
-function Light:offline()
+--- The device cannot be reached. The light takes no command until its device's next state, and the
+--- proxy is told it is offline once for the outage. What else it is told is the cause's:
+--- - `suspended`: the link was dropped on purpose (a license lapse, a device driver update, Reset
+---   Driver), so the proxy keeps the level and the LEDs, and no Light Off runs;
+--- - `unbound`: the device binding is gone, so the LEDs go off and the proxy keeps the level;
+--- - neither: the device dropped off, so the light reads off, its LEDs with it.
+--- The declaration in force is kept.
+--- @param kind table|nil { suspended = boolean, unbound = boolean }
+function Light:lost(kind)
+  kind = kind or {}
+  local online = self.told.online
   self:_drop()
+  if not online then
+    if kind.unbound then
+      self:_matchLedState(false)
+    end
+    return
+  end
   self:_notifyOnline(false)
+  if kind.suspended then
+    return
+  end
+  if kind.unbound then
+    self:_matchLedState(false)
+    return
+  end
   self:_notifyBrightnessChanged(0) -- the LED state is kept, so the button LEDs go off too
 end
 
---- The device binding is bound, unbound or replaced, as Director binds it at every controller start: the
---- proxy is told only that the light is offline, since an off would run its Off programming, and the button
---- LEDs go off. The light is forgotten, its color D65 again.
+--- A direct device was replaced: the light forgets it, its color D65 again, and is lost as unbound.
+--- A light with a device binding never needs it: the library forgets at the binding's change.
 function Light:forget()
-  self:_drop()
+  self:lost({ unbound = true })
   local told = self.told
   told.x, told.y, told.mode = Color.D65.x, Color.D65.y, Color.CCT
-  self:_notifyOnline(false)
-  self:_matchLedState(false)
+  told.leds = nil
 end
 
---- Drop what the light knows of its device and what the proxy was told of it, telling nothing.
+--- The device binding the library owns: a light on a device driver's binding is offline whenever that
+--- binding is unbound. With nil the light is direct, and the driver calls lost and forget itself.
+--- Changing it loses the light as unbound until the new device's first state.
+--- @param binding integer|nil
+function Light:via(binding)
+  if binding == self.viaBinding then
+    return
+  end
+  local old = self.viaBinding
+  if old and OBC[old] == self.viaHandler then
+    OBC[old] = nil
+  end
+  self.viaBinding, self.viaHandler = binding, nil
+  if binding then
+    self.viaHandler = function(_, _, bIsBound)
+      self:_bound(bIsBound)
+    end
+    OBC[binding] = self.viaHandler
+  end
+  if self.started and old ~= nil then
+    self:lost({ unbound = true })
+    self.told.leds = nil
+    self:_refresh()
+  end
+end
+
+--- The device binding was bound or unbound. Director binds every light at a controller start, between
+--- init and late init, and that tells nothing: start() asks the device. A bind after it keeps what the
+--- device already told, and asks again; an unbind is the light lost as unbound.
+--- @private
+--- @param bound boolean
+function Light:_bound(bound)
+  if not self.started or self.destroyed then
+    return
+  end
+  if bound then
+    self.told.leds = self.device.present and self.told.leds or nil
+    if self.adapter.bound then
+      self.adapter:bound()
+    end
+    self:_refresh()
+    return
+  end
+  self:lost({ unbound = true })
+  self.told.leds = nil
+end
+
+--- Reset Driver: the light stops its timers and scenes, is lost as suspended, forgets its device's
+--- state, and reads the proxy's setup again. The proxy's own settings it keeps:
+--- presets, scenes, on modes, rates, Min and Max On, and the button colors.
+function Light:reset()
+  self:lost({ suspended = true })
+  local told = self.told
+  told.x, told.y, told.mode = Color.D65.x, Color.D65.y, Color.CCT
+  told.leds = nil
+  if self.started then
+    self:_readSetup()
+    self:_refresh()
+  end
+end
+
+--- OnDriverDestroyed: every timer the light set stops, and it takes nothing after.
+function Light:destroy()
+  self:_drop()
+  self.destroyed = true
+end
+
+--- Drop what the light knows of its device and what the proxy was told of it, telling nothing. The
+--- declaration in force is kept.
 --- @private
 function Light:_drop()
   local dev, aim, told = self.device, self.aim, self.told
@@ -454,7 +595,9 @@ function Light:_drop()
   self:_stopAllScenes()
   dev.word = {}
   self:_resetPolicy()
-  dev.decl, dev.live, dev.ack = nil, nil, "send"
+  dev.live, dev.ack = nil, "send"
+  dev.present = false
+  self.early = nil
   told.online = false
   told.level = 0
   aim.prePress = nil

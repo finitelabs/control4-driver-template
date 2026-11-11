@@ -115,30 +115,40 @@ function Motion:_timeLeft(ramp)
   return math.max(0, ramp.durationMs - (C4:GetTime() - ramp.startTime))
 end
 
---- Where the adapter's colorAt has the device's color, and the least time a stop must take now.
+--- Where the adapter's channelsAt has the device's color mid-fade.
 --- @private
 --- @param now number|nil
 --- @return table|nil color { x, y, mode }
---- @return number|nil stopMs
 function Motion:_colorAt(now)
   local adapter = self.adapter
-  if not adapter.colorAt then
-    return nil, nil
+  if not adapter.channelsAt then
+    return nil
   end
-  local ramp = self.aim.color
-  local to = ramp and { x = ramp.targetX, y = ramp.targetY, mode = ramp.targetMode } or nil
-  return adapter:colorAt(now or C4:GetTime(), to)
+  return adapter:channelsAt(now or C4:GetTime())
 end
 
---- Where a color leaves the light: the adapter's takeColor says, for a device that holds some colors
+--- The least time a stop must take now: fade.darkBetweenModes while a color ramp in flight crosses
+--- between color modes, which the device runs through dark; nil otherwise.
+--- @private
+--- @return number|nil stopMs
+function Motion:_darkStopMs()
+  local decl, ramp = self.device.live, self.aim.color
+  local dark = decl and decl.fade.darkBetweenModes
+  if dark and ramp and ramp.startMode ~= ramp.targetMode then
+    return dark
+  end
+  return nil
+end
+
+--- Where a color leaves the light: the adapter's shows says, for a device that holds some colors
 --- elsewhere (a color temperature past its range at the range's end).
 --- @private
 --- @return number x, number y
 function Motion:_held(x, y, mode)
-  if not self.adapter.takeColor then
+  if not self.adapter.shows then
     return x, y
   end
-  local held = self.adapter:takeColor({ x = x, y = y, mode = mode }, { held = true })
+  local held = self.adapter:shows({ x = x, y = y, mode = mode })
   return held.x, held.y
 end
 
@@ -529,10 +539,10 @@ function Motion:_brightnessRampStopped()
 end
 
 --- A level stop on a device that re-times: a kept color runs on over the time it has left, and a
---- light dark between color modes eases back up over the stop time colorAt gives.
+--- light dark between color modes eases back up over fade.darkBetweenModes.
 --- @private
 function Motion:_heldBrightnessStop(stoppedAt, at, keepColor)
-  local _, stopMs = self:_colorAt()
+  local stopMs = self:_darkStopMs()
   local dimmed = not keepColor and stoppedAt > 0 and stopMs ~= nil
   if dimmed then
     self:_leaveMergedColor()
@@ -738,17 +748,17 @@ function Motion:_colorRampStopped(level, at)
   self:_notifyColorChanged(x, y, mode)
 end
 
---- A color stop on a device that re-times: held over the level's time left, or the stop time
---- colorAt gives while the light is dark between color modes, and the level re-timed to end with it.
+--- A color stop on a device that re-times: held over the level's time left, or fade.darkBetweenModes
+--- while the light is dark between color modes, and the level re-timed to end with it.
 --- @private
 function Motion:_heldColorStop(x, y, mode, level, at)
   local now = C4:GetTime()
-  if self.adapter.takeColor then
-    x, y, mode = self:_taken(x, y, mode, { stop = true })
+  if self.adapter.shows then
+    x, y, mode = self:_taken(x, y, mode)
   end
   local levelRamp = self.aim.level
   local hold = levelRamp and self:_timeLeft(levelRamp) or 0
-  local _, stopMs = self:_colorAt()
+  local stopMs = self:_darkStopMs()
   if stopMs then
     hold = math.max(hold, stopMs)
   end
@@ -931,7 +941,6 @@ function Motion:_setColorTarget(tParams)
   self.told.colorPreset = presetId
 
   local targetX, targetY, targetMode
-  local asked = { asked = { x = x, y = y, mode = incomingMode, kelvin = kelvin } }
   if kelvin and kelvin > 0 and self:_hasCct() then
     targetX, targetY = C4:ColorCCTtoXY(kelvin)
     targetMode = CCT
@@ -940,9 +949,9 @@ function Motion:_setColorTarget(tParams)
       log:warn("SET_COLOR_TARGET: ColorXYtoCCT(%s, %s) gave no color temperature", x, y)
       return
     end
-    targetX, targetY, targetMode = self:_taken(x, y, CCT, asked)
+    targetX, targetY, targetMode = self:_taken(x, y, CCT)
   elseif x and y and self:_hasColor() then
-    targetX, targetY, targetMode = self:_taken(x, y, FULL, asked)
+    targetX, targetY, targetMode = self:_taken(x, y, FULL)
   else
     log:warn(
       "SET_COLOR_TARGET ignored (kelvin=%s x=%s y=%s mode=%s color=%s cct=%s)",

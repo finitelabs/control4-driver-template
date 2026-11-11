@@ -142,18 +142,16 @@ function Settings:_setButtonColors(buttonId, onColor, offColor)
   persist:set(Settings.P_BUTTON_COLORS, colors)
 end
 
---- A color in the form the light takes it: the adapter's takeColor, else Color.taken.
+--- A color in the form the device shows it: the adapter's shows, else Color.taken.
 --- @private
 --- @param x number
 --- @param y number
 --- @param mode integer
---- @param ctx table|nil For takeColor: `asked`, the color as the proxy asked it; `ends`, the
----   Dim-To-Warm presets a point between them comes from; `stop`, a stop's estimate.
 --- @return number x, number y, integer mode
-function Settings:_taken(x, y, mode, ctx)
+function Settings:_taken(x, y, mode)
   local adapter = self.adapter
-  if adapter.takeColor then
-    local color = adapter:takeColor({ x = x, y = y, mode = mode }, ctx or {})
+  if adapter.shows then
+    local color = adapter:shows({ x = x, y = y, mode = mode })
     return color.x, color.y, color.mode
   end
   return Color.taken(x, y, mode, self:_hasColor(), self:_hasCct())
@@ -180,8 +178,7 @@ function Settings:_fadeColor(brightness)
   local x, y, colorMode = self:_taken(
     dimPreset.x + (onPreset.x - dimPreset.x) * b,
     dimPreset.y + (onPreset.y - dimPreset.y) * b,
-    onPreset.mode or Color.FULL,
-    { ends = { on = onPreset, dim = dimPreset } }
+    onPreset.mode or Color.FULL
   )
   return { x = x, y = y, mode = colorMode }
 end
@@ -237,7 +234,7 @@ function Settings:_onColor(brightnessLevel)
     if prev and prev.x and prev.y then
       local x, y, colorMode = prev.x, prev.y, prev.mode or Color.FULL
       -- An adapter's own form of it, as the proxy's follow-up SET_COLOR_TARGET is taken, so it dedupes.
-      if self.adapter.takeColor then
+      if self.adapter.shows then
         x, y, colorMode = self:_taken(x, y, colorMode)
       end
       return { x = x, y = y, mode = colorMode, preset = preset }

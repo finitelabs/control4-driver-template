@@ -4,6 +4,7 @@
 
 local log = require("lib.logging")
 local persist = require("lib.persist")
+local values = require("lib.values")
 local Caps = require("lib.light.caps")
 local Color = require("lib.light.color")
 local Settings = require("lib.light.settings")
@@ -81,6 +82,7 @@ function Notify:_notifyBrightnessChanged(level)
     LIGHT_BRIGHTNESS_CURRENT_PRESET_ID = told.levelPreset,
   }, "NOTIFY")
   self:_matchLedState(level > 0)
+  self:_shown()
 end
 
 --- Tell the proxy the light is on its way to a level.
@@ -123,6 +125,26 @@ function Notify:_notifyColorChanged(x, y, mode)
     LIGHT_COLOR_CURRENT_COLOR_MODE = toldMode(mode),
     LIGHT_COLOR_CURRENT_PRESET_ID = told.colorPreset,
   }, "NOTIFY")
+  self:_shown()
+end
+
+--- Tell the adapter what the proxy now shows, for a device page that mirrors Control4: the level, and
+--- the color with its kelvin when it is a white. An error in it is logged and goes no further.
+--- @private
+function Notify:_shown()
+  local adapter = self.adapter
+  if not adapter.shown then
+    return
+  end
+  local told = self.told
+  local color = { x = told.x, y = told.y, mode = toldMode(told.mode) }
+  if color.mode == Color.CCT then
+    color.kelvin = Color.kelvin(told.x, told.y)
+  end
+  local ok, err = pcall(adapter.shown, adapter, { level = told.level, color = color })
+  if not ok then
+    log:error("adapter:shown raised: %s", err)
+  end
 end
 
 --- Tell the proxy the light is on its way to a color.
@@ -148,11 +170,13 @@ function Notify:_notifyColorChanging(targetX, targetY, mode, rate)
   }, "NOTIFY", true)
 end
 
---- Tell the proxy whether the light can be reached.
+--- Tell the proxy whether the light can be reached, and Control4 programming through the Connected
+--- variable.
 --- @private
 --- @param online boolean
 function Notify:_notifyOnline(online)
   SendToProxy(self.opts.proxy, "ONLINE_CHANGED", { STATE = online }, "NOTIFY")
+  values:update("Connected", online, "BOOL")
 end
 
 --- Tell the proxy the light's capabilities, at a connection's first report, then re-read its setup
@@ -168,11 +192,15 @@ function Notify:_notifyCapabilities(decl)
     decl.fade.by,
     decl.reports.policy
   )
-  local caps = Caps.dynamic(decl)
+  local caps = Caps.dynamic(decl, self.profile)
   SendToProxy(self.opts.proxy, "DYNAMIC_CAPABILITIES_CHANGED", caps, "NOTIFY", true)
   -- A new light's setup lists no colors until the proxy hears it has color.
   self:_readSetup()
 
+  if not self.opts.links then
+    self:_tellPresetLevel()
+    return
+  end
   -- The three buttons, a string per the NUMBER_BUTTONS notify, then each one's name and colors.
   SendToProxy(self.opts.proxy, "NUMBER_BUTTONS", "3", "NOTIFY")
   local ids = Settings.BUTTONS
@@ -192,7 +220,12 @@ function Notify:_notifyCapabilities(decl)
     }, "NOTIFY")
   end
 
-  -- The preset level, so the proxy is seeded after a reload.
+  self:_tellPresetLevel()
+end
+
+--- The preset level, so the proxy is seeded after a reload.
+--- @private
+function Notify:_tellPresetLevel()
   local presetLevel = tointeger(persist:get(Settings.P_PRESET_LEVEL))
   if presetLevel and presetLevel > 0 then
     SendToProxy(self.opts.proxy, "PRESET_LEVEL", tostring(presetLevel), "NOTIFY")
