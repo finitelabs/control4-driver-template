@@ -31,10 +31,10 @@ test("closed, it is the button and an arrow in its look; open, the menu of the o
   const items = [["Check for updates", () => {}], ["Update from a <URL>", () => {}]];
   const draw = () => Kit.splitButton("fw", MAIN, items, { label: "More ways to update", onChange: () => drawn++ });
   const closed = draw();
-  assert.match(closed, /^<span class="kit-split"><button class="btn btn-primary">Update firmware<\/button>/);
-  assert.match(closed, /class="btn btn-primary kit-split-arrow" data-kit-menu="fw" aria-label="More ways to update" aria-haspopup="menu" aria-expanded="false"/);
+  assert.match(closed, /^<span class="kit-splitbtn"><button class="btn btn-primary">Update firmware<\/button>/);
+  assert.match(closed, /class="btn btn-primary kit-splitbtn-arrow" data-kit-menu="fw" aria-label="More ways to update" aria-haspopup="menu" aria-expanded="false"/);
   assert.doesNotMatch(closed, /kit-menu"/);
-  assert.match(Kit.splitButton("x", '<button class="btn btn-secondary">Check</button>', items), /btn btn-secondary kit-split-arrow/);
+  assert.match(Kit.splitButton("x", '<button class="btn btn-secondary">Check</button>', items), /btn btn-secondary kit-splitbtn-arrow/);
   click(document, el(document, { "data-kit-menu": "fw" }));
   assert.equal(Kit.menu.isOpen("fw"), true);
   assert.equal(drawn, 1, "opening draws the page again");
