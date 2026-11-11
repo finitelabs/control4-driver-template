@@ -28,19 +28,6 @@ local EVENT_ID_END = 999
 --- @field name string
 --- @field description string
 
---- Calls `fn` with each saved event that has its ID, skipping any other saved entry.
---- @param saved table<string, table<string, Event>> The saved events.
---- @param fn fun(event: Event)
-local function eachEvent(saved, fn)
-  for _, keys in pairs(saved) do
-    for _, event in pairs(type(keys) == "table" and keys or {}) do
-      if Select(event, "eventId") ~= nil then
-        fn(event)
-      end
-    end
-  end
-end
-
 --- Creates a new `Events` instance.
 --- @return Events events A new `Events` instance.
 function Events:new()
@@ -130,10 +117,14 @@ function Events:restoreEvents()
   log:trace("Events:restoreEvents()")
   --- @type table<number, boolean>
   local usedEventIds = {}
-  eachEvent(self:getEvents(), function(event)
-    usedEventIds[event.eventId] = true
-    C4:AddEvent(event.eventId, event.name, event.description)
-  end)
+  for _, keys in pairs(self:getEvents()) do
+    for _, event in pairs(keys) do
+      if Select(event, "eventId") ~= nil then
+        usedEventIds[event.eventId] = true
+        C4:AddEvent(event.eventId, event.name, event.description)
+      end
+    end
+  end
   for id = EVENT_ID_START, EVENT_ID_END do
     if usedEventIds[id] == nil then
       log:trace("Deleting non-configured event %s, if it exists", id)
@@ -149,9 +140,13 @@ function Events:_getNextEventId()
   log:trace("Events:_getNextEventId()")
   --- @type table<number, boolean>
   local currentEvents = {}
-  eachEvent(self:getEvents(), function(event)
-    currentEvents[event.eventId] = true
-  end)
+  for _, keys in pairs(self:getEvents()) do
+    for _, event in pairs(keys) do
+      if Select(event, "eventId") ~= nil then
+        currentEvents[event.eventId] = true
+      end
+    end
+  end
   local nextId = EVENT_ID_START
   while currentEvents[nextId] ~= nil do
     nextId = nextId + 1
@@ -179,10 +174,12 @@ end
 --- Resets all dynamic events, removing them from the system and clearing persisted storage.
 function Events:reset()
   log:trace("Events:reset()")
-  eachEvent(self:getEvents(), function(event)
-    log:debug("Removing event '%s' (id=%s)", event.name, event.eventId)
-    C4:DeleteEvent(event.eventId)
-  end)
+  for _, nsEvents in pairs(self:getEvents()) do
+    for _, event in pairs(nsEvents) do
+      log:debug("Removing event '%s' (id=%s)", event.name, event.eventId)
+      C4:DeleteEvent(event.eventId)
+    end
+  end
   self:_saveEvents(nil)
 end
 

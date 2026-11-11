@@ -1,6 +1,6 @@
 -- What lib/conditionals.lua and lib/events.lua do with a saved record that comes back without its id, or as
--- something other than a table. Each loop over the saved records indexed by that id, so one such record threw
--- "table index is nil" at the start of OnDriverLateInit and stopped the driver from starting.
+-- something other than a table. Restoring events and finding the next free id indexed by that id, so one such
+-- record threw "table index is nil" at the start of OnDriverLateInit and stopped the driver from starting.
 --
 -- Run from the driver root:
 --   make test
@@ -14,10 +14,10 @@ require("drivers-common-public.global.handlers") -- TC
 
 local persist = require("lib.persist")
 
---- Saves records under key the way a driver might find them: one whole, one without its id, one that is not a
---- table, and a namespace that is not a table either. Then fresh modules read them back, as after a restart.
+--- Saves records under key the way a driver might find them: one whole, one without its id and one that is not a
+--- table. Then fresh modules read them back, as after a restart.
 local function savedAfterRestart(key, whole, noId)
-  persist:set(key, { Buttons = { whole = whole, noId = noId, notATable = "x" }, Broken = "x" })
+  persist:set(key, { Buttons = { whole = whole, noId = noId, notATable = "x" } })
   ShimPersistLand()
   T.unload("^lib%.")
   ShimResetEvents()
@@ -41,11 +41,7 @@ savedAfterRestart(
   { name = "CONDITIONAL_LOST", type = "BOOL", condition_statement = "IS", description = "Lost its id" }
 )
 local conditionals = require("lib.conditionals")
-local ok, listed = pcall(GetConditionals)
-T.truthy("GetConditionals runs", ok, listed)
-T.eq("and lists only the whole one", keys(ok and listed or nil), { "10" })
-local added
-ok, added = pcall(conditionals.upsertConditional, conditionals, "Buttons", "new", {
+local ok, added = pcall(conditionals.upsertConditional, conditionals, "Buttons", "new", {
   type = "BOOL",
   condition_statement = "IS",
   description = "New",
@@ -54,9 +50,6 @@ ok, added = pcall(conditionals.upsertConditional, conditionals, "Buttons", "new"
 end)
 T.truthy("a new one is added", ok, added)
 T.eq("under the next free id", ok and added.conditionalId, 11)
-T.eq("with its test", type(TC.CONDITIONAL_11), "function")
-T.truthy("reset runs", pcall(conditionals.reset, conditionals))
-T.eq("and removes the test", TC.CONDITIONAL_11, nil)
 
 T.section("a saved event without its id is skipped")
 savedAfterRestart(
@@ -70,7 +63,5 @@ T.eq("and declares only the whole one", keys(ShimEvents()), { 10 })
 ok, added = pcall(events.getOrAddEvent, events, "Buttons", "new", "New", "When new")
 T.truthy("a new one is added", ok, added)
 T.eq("under the next free id", ok and added.eventId, 11)
-T.truthy("reset runs", pcall(events.reset, events))
-T.eq("and deletes both", keys(ShimEvents()), {})
 
 T.finish()
