@@ -1,5 +1,7 @@
 --- Masks credentials in values bound for a log line or a diagnostics report.
 
+local log = require("lib.logging")
+
 -- JSON, which bodies are decoded with.
 require("drivers-common-public.global.lib")
 
@@ -244,9 +246,21 @@ local function redact(value, depth, seen)
   return copy
 end
 
+--- What a log line shows of a value: masked as `value` masks it, except at Ultra, which prints everything as it is.
+--- Anything that leaves the controller, such as a Cloud Monitoring report, uses `value`.
+--- @param value any
+--- @return any
+local function forLog(value)
+  if log:getLogLevel() >= log.LogLevel.ULTRA then
+    return value
+  end
+  return redact(value)
+end
+
 return {
   REDACTED = REDACTED,
   value = redact,
+  forLog = forLog,
   text = redactSerialized,
   isSensitiveKey = isSensitiveKey,
 }

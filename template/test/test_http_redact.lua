@@ -395,4 +395,18 @@ do
   T.contains("the other query values kept", out, "serialnumber=123456")
 end
 
+--------------------------------------------------------------------------------
+T.section("A log line shows a value as it is at Ultra, and masked below it")
+--------------------------------------------------------------------------------
+do
+  local log = require("lib.logging")
+  local body = { pin = "031-45-154", name = "Living Room Bridge" }
+  log:setLogLevel(log.LogLevel.TRACE)
+  T.eq("masked at Trace", R.forLog(body).pin, REDACTED)
+  log:setLogLevel(log.LogLevel.ULTRA)
+  T.eq("as it is at Ultra", R.forLog(body).pin, "031-45-154")
+  T.eq("while what leaves the controller is still masked", R.value(body).pin, REDACTED)
+  log:setLogLevel(log.LogLevel.INFO)
+end
+
 T.finish()
