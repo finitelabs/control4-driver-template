@@ -114,10 +114,14 @@ T.eq("and deletes every declared event", keys(ShimEvents()), {})
 T.section("a saved binding without its id, type or class is skipped, and the driver adding it again adds it whole")
 ShimResetDynamicBindings()
 ShimSetStaticBindings({})
+-- What Director still holds from before the restart: the binding with no class saved, and a connection on it.
+C4:AddDynamicBinding(5013, "PROXY", true, "No class", "RELAY", false, false)
+C4:Bind(C4:GetDeviceID(), 5013, 700, 1, "RELAY")
 savedAfterRestart("ConnectionBindings", {
   whole = { key = "whole", bindingId = 5012, type = "PROXY", provider = true, displayName = "Whole", class = "RELAY" },
   noId = { key = "noId", type = "PROXY", provider = true, displayName = "No id", class = "RELAY" },
   noClass = { key = "noClass", bindingId = 5013, type = "PROXY", provider = true, displayName = "No class" },
+  noType = { key = "noType", bindingId = 5014, provider = true, displayName = "No type", class = "RELAY" },
 })
 local bindings = require("lib.bindings")
 _, err, output = warned(function()
@@ -130,24 +134,32 @@ T.contains(
   "Skipping saved binding Buttons/noId: it has no binding ID"
 )
 T.contains("and the one with no class", output, "Skipping saved binding 5013: it has no type or class")
-T.eq("adding only the whole one", keys(ShimDynamicBindings()), { 5012 })
+T.contains("and the one with no type", output, "Skipping saved binding 5014: it has no type or class")
+T.eq("adding only the whole one, and keeping the one Director holds", keys(ShimDynamicBindings()), { 5012, 5013 })
 --- getOrAddDynamicBinding's binding, or nil if it raised.
 local function added(...)
   local ok, binding = pcall(bindings.getOrAddDynamicBinding, bindings, ...)
   return ok and binding or nil
 end
 local binding = added("Buttons", "new", "PROXY", true, "New", "RELAY")
-T.eq("a new one takes the next id not saved", binding and binding.bindingId, 5014)
+T.eq("a new one takes the next id not saved", binding and binding.bindingId, 5015)
 binding = added("Buttons", "noClass", "PROXY", true, "No class", "RELAY")
 T.eq("the one with no class is added whole at its own id", {
   binding and binding.bindingId,
   binding and binding.class,
   ShimDynamicBindings()[5013] and ShimDynamicBindings()[5013].class,
 }, { 5013, "RELAY", "RELAY" })
+T.eq("keeping its connection", #ShimConnections(), 1)
+binding = added("Buttons", "noType", "PROXY", true, "No type", "RELAY")
+T.eq("the one with no type, added again as it was, is added whole at its own id", {
+  binding and binding.bindingId,
+  binding and binding.type,
+  ShimDynamicBindings()[5014] and ShimDynamicBindings()[5014].type,
+}, { 5014, "PROXY", "PROXY" })
 binding = added("Buttons", "noId", "PROXY", true, "No id", "RELAY")
-T.eq("the one with no id is given the next", binding and binding.bindingId, 5015)
+T.eq("the one with no id is given the next", binding and binding.bindingId, 5016)
 binding = added("Broken", "first", "PROXY", true, "First", "RELAY")
-T.eq("one in a namespace that was not a table replaces it", binding and binding.bindingId, 5016)
+T.eq("one in a namespace that was not a table replaces it", binding and binding.bindingId, 5017)
 T.truthy("reset runs", pcall(bindings.reset, bindings))
 T.eq("and removes every binding it added", keys(ShimDynamicBindings()), {})
 

@@ -111,30 +111,14 @@ local PROXY_BINDING_END = 5999
 --- @field displayName string
 --- @field class string
 
---- Whether a saved entry is a table holding each named field.
---- @param entry any
---- @param ... string The fields it must hold.
---- @return boolean
-local function holds(entry, ...)
-  if type(entry) ~= "table" then
-    return false
-  end
-  for i = 1, select("#", ...) do
-    if entry[select(i, ...)] == nil then
-      return false
-    end
-  end
-  return true
-end
-
 --- Calls `fn` with each saved binding that has its ID, and `skipped` with the namespace and key of any other entry.
 --- @param saved table<string, table<string, Binding>> The saved bindings.
 --- @param fn fun(binding: Binding)
 --- @param skipped? fun(namespace: any, key: any)
 local function eachBinding(saved, fn, skipped)
   for namespace, keys in pairs(saved) do
-    for key, binding in pairs(holds(keys) and keys or {}) do
-      if holds(binding, "bindingId") then
+    for key, binding in pairs(type(keys) == "table" and keys or {}) do
+      if Select(binding, "bindingId") ~= nil then
         fn(binding)
       elseif skipped then
         skipped(namespace, key)
@@ -155,17 +139,17 @@ end
 --- If the binding does not exist, it creates a new one with a unique ID.
 --- @param namespace string The namespace of the binding.
 --- @param key string The key of the binding.
---- @param type string The type of the binding (e.g., "CONTROL" or "PROXY").
+--- @param bindingType string The type of the binding (e.g., "CONTROL" or "PROXY").
 --- @param provider boolean Whether the binding is a provider.
 --- @param displayName string The display name of the binding.
 --- @param class string The class of the binding.
 --- @return Binding|nil binding The binding object or nil if the binding could not be created.
-function Bindings:getOrAddDynamicBinding(namespace, key, type, provider, displayName, class)
+function Bindings:getOrAddDynamicBinding(namespace, key, bindingType, provider, displayName, class)
   log:trace(
     "Binding:getOrAddDynamicBinding(%s, %s, %s, %s, %s, %s)",
     namespace,
     key,
-    type,
+    bindingType,
     provider,
     displayName,
     class
@@ -173,26 +157,26 @@ function Bindings:getOrAddDynamicBinding(namespace, key, type, provider, display
   local bindings = self:getBindings()
   --- @type Binding|nil
   local binding = Select(bindings, namespace, key)
-  if not holds(binding, "bindingId", "type", "class") then
+  if Select(binding, "bindingId") == nil or binding.type == nil or binding.class == nil then
     -- A saved record missing a field the restore needs is replaced, keeping its ID if it has one.
-    local bindingId = Select(binding, "bindingId") or self:_getNextBindingId(type)
+    local bindingId = Select(binding, "bindingId") or self:_getNextBindingId(bindingType)
     if bindingId == nil then
       return nil
     end
     binding = {
       key = key,
       bindingId = bindingId,
-      type = type,
+      type = bindingType,
       provider = provider,
       displayName = displayName,
       class = class,
     }
     --- @cast binding Binding
 
-    bindings[namespace] = holds(bindings[namespace]) and bindings[namespace] or {}
+    bindings[namespace] = type(bindings[namespace]) == "table" and bindings[namespace] or {}
     bindings[namespace][key] = binding
     self:_saveBindings(bindings)
-    C4:AddDynamicBinding(bindingId, type, provider, displayName, class, false, false)
+    C4:AddDynamicBinding(bindingId, bindingType, provider, displayName, class, false, false)
   elseif binding.displayName ~= displayName or binding.provider ~= provider or binding.class ~= class then
     -- Control4 has no in-place rename, so re-add under the same id, with the record's own
     -- type (its id came from that type's range and restoreBindings re-adds from it). Wiring
@@ -330,7 +314,7 @@ function Bindings:restoreBindings()
     -- AddDynamicBinding raises on a nil name, which an older driver build could save, and a record without its
     -- type or class can't be added as it was. Either keeps its id, and the driver's next getOrAddDynamicBinding
     -- for it adds it whole.
-    if not holds(binding, "type", "class") then
+    if binding.type == nil or binding.class == nil then
       log:warn("Skipping saved binding %s: it has no type or class", binding.bindingId)
     elseif binding.displayName ~= nil then
       log:debug("Restoring %s binding %s", binding.class, binding.displayName)
@@ -361,24 +345,24 @@ end
 --- Retrieves the next available binding ID for a given type. Ensures that the
 --- ID is unique and within the allowed range.
 --- @private
---- @param type string The type of the binding (e.g., "CONTROL" or "PROXY").
+--- @param bindingType string The type of the binding (e.g., "CONTROL" or "PROXY").
 --- @return integer|nil bindingId The next available binding ID or nil if the maximum is exceeded.
-function Bindings:_getNextBindingId(type)
-  log:trace("Binding:_getNextBindingId(%s)", type)
+function Bindings:_getNextBindingId(bindingType)
+  log:trace("Binding:_getNextBindingId(%s)", bindingType)
   --- @type table<integer, boolean>
   local currentBindings = {}
   eachBinding(self:getBindings(), function(binding)
     currentBindings[binding.bindingId] = true
   end)
   local nextId, maxId = CONTROL_BINDING_START, CONTROL_BINDING_END
-  if type == "PROXY" then
+  if bindingType == "PROXY" then
     nextId, maxId = PROXY_BINDING_START, PROXY_BINDING_END
   end
   while currentBindings[nextId] ~= nil and nextId <= maxId do
     nextId = nextId + 1
   end
   if nextId > maxId then
-    log:error("maximum %s bindings exceeded", type)
+    log:error("maximum %s bindings exceeded", bindingType)
     return nil
   end
   return nextId
