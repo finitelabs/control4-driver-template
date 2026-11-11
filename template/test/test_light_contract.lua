@@ -18,9 +18,18 @@ local Light = require("lib.light")
 
 local root = D.root()
 local lights = D.lights(root)
+local rigsFile = io.open(root .. "/test/light_rigs.lua")
+local hasRigs = rigsFile ~= nil
+if rigsFile then
+  rigsFile:close()
+end
 
-T.section("the repo's light_v2 drivers")
-T.check("at least one driver names the light_v2 proxy", #lights > 0, "none under drivers/")
+-- A repo with no light driver yet has nothing to prove, unless it gives rigs.
+if #lights == 0 and not hasRigs then
+  print("No light_v2 driver under drivers/: nothing to prove.")
+  T.finish()
+  return
+end
 
 for _, folder in ipairs(lights) do
   T.section(folder .. ": its chunk makes one light at API " .. Light.API .. ", and driver.xml holds its capabilities")

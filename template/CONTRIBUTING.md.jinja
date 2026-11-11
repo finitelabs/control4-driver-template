@@ -490,8 +490,8 @@ that states facts about its device and moves bytes. The LuaDoc header of
 - **The hooks**: `send(cmd)` puts a command on the wire, `refresh()` asks for
   the whole state, and the optional ones answer device questions only.
 - **The calls**: `report` for every state the device gives, `lost` when it
-  cannot be reached, `via` for a device binding the library then owns,
-  `forget`, `reset` from Reset Driver, and `destroy` from `OnDriverDestroyed`.
+  cannot be reached, `via` for a device binding the library then owns, `forget`,
+  `reset` from Reset Driver, and `destroy` from `OnDriverDestroyed`.
 
 `make light-caps` writes each light driver's `<capabilities>` block in
 `driver.xml` from its profile, between the two `lib.light` comments. Nothing in
