@@ -50,7 +50,8 @@ Kit.initTabs();
 </body>
 </html>
 """
-UI_FILES = ("style.css", "variables.css", "expressions.css", "page.js", "variables.js", "expressions.js")
+UI_FILES = ("style.css", "variables.css", "expressions.css", "page.js", "variables.js", "expressions.js",
+            "collapse.css", "collapse.js", "menu.css", "menu.js", "combobox.css", "combobox.js", "color.css", "color.js", "pickgrid.css", "pickgrid.js")
 
 
 def kit_as_built(text, build):
