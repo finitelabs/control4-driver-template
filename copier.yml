@@ -121,6 +121,13 @@ extra_required_checks:
   validator: >-
     {% for check in extra_required_checks.split() %}{% if not check | regex_search('^[A-Za-z0-9._-]+$') %}{{ check }} is not a check name tools/github-setup can require: use letters, digits, '.', '_' and '-'. {% endif %}{% endfor %}
 
+embedded_drivers:
+  type: str
+  help: "Space-separated <host>:<driver>[,<driver>...] pairs, each a drivers/ folder: make package packages each driver named before its host and puts its .c4z in the host's package under c4z/, for a host that adds that driver to the project itself, since a driver update never adds a proxy item. Each embedded driver also ships as its own .c4z."
+  default: ""
+  validator: >-
+    {% for pair in embedded_drivers.split() %}{% if not pair | regex_search('^[A-Za-z0-9_-]+:[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$') %}{{ pair }} is not <host>:<driver>[,<driver>...], each a drivers/ folder name. {% endif %}{% endfor %}
+
 stale_issues:
   type: bool
   help: "Ping inactive issues, then close them, unless an exempt author opened them"

@@ -1,0 +1,2 @@
+# expect: is not <host>:<driver>
+embedded_drivers: home_connect
