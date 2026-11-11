@@ -293,6 +293,12 @@ function Motion:_setDeviceBrightness(level, rateMs, keepColor, at)
     end
   end
   local wire = mergedColor and self:_wireColor(mergedColor.x, mergedColor.y, mergedColor.mode)
+  -- A color the light already shows, with no color ramp in flight, rides the level and tells nothing:
+  -- Dim-To-Warm between two equal colors fires no color event at each level.
+  local told = self.told
+  local shown = wire
+    and self.aim.color == nil
+    and Color.same(told.x, told.y, told.mode, mergedColor.x, mergedColor.y, mergedColor.mode)
   if wire then
     cmd.color = wire
     -- The proxy's follow-up SET_COLOR_TARGET for this color is taken as already sent.
@@ -303,7 +309,7 @@ function Motion:_setDeviceBrightness(level, rateMs, keepColor, at)
     -- A level change's color is told at the ramp's end; an on's was told at once, and only matches
     -- the proxy's follow-up.
     local ramp = self.aim.level
-    if ramp then
+    if ramp and not shown then
       local color = { x = mergedColor.x, y = mergedColor.y, mode = mergedColor.mode, preset = mergedColor.preset }
       if goingOn then
         ramp.onColor = color
@@ -318,7 +324,7 @@ function Motion:_setDeviceBrightness(level, rateMs, keepColor, at)
   self:_command(cmd, { target = level, brightness = brightness }, preOn)
   -- The proxy does not always send a color of its own (Dim-To-Warm drives it from the formula),
   -- so the color's CHANGING or CHANGED mirrors the level's.
-  if wire then
+  if wire and not shown then
     -- The color sent last is the one the light goes to, so a color ramp in flight ends here: its
     -- end would tell the proxy, and re-send, a color the light has left.
     self:_leaveColorRamp(now)
@@ -328,7 +334,7 @@ function Motion:_setDeviceBrightness(level, rateMs, keepColor, at)
     else
       self:_notifyColorChanged(mergedColor.x, mergedColor.y, mergedColor.mode)
     end
-  elseif self:_retimes() then
+  elseif not wire and self:_retimes() then
     self:_retimeColor(cmd.ms, keepColor, now)
   end
 end

@@ -5526,6 +5526,47 @@ case(function()
   w.restore()
 end)
 
+T.section("Dim-To-Warm with the On and Dim colors the same: a level fade tells no color event (WLED dig2go, 11-10)")
+for _, kind in ipairs({ "policy", "trust", "echo", "retimes" }) do
+  local o = kind == "policy" and {} or kind == "retimes" and { retimes = true } or { policy = kind }
+  for _, pair in ipairs({
+    { name = "a white", on = WARM, dim = { id = 2, origin = 1, x = WARM.x, y = WARM.y, mode = CCT } },
+    { name = "a full color", on = ON_PRESET, dim = { id = 2, origin = 1, x = ON_PRESET.x, y = ON_PRESET.y } },
+  }) do
+    case(function()
+      local w = world(o, 100)
+      onMode(w, pair.on, pair.dim)
+      -- A level brings the light into the mix first, which is a real change of color.
+      w.proxy:send("SET_LEVEL", { LEVEL = 100 })
+      w.run(20000)
+      w.proxy:mark()
+      w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 30, RATE = 3000 })
+      w.run(1500)
+      w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 80, RATE = 3000 })
+      w.run(20000)
+      local label = string.format("%s, %s: ", kind == "policy" and "settle" or kind, pair.name)
+      if kind == "retimes" then
+        T.check(label .. "the device re-times", w.m.declaration().fade.retimes == true)
+      end
+      T.eq(label .. "no color CHANGING", #w.proxy:told("LIGHT_COLOR_CHANGING"), 0)
+      T.eq(label .. "and no color CHANGED", #w.proxy:told("LIGHT_COLOR_CHANGED"), 0)
+      T.check(label .. "while the level moved", #w.proxy:told("LIGHT_BRIGHTNESS_CHANGING") > 0)
+      w.restore()
+    end)
+  end
+end
+case(function()
+  local w = world({}, 100)
+  onMode(w, WARM, DIM)
+  w.proxy:send("SET_LEVEL", { LEVEL = 100 })
+  w.run(20000)
+  w.proxy:mark()
+  w.proxy:send("SET_BRIGHTNESS_TARGET", { LIGHT_BRIGHTNESS_TARGET = 30, RATE = 3000 })
+  w.run(20000)
+  T.check("the control: On and Dim colors apart, the fade tells its color", #w.proxy:told("LIGHT_COLOR_CHANGING") > 0)
+  w.restore()
+end)
+
 T.section("Min and Max On Level remap every level sent and shown, and the adapter is told the range")
 case(function()
   local w = world({}, 50)
