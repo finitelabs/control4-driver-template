@@ -69,7 +69,7 @@ do
     { 500, 500, 500, 500 }
   )
   T.eq("hold rates", { s:holdRate(true), s:holdRate(false) }, { 3000, 3000 })
-  T.eq("button colors", { s:buttonColors(0) }, { "0000ff", "000000" })
+  T.eq("button colors: none invented", { s:buttonColors(0) }, { "", "" })
   T.eq("no Previous On level", s:previousOnLevel(), nil)
   local on = s:forOn()
   T.eq("an on reads no on mode", { on.onModeLevel, on.colorOnMode, on.onColor, on.previousColor }, { nil, "none" })
@@ -163,7 +163,7 @@ do
       function()
         return { s:buttonColors(2) }
       end,
-      { "ff0000", "000000" },
+      { "ff0000", "" },
     },
   }
   for _, c in ipairs(cases) do
@@ -364,6 +364,18 @@ do
   s = fresh()
   s:readSetup(setupFile("setup-732-new.xml"))
   T.eq("a new light's setup lists no colors: no mode", persist:get(Settings.P_COLOR_ON_MODE, false), false)
+end
+
+T.section("button colors: saved, else the setup's, else empty")
+do
+  local s = fresh()
+  s:readSetup(setupFile("setup-607.xml"))
+  T.eq("Top's from the setup", { s:buttonColors(0) }, { "0000ff", "000000" })
+  T.eq("Bottom's from the setup, the Off look", { s:buttonColors(1) }, { "000000", "0000ff" })
+  T.eq("Toggle's from the setup", { s:buttonColors(2) }, { "0000ff", "000000" })
+  s:apply("SET_BUTTON_COLOR", { BUTTON_ID = "1", ON_COLOR = "ff0000" })
+  T.eq("a saved color wins, and the other keeps the setup's", { s:buttonColors(1) }, { "ff0000", "0000ff" })
+  T.eq("a button with neither has empty colors", { fresh():buttonColors(2) }, { "", "" })
 end
 
 T.section("a setup that cannot be read leaves what is stored")

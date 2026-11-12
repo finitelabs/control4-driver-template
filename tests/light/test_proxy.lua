@@ -11,6 +11,8 @@ local persist = require("lib.persist")
 
 -- Caps.dynamic as the test sets it, and a deep Caps.same.
 local dynamicCaps = { dimmer = true, supports_color = false, brightness_rate_max = 65535 }
+-- What the build wrote into driver.xml from the profile: the proxy holds these before any tell.
+local staticCaps = { dimmer = "True", supports_color = "False", brightness_rate_max = "65535" }
 local function same(a, b)
   if type(a) ~= "table" or type(b) ~= "table" then
     return a == b
@@ -34,6 +36,13 @@ package.loaded["lib.light.caps"] = {
       copy[k] = v
     end
     return copy
+  end,
+  static = function()
+    local rows = {}
+    for key, value in pairs(staticCaps) do
+      rows[#rows + 1] = { key = key, value = value }
+    end
+    return rows
   end,
   same = same,
 }
@@ -175,7 +184,7 @@ do
   for _, s in ipairs(got) do
     cmds[#cmds + 1] = s.cmd
   end
-  T.eq("online: ONLINE_CHANGED, the capabilities, the buttons, the link colors and the preset level", cmds, {
+  T.eq("online: ONLINE_CHANGED, the capabilities, the buttons and the link colors, and no echo", cmds, {
     "ONLINE_CHANGED",
     "DYNAMIC_CAPABILITIES_CHANGED",
     "NUMBER_BUTTONS",
@@ -185,7 +194,6 @@ do
     "BUTTON_COLORS",
     "BUTTON_COLORS",
     "BUTTON_COLORS",
-    "PRESET_LEVEL",
   })
   T.eq("ONLINE_CHANGED true", got[1].params.STATE, true)
   T.eq("the links each hear their colors", { got[7].id, got[8].id, got[9].id }, { 300, 302, 301 })
@@ -216,14 +224,23 @@ do
   vars = {
     [6661] = "<DynamicCapabilities><dimmer>True</dimmer><supports_color>False</supports_color></DynamicCapabilities>",
   }
-  T.eq("the first after an upgrade has no rate keys stored, so it tells", p:capabilities(DEVICE), true)
-  T.eq("the rate keys 6661 does not show are kept", persist:get("light_rate_caps"), { brightness_rate_max = 65535 })
+  T.eq(
+    "none stored, and the table matches 6661 and driver.xml's static values: nothing told",
+    p:capabilities(DEVICE),
+    false
+  )
+  T.eq("and nothing stored", persist:get("light_rate_caps"), nil)
+  dynamicCaps.brightness_rate_max = 60000
+  p = make()
+  T.eq("a rate the static value does not give is told, once after the upgrade", p:capabilities(DEVICE), true)
+  T.eq("the rate keys 6661 does not show are kept", persist:get("light_rate_caps"), { brightness_rate_max = 60000 })
   T.eq("the same again in this load tells nothing", p:capabilities(DEVICE), false)
   take()
 
   p = make()
   T.eq("a new load whose proxy holds them all tells nothing", p:capabilities(DEVICE), false)
   T.eq("not even once", names(), {})
+  dynamicCaps.brightness_rate_max = 65535
 
   vars[6661] = "<DynamicCapabilities><dimmer>False</dimmer></DynamicCapabilities>"
   p = make()
@@ -476,6 +493,31 @@ do
   p = make()
   p:sync(rest(true, 0.5))
   T.eq("the first sync of a load echoes nothing", names(), { "LIGHT_BRIGHTNESS_CHANGED" })
+end
+
+T.section("a setup read tells no echo: an echo answers a setting command")
+do
+  local p, settings = make(LINKS)
+  p:readSetup()
+  settings.preset = 30
+  settings.colors[1] = { on = "000000", off = "0000ff" }
+  p:read()
+  p:online(DEVICE)
+  p:sync(rest(true, 0.5))
+  local got = take()
+  local cmds = {}
+  for _, s in ipairs(got) do
+    cmds[#cmds + 1] = s.cmd
+  end
+  T.check("a start tells no PRESET_LEVEL", not table.concat(cmds, " "):find("PRESET_LEVEL"), cmds)
+  p:readSetup()
+  settings.preset = 40
+  p:sync(rest(true, 0.5))
+  T.eq("the setup re-read at the first report tells nothing either", names(), {})
+  settings.preset = 55
+  p:sync(rest(true, 0.5))
+  got = take()
+  T.eq("a setting command after it is echoed", { #got, got[1].cmd, got[1].params }, { 1, "PRESET_LEVEL", "55" })
 end
 
 T.section("shown: at each connection's first sync, then whenever it changes")

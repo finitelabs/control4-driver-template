@@ -170,7 +170,8 @@ do
   T.eq("the pre-on first: lit, at once, in the on color", flags(cmds[1]), "preOn on=true L=1 C=1 off=1")
   T.eq("at the bottom step", cmds[1].level, 1 / 255)
   T.eq("0 ms", cmds[1].transitionMs, 0)
-  T.eq("its change follows, not from off, the color already sent", flags(cmds[2]), "change on=true L=1 C=0 off=0")
+  T.eq("its change follows, not from off, and carries the on color too", flags(cmds[2]), "change on=true L=1 C=1 off=0")
+  T.eq("the same color on both", { cmds[1].color.x, cmds[2].color.x }, { RED.x, RED.x })
   T.eq("from the bottom step", cmds[2].from.level, 1 / 255)
   T.eq("over the rate", cmds[2].transitionMs, 2000)
   run(m, level(20, 0))
@@ -707,6 +708,54 @@ do
   T.eq("so its on keeps the color it has", flags(take(send)[1]), "change on=true L=1 C=0 off=1")
 end
 
+T.section("an on from off sets an on mode's or a held color even when the light kept it")
+do
+  local plain = make(nil, { level = 0, color = RED })
+  run(plain, on(0), choose(100, RED))
+  T.eq("an on mode's color equal to the kept one is set", flags(take(plain)[1]), "change on=true L=1 C=1 off=1")
+  local none = make(nil, { level = 0, color = RED })
+  run(none, on(0), choose(100))
+  T.eq("an on with no color of its own is not", flags(take(none)[1]), "change on=true L=1 C=0 off=1")
+  local pre = make(device({ fade = PRE_ON }), { level = 0, color = RED })
+  run(pre, level(60, 1500), choose(60, RED))
+  local cmds = take(pre)
+  T.eq("on a pre-on device, the pre-on and its change both set it", { flags(cmds[1]), flags(cmds[2]) }, {
+    "preOn on=true L=1 C=1 off=1",
+    "change on=true L=1 C=1 off=0",
+  })
+  local held = make(device({ colorWhileOff = "hold", fade = PRE_ON }), { level = 0, color = BLUE })
+  run(held, level(60, 1500), choose(60))
+  cmds = take(held)
+  T.eq("a held color goes with both too", { flags(cmds[1]), flags(cmds[2]) }, {
+    "preOn on=true L=1 C=1 off=1",
+    "change on=true L=1 C=1 off=0",
+  })
+  T.eq("in the held color", cmds[2].color.x, BLUE.x)
+  local lit = make(nil, { level = 0.5, color = RED })
+  run(lit, level(80, 0), choose(80, RED))
+  T.eq("a lit light's change to the same color sets no color", flags(take(lit)[1]), "change on=true L=1 C=0 off=0")
+end
+
+T.section("a stop lands on a whole C4 level")
+do
+  for _, case in ipairs({ { 1, 100 }, { 20, 80 } }) do
+    local lo, hi = case[1], case[2]
+    local m = make(nil, { level = 0.1 }, settings(lo, hi))
+    run(m, level(100, 1000))
+    take(m)
+    clock.run(437)
+    run(m, { kind = "stopLevel", source = "proxy" })
+    local stop = take(m)[1]
+    local c4 = Range.toLevel(stop.level, lo, hi)
+    T.eq(
+      string.format("on %d-%d the stop is the device value of a whole level", lo, hi),
+      stop.level,
+      Range.toDevice(c4, lo, hi)
+    )
+    T.eq("and the view rests there, the level LightProxy tells", m:view().level, stop.level)
+  end
+end
+
 T.section("the view's power is Motion's, not the estimate's")
 do
   local m = make()
@@ -845,6 +894,7 @@ do
   end
   T.check(string.format("%d commands, each within the rules", count), #broken == 0, broken[1])
 end
+
 
 clock.restore()
 T.finish()
