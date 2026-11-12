@@ -375,6 +375,43 @@ CASES["answers to a read"] = {
     want = { H(), H({ ask = true }, "level"), H({ settle = { level = 0.6 } }, "level") },
   },
   {
+    name = "an off pushed during a lit ramp, then read back moving, is another hand's off at once",
+    dev = { shows = "position", refresh = true },
+    now = { level = 0.2 },
+    steps = {
+      { send = { level = 1, fromLevel = 0.2 }, land = 30000, now = { levelRamping = true } },
+      { run = 3000 },
+      { hear = { kind = "push", on = false } },
+      { hear = { kind = "moving", on = false } },
+    },
+    -- A light on its way to lit is never off.
+    want = { H({ ask = true }), H({ settle = { on = false }, foreign = { "on" } }) },
+  },
+  {
+    name = "a stale off read back moving on ends there, so a real off after it is read and told at once",
+    dev = { shows = "position", refresh = true },
+    now = { level = 0.2 },
+    steps = {
+      { send = { level = 1, fromLevel = 0.2 }, land = 20000, now = { levelRamping = true } },
+      { run = 3000 },
+      { hear = { kind = "push", on = false } },
+      { hear = { kind = "moving", on = true } },
+      { run = 3000 },
+      { hear = { kind = "push", on = false } },
+      { hear = { kind = "moving", on = false } },
+    },
+    want = { H({ ask = true }), H(), H({ ask = true }), H({ settle = { on = false }, foreign = { "on" } }) },
+  },
+  {
+    name = "a moving on during a fade to off is the light on its way, held",
+    dev = { shows = "position", refresh = true },
+    steps = {
+      { send = { on = false }, land = 3000, now = { levelRamping = true } },
+      { hear = { kind = "moving", on = true } },
+    },
+    want = { H() },
+  },
+  {
     name = "a final that matches the newest sent in device steps settles on the sent value, not its rounding",
     dev = { shows = "position" },
     steps = { { send = { level = 0.5 } }, { hear = { kind = "final", level = 0.5013 } } },
@@ -407,6 +444,17 @@ CASES["the newest command's echo"] = {
       { run = 5000 },
     },
     want = { H({ settle = { level = 0.8 } }) },
+  },
+  {
+    name = "under position, a color's target read while its ramp runs is read at once by the device: the ramp runs on",
+    dev = { shows = "position", refresh = true },
+    steps = {
+      { send = { color = BLUE }, land = 2000, now = { colorRamping = true } },
+      { hear = { kind = "push", color = BLUE } },
+      { now = { colorRamping = false }, run = 3000 },
+    },
+    -- The ramp's end tells the color; its deadline, the echo heard, closes quietly.
+    want = { H(), H(nil, "color") },
   },
   {
     name = "a color within the tolerance is the echo",
@@ -560,6 +608,18 @@ CASES["after the deadline's ask"] = {
 
 CASES["the deadline"] = {
   {
+    name = "a position no command sent, reported once the change landed, is adopted at the deadline with no read",
+    dev = { shows = "position", refresh = true },
+    steps = {
+      { send = { level = 0.01 } },
+      { run = 60 },
+      { hear = { kind = "push", level = 0.05 } },
+      { run = 1000 },
+    },
+    -- A light that clamps a level to its minimum landed there; one still on its way is read first.
+    want = { H(), H({ settle = { level = 0.05 } }, "level") },
+  },
+  {
     name = "heard with nothing held keeps the command",
     steps = {
       { send = { level = 0.8 }, land = 2000, now = { levelRamping = true } },
@@ -709,6 +769,27 @@ CASES["One attribute at a time, and walks"] = {
     want = { H(), H({ ask = true }, "color"), H(), H({ settle = { color = BLUE } }) },
   },
   {
+    name = "a command while another hand's on waits for its level asks again once it is out, not at the deadline",
+    dev = { shows = "position", refresh = true, waitMs = 11500 },
+    now = { on = false },
+    steps = {
+      { hear = { kind = "push", on = true } },
+      { run = 100 },
+      { send = { color = BLUE } },
+      -- Motion holds the light off: only the Ledger holds another hand's on.
+      { now = { on = false }, run = 1 },
+      { hear = { kind = "final", on = true } },
+      { hear = { kind = "final", level = 0.5 } },
+    },
+    -- The read under way answers from before the color, and the device may drop that answer.
+    want = {
+      H({ foreign = { "on" }, ask = true }),
+      H({ ask = true }, "on"),
+      H(),
+      H({ settle = { on = true, level = 0.5 } }),
+    },
+  },
+  {
     name = "a light that doesn't dim: another hand's on is read once, and the read's on is told alone",
     dev = { refresh = true, dims = false },
     now = { on = false, level = 1 },
@@ -736,6 +817,42 @@ CASES["One attribute at a time, and walks"] = {
       { hear = { kind = "push", on = true, level = 0.22 } },
     },
     want = { H(), H() },
+  },
+  {
+    name = "a walk's first poll that reads the level it started from is where the walk is: it may predate the step",
+    dev = { walk = true, refresh = true, waitMs = 2000, levelSteps = 100 },
+    now = { level = 0.5 },
+    steps = {
+      { send = { level = 0.51, fromLevel = 0.5 }, now = { levelRamping = true } },
+      { hear = { kind = "push", on = true, level = 0.5 } },
+    },
+    want = { H() },
+  },
+  {
+    name = "once a walk is heard, a poll that reads the level it started from is another hand's: the walk never sent it",
+    dev = { walk = true, refresh = true, waitMs = 2000, levelSteps = 100 },
+    now = { level = 0.05 },
+    steps = {
+      { send = { level = 0.06, fromLevel = 0.05 }, now = { levelRamping = true } },
+      { hear = { kind = "push", on = true, level = 0.06 } },
+      { send = { level = 0.07, fromLevel = 0.06 } },
+      { hear = { kind = "push", on = true, level = 0.05 } },
+    },
+    want = { H(), H({ settle = { level = 0.05 }, foreign = { "level" } }) },
+  },
+  {
+    name = "a walk's first poll tells a color no command sent as the light's state; a later poll's is another hand's",
+    dev = { walk = true, refresh = true, waitMs = 2000, levelSteps = 100 },
+    steps = {
+      { send = { level = 0.6, fromLevel = 0.5 }, now = { levelRamping = true } },
+      { hear = { kind = "push", on = true, level = 0.6, color = BLUE } },
+      { hear = { kind = "push", on = true, level = 0.6, color = { x = 0.3, y = 0.3, mode = "xy" } } },
+    },
+    -- The first poll may read a change made before the walk was asked for.
+    want = {
+      H({ settle = { color = BLUE } }),
+      H({ settle = { color = { x = 0.3, y = 0.3, mode = "xy" } }, foreign = { "color" } }),
+    },
   },
   {
     name = "a walk from off: a read that shows the light still off before the first step is the walk's own",
@@ -804,6 +921,20 @@ CASES["One attribute at a time, and walks"] = {
 }
 
 CASES["Another hand, and fades on their way"] = {
+  {
+    name = "a level alone below where a fade to off started is the fade on its way: neither settled nor another hand's",
+    dev = { shows = "position", refresh = true },
+    now = { on = true, level = 0.8 },
+    steps = {
+      { send = { on = false, level = 0.8, fromLevel = 0.8 }, land = 2000, now = { levelRamping = true } },
+      { run = 1100 },
+      { hear = { kind = "push", level = 0.4 } },
+      { now = { levelRamping = false }, run = 1900 },
+      { hear = { kind = "final", on = false } },
+    },
+    -- The fade's end tells the off; its deadline reads the light once, and the read's off is no news.
+    want = { H(), H({ ask = true }, "on"), H() },
+  },
   {
     name = "a lit report below where a fade to off started is the fade on its way: held, and the off settles",
     dev = { shows = "position", refresh = true },
@@ -919,6 +1050,46 @@ do
   ledger:closeAll()
 end
 
+T.section("a stop ends a change early, so a lone off after it is adopted at the stop's landing plus the wait")
+do
+  local dues = {}
+  local now = { on = false, level = 0.4, color = RED, levelRamping = false, colorRamping = false }
+  local ledger
+  local light = {}
+  function light._due(_, aspect)
+    dues[#dues + 1] = { aspect = aspect, at = clock.now(), heard = ledger:due(aspect, now) }
+  end
+  ledger = Ledger.new(light)
+  ledger:declare(device())
+  ledger:heard({ kind = "push", on = false, level = 0.4, color = RED }, now)
+  local start = clock.now()
+  -- A rated on from off, landing in 6 s.
+  ledger:sent(command({ fromOff = true, level = 0.6, fromLevel = 0.4 }), { on = start + 6000, level = start + 6000 })
+  now.on, now.levelRamping = true, true
+  clock.run(50)
+  -- A stop at 50 ms holds the light lit where it got to.
+  local stop = command({ level = 0.01, fromLevel = 0.01 })
+  stop.kind = "stop"
+  ledger:sent(stop, { on = clock.now(), level = clock.now() })
+  now.level, now.levelRamping = 0.01, false
+  clock.run(40)
+  T.eq(
+    "a lone off nothing sent explains is held, not told at once",
+    ledger:heard({ kind = "push", on = false }, now).settle.on,
+    nil
+  )
+  clock.run(1500)
+  local onDue
+  for _, d in ipairs(dues) do
+    if d.aspect == "on" then
+      onDue = d
+    end
+  end
+  T.eq("the on's deadline comes at the stop's landing plus the wait", onDue and onDue.at - start, 50 + 1000)
+  T.eq("and adopts the off", onDue and onDue.heard.settle.on, false)
+  ledger:closeAll()
+end
+
 T.section("Windows and the run")
 do
   local outs = {}
@@ -965,6 +1136,50 @@ do
     end)(),
     true
   )
+end
+
+T.section("a connection's first report: what it leaves out is awaited until a report, a command or the wait's end")
+do
+  local now = { on = true, level = 0.5, color = RED, levelRamping = false, colorRamping = false }
+  local awaited = {}
+  local ledger
+  local light = {}
+  function light._due() end
+  function light._awaited()
+    awaited[#awaited + 1] = ledger:awaited()
+  end
+  ledger = Ledger.new(light)
+  ledger:declare(device({ waitMs = 1000 }))
+  ledger:heard({ kind = "push", on = true }, now)
+  T.eq("an on alone awaits the level and the color", ledger.awaiting, { level = true, color = true })
+  ledger:heard({ kind = "push", level = 0.4 }, now)
+  T.eq("the level's own report ends its wait", ledger.awaiting, { color = true })
+  clock.run(1000)
+  T.eq(
+    "the wait's end gives the color as a first, told as held",
+    awaited[1],
+    { settle = {}, foreign = {}, ask = false, first = { "color" } }
+  )
+  T.eq("and nothing is awaited after", ledger.awaiting, {})
+
+  ledger:reset()
+  ledger:heard({ kind = "push", on = true }, now)
+  local at = clock.now()
+  ledger:sent(command({ level = 0.8, color = BLUE }), { on = at, level = at, color = at })
+  T.eq("a command that sets them ends the wait", ledger.awaiting, {})
+  clock.run(2000)
+  T.eq("and its timer with it", #awaited, 1)
+
+  ledger:reset()
+  ledger:heard({ kind = "push", on = false }, now)
+  T.eq("an off alone awaits only the color: an off's level is 0", ledger.awaiting, { color = true })
+  ledger:reset()
+  T.eq("a reset ends the wait", ledger.awaiting, {})
+  clock.run(2000)
+  T.eq("and its timer", #awaited, 1)
+  ledger:heard({ kind = "push", on = true, level = 0.5, color = RED }, now)
+  T.eq("a whole first report awaits nothing", ledger.awaiting, {})
+  ledger:closeAll()
 end
 
 clock.restore()

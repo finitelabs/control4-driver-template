@@ -81,6 +81,9 @@ end
 --- @field readbackMs integer|nil The transport reads the device this long after a command's transition.
 --- @field seeds boolean|nil After each command the transport's cache re-pushes it as a "seed".
 --- @field silent boolean|nil The device pushes nothing: only reads are answered.
+--- @field split boolean|nil Each aspect is its own report, On/Off first, then level, then color, each lost or late
+---   on its own. A push carries only an aspect that differs from the one last heard, a read is answered aspect by
+---   aspect, and a connect is a seed of all three followed by a push of each.
 --- @field rest (fun(cmd: LightCommand): LightRest|nil)|nil What send returns; the device rests there.
 --- @field drop (fun(kind: string): boolean)|nil Lose a frame: kind "command", "report" or "read".
 --- @field delay (fun(kind: string): integer)|nil Ms more a report takes, so what follows overtakes it.
@@ -416,8 +419,23 @@ end
 --- @field reads integer refresh() calls.
 --- @field dropNext boolean|nil Lose the next command on its way to the device.
 --- @field dropReads boolean|nil Answer no read.
+--- @field heard table<LightAspect, any> Each aspect's value as the light last heard it.
 local Memory = {}
 Memory.__index = Memory
+
+local ASPECTS = { "on", "level", "color" }
+-- Ms between the frames of one split report.
+local SPLIT_GAP_MS = 10
+
+--- @param a any
+--- @param b any
+--- @return boolean
+local function sameValue(a, b)
+  if type(a) == "table" and type(b) == "table" then
+    return math.abs(a.x - b.x) < 1e-9 and math.abs(a.y - b.y) < 1e-9 and a.mode == b.mode
+  end
+  return a == b
+end
 
 --- The device's facts, as the driver declares them.
 --- @return LightDevice
@@ -448,7 +466,39 @@ function Memory:deliver(report)
     return
   end
   self.reports[#self.reports + 1] = { at = self.clock.now(), report = copy(report) }
+  for _, aspect in ipairs(ASPECTS) do
+    if report[aspect] ~= nil then
+      self.heard[aspect] = copy(report[aspect])
+    end
+  end
   self.light:report(report)
+end
+
+--- Under `split`, a report's aspects as one frame each, SPLIT_GAP_MS apart, each read as it lands.
+--- @private
+--- @param kind LightReportKind|fun(): LightReportKind A function is read as each frame lands.
+--- @param frame "report"|"read" What the transport may lose.
+--- @param values fun(): LightValues
+--- @param after integer Ms before the first frame lands.
+--- @param changedOnly boolean A frame goes only for an aspect that differs from the one last heard.
+--- @param stale (fun(): boolean)|nil A frame that lands once this is true is dropped.
+function Memory:_frames(kind, frame, values, after, changedOnly, stale)
+  local o = self.o
+  for i, aspect in ipairs(ASPECTS) do
+    if not (o.drop and o.drop(frame)) then
+      local late = frame == "report" and o.delay and o.delay(frame) or 0
+      self.clock.at(after + late + (i - 1) * SPLIT_GAP_MS, function()
+        if stale and stale() then
+          return
+        end
+        local value = values()[aspect]
+        if value == nil or (changedOnly and sameValue(self.heard[aspect], value)) then
+          return
+        end
+        self:deliver({ kind = type(kind) == "function" and kind() or kind, [aspect] = copy(value) })
+      end)
+    end
+  end
 end
 
 --- A report of `kind` after the latency, unless the transport loses it. A function is read as it lands.
@@ -457,6 +507,13 @@ end
 --- @param extra integer|nil
 function Memory:push(kind, values, extra)
   local o = self.o
+  if o.split and kind ~= "seed" then
+    local function read()
+      return type(values) == "function" and values() or values
+    end
+    self:_frames(kind, "report", read, (o.latency or 40) + (extra or 0), kind == "push")
+    return
+  end
   if o.drop and o.drop("report") then
     return
   end
@@ -507,7 +564,23 @@ end
 --- @param asked integer The commands sent when the read left: one sent since outdates the answer.
 function Memory:_answer(asked)
   local o = self.o
-  if self.dropReads or (o.drop and o.drop("read")) then
+  if self.dropReads then
+    return
+  end
+  if o.split then
+    local function kind()
+      local moving = self.device.tr ~= nil or self.device.ctr ~= nil
+      return o.answers and (moving and "moving" or "final") or "push"
+    end
+    local function values()
+      return self.device:values(self.clock.now(), self:_showsTarget())
+    end
+    self:_frames(kind, "read", values, o.latency or 40, false, function()
+      return #self.sent > asked
+    end)
+    return
+  end
+  if o.drop and o.drop("read") then
     return
   end
   self.clock.at(o.latency or 40, function()
@@ -569,10 +642,16 @@ end
 --- Bring the device online: it declares, and reports its whole state.
 function Memory:connect()
   self.online = true
+  self.heard = {}
   self.light:declare(self:declaration())
   local report = self.device:values(self.clock.now(), self:_showsTarget())
-  report.kind = "push"
+  report.kind = self.o.split and "seed" or "push"
   self:deliver(report)
+  if self.o.split then
+    self:_frames("push", "report", function()
+      return self.device:values(self.clock.now(), self:_showsTarget())
+    end, self.o.latency or 40, false)
+  end
 end
 
 --- Another hand's change, reported as a push unless `quiet`.
@@ -664,8 +743,10 @@ end
 --- @return MemoryLight
 function M.memoryLight(clock, o, device)
   local Light = require("lib.light")
-  local m =
-    setmetatable({ clock = clock, o = o, online = false, sent = {}, reports = {}, shown = {}, reads = 0 }, Memory)
+  local m = setmetatable(
+    { clock = clock, o = o, online = false, sent = {}, reports = {}, shown = {}, reads = 0, heard = {} },
+    Memory
+  )
   if not device then
     device = setmetatable({
       o = o,

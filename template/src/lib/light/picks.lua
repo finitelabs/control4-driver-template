@@ -3,22 +3,21 @@
 --- - the next-on color: one set while the light is off, that the next on comes on in;
 --- - the pick: the on cycle's chosen color, which levels keep, with no on mode's color, until the light
 ---   reaches off. A scene's color-only step is one; a step that sets level and color together is not;
---- - the follow-up window: 250 ms after an on or a level, in which the proxy may send the color it set. It
----   takes one follow-up; any other color in it is a pick and closes it, so an on mode's preset after that is a
----   choice again.
+--- - the follow-up window: 250 ms after an on or a level that names a brightness preset (a Navigator On), in
+---   which the proxy sends the Color On Mode's preset. It takes one follow-up; any other color in it is a pick and
+---   closes it, so an on mode's preset after that is a choice again. Every color outside it is a pick.
 --- None of it persists: a reload ends it, as a loss or Reset Driver does.
 
 local OnColor = require("lib.light.oncolor")
 
--- A proxy follows an on or a level with the color it set within this window: 250 ms covers its usual gap of 6
--- to 50 ms.
+-- A proxy follows a Navigator On with the Color On Mode's preset within this window: 250 ms covers its usual gap
+-- of 6 to 50 ms.
 local FOLLOW_UP_MS = 250
 
 --- @class LightPicks
 --- @field nextOn LightPick|nil
 --- @field picked LightPick|nil
 --- @field followUntil integer|nil C4:GetTime() ms when the follow-up window closes.
---- @field followHeld boolean The window follows a Navigator On that took the held color.
 --- @field followSpent boolean The window took its follow-up, and closes at the next intent, once the on's
 ---   choice has read it.
 local Picks = {}
@@ -26,21 +25,21 @@ Picks.__index = Picks
 
 --- @return LightPicks
 function Picks.new()
-  return setmetatable({ followHeld = false, followSpent = false }, Picks)
+  return setmetatable({ followSpent = false }, Picks)
 end
 
 --- What an on reads.
 --- @return LightOnPicks
 function Picks:forOn()
   local open = self.followUntil ~= nil and C4:GetTime() < self.followUntil
-  return { nextOn = self.nextOn, picked = self.picked, followUp = open and { held = self.followHeld } or nil }
+  return { nextOn = self.nextOn, picked = self.picked, followUp = open }
 end
 
+--- Open the window after an on or level that names a brightness preset; any other shuts it.
 --- @private
---- @param held boolean
-function Picks:_follow(held)
-  self.followUntil = C4:GetTime() + FOLLOW_UP_MS
-  self.followHeld = held
+--- @param intent LightIntent
+function Picks:_follow(intent)
+  self.followUntil = intent.presetId ~= nil and C4:GetTime() + FOLLOW_UP_MS or nil
 end
 
 --- Take an intent, before the on's choice reads the picks.
@@ -61,7 +60,7 @@ function Picks:noted(intent, now, settings)
     if not intent.color then
       return
     end
-    if OnColor.followUp(intent, now, self:forOn(), settings) then
+    if OnColor.followUp(intent, self:forOn(), settings) then
       self.followSpent = true
       return
     end
@@ -74,18 +73,16 @@ function Picks:noted(intent, now, settings)
       self.nextOn = pick
     end
   elseif OnColor.lights(intent, now) then
-    -- The on that takes the held color makes it the cycle's pick. A Navigator On names a brightness preset,
-    -- and its follow-up color names the Color On Mode's preset; programming's On, Toggle and a plain level send
-    -- none, so a color after them is a pick.
+    -- The on that takes the held color makes it the cycle's pick.
     local took = self.nextOn
     if took then
       self.picked, self.nextOn = took, nil
     end
-    self:_follow(took ~= nil and intent.presetId ~= nil)
+    self:_follow(intent)
   elseif OnColor.darkens(intent, now) then
     self.followUntil = nil
   elseif kind == "on" or kind == "level" then
-    self:_follow(false)
+    self:_follow(intent)
   end
 end
 
@@ -108,7 +105,7 @@ end
 
 --- The run replaced: nothing held.
 function Picks:reset()
-  self.nextOn, self.picked, self.followUntil, self.followHeld, self.followSpent = nil, nil, nil, false, false
+  self.nextOn, self.picked, self.followUntil, self.followSpent = nil, nil, nil, false
 end
 
 return Picks

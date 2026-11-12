@@ -354,12 +354,20 @@ function Settings:readSetup(xml)
     end
   end
 
-  -- The rates and the range the proxy holds, which an install that never stored them still has.
+  -- The rates and the range the proxy holds, which an install that never stored them still has. A rate of 0 there
+  -- is one never set, so the default stands.
   for key, name in pairs({
     [Settings.P_CLICK_RATE_UP] = "CLICK_RATE_UP",
     [Settings.P_CLICK_RATE_DOWN] = "CLICK_RATE_DOWN",
     [Settings.P_HOLD_RATE_UP] = "HOLD_RATE_UP",
     [Settings.P_HOLD_RATE_DOWN] = "HOLD_RATE_DOWN",
+  }) do
+    local rate = tointeger(setup[name])
+    if rate and rate > 0 and persist:get(key) == nil then
+      persist:set(key, rate)
+    end
+  end
+  for key, name in pairs({
     [Settings.P_MIN_ON_LEVEL] = "MIN_ON_LEVEL",
     [Settings.P_MAX_ON_LEVEL] = "MAX_ON_LEVEL",
   }) do

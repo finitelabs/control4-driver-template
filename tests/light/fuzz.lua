@@ -168,6 +168,7 @@ local function draw(r)
   o.silent = r.chance(0.1)
   o.slow = r.chance(0.1) and 1.5 or nil
   o.pushEveryMs = r.pick({ 250, 1000 })
+  o.split = r.chance(0.3)
   o.links = r.chance(0.8) and M.LINKS or false
   o.on = r.chance(0.5)
   o.level = r.pick({ 0, 0.3, 1 })
@@ -212,6 +213,7 @@ local function describe(d)
     o.readbackMs and ("readback " .. o.readbackMs) or "",
     o.seeds and "seeds" or "",
     o.silent and "silent" or "",
+    o.split and "split" or "",
     o.slow and "slow" or "",
     o.links and "links" or "no links",
     d.rest and "rest" or "",

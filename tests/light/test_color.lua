@@ -226,4 +226,28 @@ do
   end
 end
 
+T.section("mixXY: parts that light together show the sum of their light")
+do
+  local RED, D65 = { x = 0.64, y = 0.33 }, { x = 0.3127, y = 0.329 }
+  local x, y = Color.mixXY({ { x = RED.x, y = RED.y, Y = 0.4 } })
+  T.check("one part is its own color", near(x, RED.x, 1e-12) and near(y, RED.y, 1e-12), { x, y })
+  x, y = Color.mixXY({ { x = RED.x, y = RED.y, Y = 0.14 }, { x = D65.x, y = D65.y, Y = 0.35 } })
+  -- Each part weighs in by Y / y, its X + Y + Z.
+  local wr, ww = 0.14 / RED.y, 0.35 / D65.y
+  T.check(
+    "red with white LEDs is between them, weighted by each part's light",
+    near(x, (RED.x * wr + D65.x * ww) / (wr + ww), 1e-12) and near(y, (RED.y * wr + D65.y * ww) / (wr + ww), 1e-12),
+    { x, y }
+  )
+  local cross = (D65.x - RED.x) * (y - RED.y) - (D65.y - RED.y) * (x - RED.x)
+  T.check("on the line between the two", math.abs(cross) < 1e-12, cross)
+  x, y = Color.mixXY({ { x = RED.x, y = RED.y, Y = 0.14 }, { x = D65.x, y = D65.y, Y = 0 } })
+  T.check(
+    "a part that gives no light leaves the rest as it is",
+    near(x, RED.x, 1e-12) and near(y, RED.y, 1e-12),
+    { x, y }
+  )
+  T.eq("no light at all is no color", { Color.mixXY({ { x = RED.x, y = RED.y, Y = 0 } }) }, {})
+end
+
 T.finish()

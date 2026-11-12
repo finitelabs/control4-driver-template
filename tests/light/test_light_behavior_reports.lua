@@ -307,6 +307,46 @@ case(function()
 end)
 
 --------------------------------------------------------------------------------
+-- One aspect per report: On/Off, level and color each come alone
+--------------------------------------------------------------------------------
+
+T.section("one aspect per report: a level alone during a fade to off is that fade on its way")
+case(function()
+  local w = K.world(K.ZB, {}, 80)
+  K.target(w, 0, 2000)
+  w.run(1800)
+  T.eq("nothing is told before the fade ends", w.proxy:changed(), {})
+  T.eq("the device is still fading", K.device(w).on, true)
+  w.run(10000)
+  T.eq("the off is told once, at its end", w.proxy:changed(), { 0 })
+  w.restore()
+end)
+
+T.section("one aspect per report: after Reset Driver, an On alone tells no level the light never had")
+case(function()
+  local w = K.world(K.ZB, {}, 80)
+  w.m:other({ on = true, level = 0.4 }, true)
+  w.light:reset()
+  w.run(10000)
+  T.eq("only the device's own level is told", w.proxy:changed(), { 40 })
+  w.restore()
+end)
+
+T.section("one aspect per report: a level that never follows the first On is told as held once the wait ends")
+case(function()
+  local w = K.world(K.ZB, {}, 80)
+  w.m.dropReads = true
+  w.light:reset()
+  report(w, { on = true })
+  w.run(2000)
+  T.eq("nothing is told while the level is awaited", w.proxy:changed(), {})
+  w.run(1000)
+  T.eq("then the level held, once", w.proxy:changed(), { 80 })
+  T.eq("and the color held, once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  w.restore()
+end)
+
+--------------------------------------------------------------------------------
 -- LightRest
 --------------------------------------------------------------------------------
 

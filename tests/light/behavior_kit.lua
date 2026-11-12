@@ -12,7 +12,8 @@ K.copy = M.copy
 K.FULL, K.CCT = 0, 1
 
 -- A bulb behind a device driver: it fades itself, keeps its level while off, reports where it
--- has got to, and the transport reads it back after each change, answering moving or final.
+-- has got to one aspect at a time, and the transport reads it back after each change, answering moving
+-- or final.
 K.ZB = {
   dims = true,
   color = true,
@@ -22,6 +23,7 @@ K.ZB = {
   feedback = { shows = "position", waitMs = 2500, refresh = true },
   answers = true,
   readbackMs = 1500,
+  split = true,
 }
 
 -- A light that fades on a smootherstep, keeps its level while off, and reports its targets.
