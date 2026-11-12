@@ -92,12 +92,20 @@ do
   T.eq("no kelvin", Color.kelvinToMireds(nil), 0)
 end
 
-T.section("onLocus: within the tolerance of the locus between two Kelvins")
+T.section("onLocus: within the white band of the locus between two Kelvins")
 do
   local x, y = Color.kelvinToXY(3000)
+  local BAND = Color.WHITE_BAND
+  T.eq("the band is ESPHome's released white-channel test", BAND, 0.012)
   T.eq("a point on the locus inside the range", Color.onLocus(x, y, 2000, 6500), true)
-  T.eq("a point just off it", Color.onLocus(x + TOL * 0.5, y, 2000, 6500), true)
-  T.eq("a point off by more", Color.onLocus(x + TOL * 3, y + TOL * 3, 2000, 6500), false)
+  -- Off the locus along its normal at 3000 K, so the nearest point on it stays near 3000 K.
+  local ax, ay = Color.kelvinToXY(2990)
+  local bx, by = Color.kelvinToXY(3010)
+  local length = math.sqrt((bx - ax) ^ 2 + (by - ay) ^ 2)
+  local nx, ny = -(by - ay) / length, (bx - ax) / length
+  T.eq("a point inside the band", Color.onLocus(x + nx * BAND * 0.8, y + ny * BAND * 0.8, 2000, 6500), true)
+  T.eq("a point outside it", Color.onLocus(x + nx * BAND * 1.25, y + ny * BAND * 1.25, 2000, 6500), false)
+  T.eq("a point off by more", Color.onLocus(x + BAND * 3, y + BAND * 3, 2000, 6500), false)
   T.eq("a saturated red", Color.onLocus(0.64, 0.33, 2000, 6500), false)
   local hx, hy = Color.kelvinToXY(9000)
   T.eq("a white past the range's cool end", Color.onLocus(hx, hy, 2000, 6500), false)

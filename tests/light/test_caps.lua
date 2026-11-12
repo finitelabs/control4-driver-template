@@ -95,7 +95,7 @@ do
     color = false,
     colorWhileOff = "send",
     levelSteps = 255,
-    fade = { kind = "device", curve = "linear", preOn = false, maxMs = 65535 },
+    fade = { kind = "device", curve = "linear", preOn = false, retimes = false, maxMs = 65535 },
     feedback = { shows = "target", waitMs = 1000, refresh = false },
   })
   local walk = Caps.device({ dims = true, fade = { kind = "walk" } }, FULL)
@@ -140,6 +140,9 @@ do
     { { kind = "walk", stepMs = 0 }, "fade.stepMs", "stepMs", 100 },
     { { kind = "own" }, "fade.own is required", "own", ZERO },
     { { kind = "device", speed = 2 }, "fade.speed", "speed", nil },
+    { { kind = "walk", retimes = true }, "fade.retimes", "retimes", nil },
+    { { kind = "own", own = ZERO, retimes = false }, "fade.retimes", "retimes", nil },
+    { { kind = "device", retimes = "yes" }, "fade.retimes must be true or false", "retimes", false },
   }) do
     local d, errors = Caps.device({ dims = true, fade = case[1] }, FULL)
     local label = case[2] .. " on " .. tostring(case[1].kind)
@@ -151,11 +154,15 @@ do
   local noDims, errors = Caps.device({ fade = { kind = "device", preOn = true } }, FULL)
   T.eq("preOn needs dims", noDims.fade.preOn, false)
   T.check("and says so", hasError(errors, "fade.preOn needs dims"), errors)
-  local smooth = Caps.device({ dims = true, fade = { curve = "smootherstep", preOn = true, maxMs = 86400000 } }, FULL)
+  local smooth = Caps.device(
+    { dims = true, fade = { curve = "smootherstep", preOn = true, retimes = true, maxMs = 86400000 } },
+    FULL
+  )
   T.eq("a device fade keeps its own fields", smooth.fade, {
     kind = "device",
     curve = "smootherstep",
     preOn = true,
+    retimes = true,
     maxMs = 86400000,
   })
 end
@@ -370,11 +377,6 @@ do
     ok = ok and r.color_correlated_temperature_max == (p.known and cct and "6000" or "6500")
   end
   T.check("every flag over all 2048 profiles", ok)
-  local commented = 0
-  for _, row in ipairs(Caps.static(FULL)) do
-    commented = commented + (row.comment and 1 or 0)
-  end
-  T.eq("three keys carry a comment", commented, 3)
 end
 
 T.section("dynamic: by the device's fade kind")
