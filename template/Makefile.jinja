@@ -361,7 +361,6 @@ support-code: ## Print today's Support Code, which opens a DriverCentral build's
 	@python3 tools/support_code.py
 
 .PHONY: dc-release
-# The upload is the tag build's own drivercentral CI artifact, never a local build.
 dc-release: ## Download a release's DriverCentral upload into dist/release/<tag> (newest, or TAG=v...)
 	@tag="$(TAG)"; \
 	[ -n "$$tag" ] || tag=$$(gh release list --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName // empty'); \
@@ -371,9 +370,7 @@ dc-release: ## Download a release's DriverCentral upload into dist/release/<tag>
 	out="dist/release/$$tag"; rm -rf "$$out"; mkdir -p "$$out"; \
 	gh run download "$$run" --name drivercentral --dir "$$out" || { \
 		echo "Error: no drivercentral artifact in Build run $$run. If it expired, run the Build workflow on $$tag again from the Actions tab." >&2; exit 1; }; \
-	for f in "$$out"/c4z/*.c4z; do \
-		unzip -l "$$f" | grep -q 'driver\.lua\.encrypted' || { echo "Error: $$f is not encrypted, so don't upload it" >&2; exit 1; }; \
-	done; \
+	python3 tools/package.py check-encrypted drivercentral "$$out/c4z" || { echo "Error: don't upload $$out" >&2; exit 1; }; \
 	echo "$$tag, Build run $$run: the DriverCentral upload is in $$out"; \
 	ls "$$out"
 
