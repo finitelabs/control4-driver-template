@@ -1,6 +1,3 @@
--- The contract's text is pinned: an edit to types.lua above "The library's own shapes" changes this hash.
--- Change the hash only on purpose, with the adapter sessions told, and Types.API bumped for a change of meaning.
-
 local T = require("testlib")
 local Types = require("lib.light.types")
 

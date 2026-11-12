@@ -326,7 +326,7 @@ Types.API = 1
 --- @class LightNow : LightValues
 --- @field levelRamping boolean
 --- @field colorRamping boolean
---- @field colorHeld boolean A "hold" device is off with a color told but not sent: the next on carries it (J1).
+--- @field colorHeld boolean A "hold" device is off with a color told but not sent: the next on carries it.
 
 --- What LightProxy tells from. It sends only what differs from what it told. Levels are device brightness
 --- 0-1, as everywhere in the library; LightProxy maps them to C4 levels on the Min/Max On line.
@@ -347,8 +347,8 @@ Types.API = 1
 --- @field value boolean|number|LightColor
 --- @field landing integer C4:GetTime() ms when the change it belongs to ends.
 
---- "command": opened by a command. "learning": an on another hand made, waiting for its level (J4). "asked":
---- a refresh is out, and the first push or final settles (J5g).
+--- "command": opened by a command. "learning": an on another hand made, waiting for its level. "asked": a
+--- refresh is out, and the first push or final settles.
 --- @alias LightWindowKind "command"|"learning"|"asked"
 
 --- Ledger's record of one aspect from a command to its deadline.
