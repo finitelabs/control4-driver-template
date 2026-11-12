@@ -512,4 +512,63 @@ case(function()
   T.eq("the step sends the mix", #colored(w), 1)
   w.restore()
 end)
+
+--- The color modes told by CHANGED since the mark.
+--- @param w MemoryWorld
+--- @return integer[]
+local function toldModes(w)
+  local out = {}
+  for _, q in ipairs(w.proxy:told("LIGHT_COLOR_CHANGED")) do
+    out[#out + 1] = q.LIGHT_COLOR_CURRENT_COLOR_MODE
+  end
+  return out
+end
+
+--- A light with color and CCT at 50 % under Dim-To-Warm, set by another hand to a full color at the mix's xy.
+--- @return MemoryWorld
+local function inColorAtMix()
+  local w = K.world(K.ES, {}, 100)
+  K.onMode(w, K.WARM, K.DIM)
+  w.proxy:send("SET_LEVEL", { LEVEL = 50 })
+  w.run(5000)
+  local mix = w.proxy.color
+  w.m:other({ color = { x = mix.x, y = mix.y, mode = "xy" } })
+  w.run(3000)
+  w.proxy:mark()
+  w.m.sent = {}
+  return w
+end
+
+T.section("Dim-To-Warm: a full color at the mix's xy, heard while the mix is out, is the light's own")
+case(function()
+  -- The device pushes nothing of its own: the full color is the one report while the level's mix is out.
+  local w = K.world(K.ES, {}, 100)
+  w.m.o.silent = true
+  K.onMode(w, K.WARM, K.DIM)
+  w.proxy:send("SET_LEVEL", { LEVEL = 50 })
+  local mix = (colored(w)[1] or {}).color or {}
+  w.run(20)
+  w.m:deliver({ kind = "push", on = true, level = 0.5, color = { x = mix.x, y = mix.y, mode = "xy" } })
+  w.run(5000)
+  w.proxy:mark()
+  w.m.sent = {}
+  w.proxy:send("SET_LEVEL", { LEVEL = 50 })
+  T.eq("the level again sends the mix", #colored(w), 1)
+  T.eq("and the proxy is told it once, as a white", toldModes(w), { K.CCT })
+  w.restore()
+end)
+
+T.section("Dim-To-Warm: a report from before a level, of another hand's full color at the mix, landing after it")
+case(function()
+  local w = inColorAtMix()
+  local before = w.device:values(w.clock.now(), true)
+  before.kind = "push"
+  w.proxy:send("SET_LEVEL", { LEVEL = 50 })
+  w.m:inject(w.clock.now() + 20, before)
+  w.run(5000)
+  T.eq("the level again sends the mix", #colored(w), 1)
+  T.eq("the proxy is told it once, as a white: the report is from before", toldModes(w), { K.CCT })
+  T.eq("and the light is in it", (K.device(w).color or {}).mode, "cct")
+  w.restore()
+end)
 T.finish()
