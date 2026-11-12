@@ -274,6 +274,7 @@ Types.API = 1
 --- @field presetId integer|nil Told back to the proxy as the preset that set it.
 --- @field presetOrigin integer|nil The preset's origin, told with its id.
 --- @field source LightSource Light skips the cancel of the part it came from.
+--- @field ramp boolean|nil A hold or a scene ramp, which sets Toggle's next hold direction.
 
 --- OnColor.choose's answer for an intent that lights the light, or for the proxy's follow-up of one.
 --- @class LightOnChoice
