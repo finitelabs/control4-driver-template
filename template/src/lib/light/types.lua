@@ -358,6 +358,7 @@ Types.API = 1
 --- @field before boolean|number|LightColor|nil What the library held when the window opened.
 --- @field held boolean|number|LightColor|nil The latest report held.
 --- @field heard boolean A report carrying the aspect arrived.
+--- @field echoed boolean The newest command's echo has come.
 --- @field asked boolean A refresh was asked in this window.
 --- @field extended boolean The deadline was extended once.
 --- @field deadline integer
