@@ -40,6 +40,8 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
+from preprocess import build_secret, parse_env_file
+
 TOOLS_DIR = Path(__file__).resolve().parent
 GITHUB_CSS = (TOOLS_DIR / "github-markdown.css").read_text(encoding="utf-8")
 # Scoped to `.highlight pre` so github-markdown.css's rounded box outranks the
@@ -387,6 +389,11 @@ def readme(input_path: Path, output_path: Path) -> None:
     # Strip <style> blocks (screen-only chrome), then normalize.
     text = re.sub(r"<style\b[^>]*>.*?</style>", "", text, flags=re.S | re.I)
     text = _PAGE_LINK_RE.sub(r"\1", text)
+    # A README is committed, so the support phone number goes back to its placeholder.
+    phone = build_secret("SUPPORT_PHONE", parse_env_file(TOOLS_DIR.parent / ".env"))
+    if phone:
+        text = text.replace(f"tel:{phone}", "tel:__SUPPORT_PHONE__")
+        text = text.replace(phone, "%%SUPPORT_PHONE%%")
     output_path.write_text(_mdformat(text, 80), encoding="utf-8")
 
 

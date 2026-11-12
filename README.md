@@ -181,7 +181,7 @@ Copier will show diffs for any files that changed in the template and let you re
 | `icon_style` | Control4 icon artboard `make icons` exports: `shaped` (Shadow Shaped) or `square` (Shadow Square) | `shaped` |
 | `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf oauth), `expressions` for the `src/lib` expression engine, and `ui` for the custom Composer tab kit | (empty) |
 | `cloud_diagnostics` | Ship `lib.diagnostics` (Cloud Monitoring), which reports a DriverCentral build's memory use and errors to InfluxDB; needs four build secrets | `false` |
-| `extra_build_secrets` | Space-separated build secrets `.env.default` declares besides the template's own (`SUPPORT_CODE_SECRET`, and the four `INFLUXDB_*` with `cloud_diagnostics`); the Build workflow passes each by name | (empty) |
+| `extra_build_secrets` | Space-separated build secrets `.env.default` declares besides the template's own (`SUPPORT_CODE_SECRET` and `SUPPORT_PHONE`, and the four `INFLUXDB_*` with `cloud_diagnostics`); the Build workflow passes each by name | (empty) |
 | `extra_required_checks` | Space-separated status checks a PR must pass besides `build`, each a job name from the repo's own workflows; `tools/github-setup` puts them in the branch ruleset | (empty) |
 | `stale_issues` | Ping inactive issues, then close them, unless an exempt author opened them | `false` |
 | `stale_exempt_authors` | Space-separated GitHub logins whose issues are left alone; a GitHub App is `name[bot]` (asked when `stale_issues` is true) | (empty) |
