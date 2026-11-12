@@ -27,8 +27,10 @@ local ASPECTS = { "on", "level", "color" }
 --- @field offFrom number|nil Where the newest fade to off started, until a command lights the light again.
 --- @field walkUnheard boolean|nil While a report is weighed: it is the first a running walk hears.
 --- @field awaiting table<LightAspect, boolean> What the connection's first report left out: a lit light's level
----   and its color. The proxy isn't told them from what the library holds until a report carries them, a
----   command sets them, or the device's wait for them ends.
+---   and its color, and the level of a light first heard off that a report lights without one. The proxy isn't
+---   told them from what the library holds until a report carries them, a command sets them, or the device's
+---   wait for them ends.
+--- @field levelSet boolean|nil A command has set the level since construction or reset.
 local Ledger = {}
 Ledger.__index = Ledger
 
@@ -69,6 +71,7 @@ function Ledger:sent(cmd, landings)
   end
   if cmd.setsLevel and cmd.on then
     self:_open("level", cmd.level, cmd.from.level, landings.level)
+    self.levelSet = true
   end
   if cmd.setsLevel then
     self.libraryOn = cmd.on
@@ -177,6 +180,20 @@ function Ledger:heard(report, now)
   end
   if opening then
     self:_await(report)
+  elseif
+    report.on == true
+    and report.level == nil
+    and self.device.dims
+    and self.unheard.level
+    and not self.levelSet
+    and not self.awaiting.level
+  then
+    -- A light first heard off, lit with no level of its own: no report or command has given its level yet.
+    local armed = next(self.awaiting) ~= nil
+    self.awaiting.level = true
+    if not armed then
+      self:_armAwaiting()
+    end
   end
   return out
 end
@@ -272,6 +289,7 @@ function Ledger:reset()
   self:closeAll()
   self.unheard = { on = true, level = true, color = true }
   self.awaiting = {}
+  self.levelSet = nil
   CancelTimer("Light.Awaiting")
   self.reportedOn = nil
   self.offFrom = nil
@@ -579,10 +597,15 @@ function Ledger:_await(report)
     self.awaiting.color = true
   end
   if next(self.awaiting) ~= nil then
-    SetTimer("Light.Awaiting", device.feedback.waitMs, function()
-      self.light:_awaited()
-    end)
+    self:_armAwaiting()
   end
+end
+
+--- @private
+function Ledger:_armAwaiting()
+  SetTimer("Light.Awaiting", self.device.feedback.waitMs, function()
+    self.light:_awaited()
+  end)
 end
 
 --- An aspect is no longer waited for.

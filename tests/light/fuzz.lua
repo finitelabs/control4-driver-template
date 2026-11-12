@@ -276,6 +276,9 @@ end
 --- @field notes FakeProxyNote[] Every notify since the world was made, across restarts.
 --- @field flashes boolean|nil A flash scene was pushed, which repeats until stopped.
 --- @field sceneSteps integer[] The ms each scene step went at.
+--- @field changes integer[] The ms each command landed on the device or another hand changed it.
+--- @field snapshot LightValues|nil The device's targets a later stale push re-pushes.
+--- @field snapshotAt integer|nil The ms the snapshot was taken.
 --- @field sent LightCommand[] Every command the adapter was given, each with `at`.
 --- @field reports MemoryReport[]
 --- @field reached table<integer, boolean> The device's C4 levels, as it passed them.
@@ -490,10 +493,22 @@ end
 --- @param run FuzzRun
 local function stale(run)
   local w = run.w
-  local old = run.snapshot or w.device:values(w.clock.now(), true)
-  local report = copy(old)
+  local now = w.clock.now()
+  local since = run.snapshot and run.snapshotAt or now
+  local report = copy(run.snapshot or w.device:values(now, true))
   report.kind = "push"
-  w.m:inject(w.clock.now() + run.r.pick({ 0, 50, 400 }), report)
+  local after = run.r.pick({ 0, 50, 400 })
+  w.m:inject(now + after, report)
+  -- Landing later than the device's wait after the device left that state, the push is out of the device's
+  -- contract: it reads as another hand's change, and nothing corrects it.
+  w.clock.at(after, function()
+    for _, at in ipairs(run.changes) do
+      if at >= since then
+        run.late = run.late or now + after - at > run.d.o.feedback.waitMs
+        return
+      end
+    end
+  end)
 end
 
 --- A report no device makes: the library must drop it whole, with one error logged.
@@ -638,7 +653,7 @@ local function moves(run)
     {
       2,
       function()
-        run.snapshot = w.device:values(w.clock.now(), true)
+        run.snapshot, run.snapshotAt = w.device:values(w.clock.now(), true), w.clock.now()
       end,
     },
     {
@@ -1429,6 +1444,14 @@ local function fuzz(seed)
     return run
   end
   local w = run.w
+  run.changes = {}
+  for _, name in ipairs({ "take", "set" }) do
+    local change = w.device[name]
+    w.device[name] = function(self, ...)
+      run.changes[#run.changes + 1] = w.clock.now()
+      return change(self, ...)
+    end
+  end
   local errorFn = log.error
   log.error = function(_, fmt, ...)
     local okf, text = pcall(string.format, tostring(fmt), ...)
