@@ -11,6 +11,7 @@ require("c4_shim")
 
 local K = require("behavior_kit")
 local M = require("memory_light")
+local F = require("light_proxy_fake")
 
 local function case(fn)
   K.case(T, fn)
@@ -60,6 +61,27 @@ case(function()
   T.eq("lands", w.proxy.level, 90)
   w.restore()
 end)
+
+T.section("a click goes over the default click rate when the setup's click rates are 0")
+for _, button in ipairs({ BOTTOM, TOGGLE }) do
+  K.case(T, function()
+    local w = K.world(K.ZB, { setup = F.setupFile("setup-607.xml") }, 80)
+    K.button(w, button, PRESS)
+    w.run(100)
+    K.button(w, button, RELEASE_CLICK)
+    local moved = changes(w)
+    T.eq("one change, to off over 750 ms", { #moved, (moved[1] or {}).on, (moved[1] or {}).transitionMs }, {
+      1,
+      false,
+      750,
+    })
+    local changing = w.proxy:told("LIGHT_BRIGHTNESS_CHANGING")
+    T.eq("the proxy is told the fade to off", { #changing, (changing[1] or {}).RATE }, { 1, 750 })
+    w.run(5000)
+    T.eq("it lands off", w.proxy.level, 0)
+    w.restore()
+  end)
+end
 
 T.section("the gate: a hold starts 250 ms after the press, toward full, until released")
 case(function()

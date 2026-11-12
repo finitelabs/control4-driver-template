@@ -441,6 +441,20 @@ do
   T.eq("and a stored Max On", select(2, s:onRange()), 90)
 end
 
+T.section("a setup's rate of 0 is one never set: the default stands, and a rate above 0 fills the store")
+do
+  local s = fresh()
+  s:readSetup(setupFile("setup-607.xml"))
+  T.eq("click rates of 0: the defaults", { s:clickRate(true), s:clickRate(false) }, { 250, 750 })
+  T.eq("hold rates of 1000: the setup's", { s:holdRate(true), s:holdRate(false) }, { 1000, 1000 })
+  T.eq(
+    "click rates stay unstored",
+    { persist:get(Settings.P_CLICK_RATE_UP), persist:get(Settings.P_CLICK_RATE_DOWN) },
+    {}
+  )
+  T.eq("Min and Max On are the setup's", { s:onRange() }, { 1, 100 })
+end
+
 T.section("takeCommanded: the settings a command changed, for LightProxy to echo across a setup re-read")
 do
   local s = fresh()

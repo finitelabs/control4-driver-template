@@ -208,127 +208,66 @@ for _, c in ipairs({
   )
 end
 
-T.section("the proxy's follow-up of an on")
+T.section("the proxy's follow-up of an on: only a preset color in the window a Navigator On opens")
 do
-  local open = { followUp = { held = false } }
-  local held = { followUp = { held = true } }
+  local open = { followUp = true }
   local cases = {
-    { "the color the light heads for, in the window", intent("color", { color = RED }), ON, open, true },
-    { "another color, in the window", intent("color", { color = BLUE }), ON, open, false },
-    { "the same color with no window", intent("color", { color = RED }), ON, {}, false },
     {
-      "after a Navigator On that took the held color: a color naming a preset",
+      "a color naming a preset, in the window",
       intent("color", { color = BLUE, presetId = 1, presetOrigin = 1 }),
-      ON,
-      held,
+      open,
       true,
     },
+    { "the color the light heads for, bare, in the window: a pick", intent("color", { color = RED }), open, false },
+    { "another color, bare, in the window", intent("color", { color = BLUE }), open, false },
+    { "a preset id without its origin names no preset", intent("color", { color = BLUE, presetId = 1 }), open, false },
     {
-      "after it, a color naming no preset is a pick",
-      intent("color", { color = BLUE }),
-      ON,
-      held,
-      false,
-    },
-    {
-      "a preset id without its origin names no preset",
-      intent("color", { color = BLUE, presetId = 1 }),
-      ON,
-      held,
+      "a color naming a preset with no window",
+      intent("color", { color = BLUE, presetId = 1, presetOrigin = 1 }),
+      {},
       false,
     },
   }
   for _, c in ipairs(cases) do
-    T.eq(c[1], OnColor.followUp(c[2], c[3], c[4]), c[5])
+    T.eq(c[1], OnColor.followUp(c[2], c[3]), c[4])
   end
-  -- On a profile with on modes the held on's follow-up is the Color On Mode's own preset.
-  local onModes = { onModes = true, onPresetId = 7, onPresetOrigin = 1 }
+  -- On a profile with on modes the follow-up is the Color On Mode's own preset.
+  local onModes = settings({ onModes = true, onPresetId = 7, onPresetOrigin = 1 })
   local withModes = {
     { "with on modes: the Color On Mode's own preset", { presetId = 7, presetOrigin = 1 }, true },
     { "with on modes: another preset is a pick", { presetId = 1, presetOrigin = 1 }, false },
     { "with on modes: the same id from another origin is a pick", { presetId = 7, presetOrigin = 2 }, false },
   }
   for _, c in ipairs(withModes) do
-    local named = intent("color", { color = BLUE, presetId = c[2].presetId, presetOrigin = c[2].presetOrigin })
-    T.eq(c[1], OnColor.followUp(named, ON, held, onModes), c[3])
+    local named = intent("color", { color = RED, presetId = c[2].presetId, presetOrigin = c[2].presetOrigin })
+    T.eq(c[1], OnColor.followUp(named, open, onModes), c[3])
   end
   T.eq(
     "without on modes: any named preset",
-    OnColor.followUp(intent("color", { color = BLUE, presetId = 1, presetOrigin = 1 }), ON, held, { onModes = false }),
+    OnColor.followUp(intent("color", { color = BLUE, presetId = 1, presetOrigin = 1 }), open, settings()),
     true
   )
-  -- The color the light heads for, in the window: bare or in the Color On Mode's preset, the echo; naming
-  -- another preset, a choice told in it.
-  local modes = { onModes = true, onPresetId = 7, onPresetOrigin = 1 }
-  T.eq(
-    "the color it heads for, in the Color On Mode's own preset: the echo",
-    OnColor.followUp(intent("color", { color = RED, presetId = 7, presetOrigin = 1 }), ON, open, modes),
-    true
-  )
-  T.eq(
-    "the color it heads for, naming another preset: told in that preset",
-    OnColor.followUp(intent("color", { color = RED, presetId = 5, presetOrigin = 2 }), ON, open, modes),
-    false
-  )
-  T.eq(
-    "and with no settings to read",
-    OnColor.followUp(intent("color", { color = RED, presetId = 5, presetOrigin = 2 }), ON, open),
-    false
-  )
-  -- The proxy sends the on mode's color back as it holds it, though the light heads for its own form of it.
-  local offLocus = { x = WARM.x + 0.01, y = WARM.y - 0.01, mode = "cct" }
-  local projected = { x = WARM.x, y = WARM.y, mode = "cct", kelvin = 2700 }
-  local lit = { on = true, level = 1, color = projected, levelRamping = true, colorRamping = false }
-  local preset = settings({ colorOnMode = "preset", onColor = offLocus })
-  T.eq(
-    "a white off the locus, sent back bare: the echo, though the light heads for its point on the locus",
-    OnColor.followUp(intent("color", { color = offLocus }), lit, open, preset),
-    true
-  )
-  local asColor = { on = true, level = 1, color = { x = COOL.x, y = COOL.y, mode = "xy" }, levelRamping = true }
-  T.eq(
-    "a white On color on a light with no color temperature, sent back bare: the echo, though the light shows it as a color",
-    OnColor.followUp(
-      intent("color", { color = COOL }),
-      asColor,
-      open,
-      settings({ colorOnMode = "preset", onColor = COOL })
-    ),
-    true
-  )
-  T.eq(
-    "Previous On's color, sent back bare: the echo",
-    OnColor.followUp(
-      intent("color", { color = BLUE }),
-      ON,
-      open,
-      settings({ colorOnMode = "previous", previousColor = BLUE })
-    ),
-    true
-  )
+  -- Bare colors the proxy holds for its on modes are picks too.
   local fade = settings({ colorOnMode = "fade", onColor = COOL, dimColor = WARM })
-  local mix = Color.dimToWarm(WARM, COOL, 50)
-  T.eq(
-    "Dim-To-Warm's mix at the level the light heads for, sent back bare: the echo",
-    OnColor.followUp(intent("color", { color = mix }), { on = true, level = 0.5, levelRamping = true }, open, fade),
-    true
-  )
-  T.eq(
-    "another color sent bare is a pick",
-    OnColor.followUp(intent("color", { color = RED }), lit, open, preset),
-    false
-  )
-  T.eq(
-    "and the on mode's color with the light off is no echo",
-    OnColor.followUp(intent("color", { color = offLocus }), OFF, open, preset),
-    false
-  )
-  local choice = OnColor.choose(intent("color", { color = RED }), inputs({ now = ON, picks = open }))
+  for _, c in ipairs({
+    { "the On color, bare", COOL, settings({ colorOnMode = "preset", onColor = COOL }) },
+    { "Previous On's color, bare", BLUE, settings({ colorOnMode = "previous", previousColor = BLUE }) },
+    { "Dim-To-Warm's mix, bare", Color.dimToWarm(WARM, COOL, 50), fade },
+  }) do
+    T.eq(c[1] .. ", in the window: a pick", OnColor.followUp(intent("color", { color = c[2] }), open, c[3]), false)
+  end
+  local followUp = intent("color", { color = BLUE, presetId = 1, presetOrigin = 1 })
+  local choice = OnColor.choose(followUp, inputs({ now = ON, picks = open }))
   T.eq("choose says follow-up, with the light's own color and level", {
     choice.followUp,
     near(choice.color, RED),
     choice.level,
   }, { true, true, 50 })
+  T.eq(
+    "and a bare color in the window is no choice of the on's",
+    OnColor.choose(intent("color", { color = RED }), inputs({ now = ON, picks = open })),
+    nil
+  )
 end
 
 T.section("an off under Dim-To-Warm fades to the Dim color: the formula's color at level 0")

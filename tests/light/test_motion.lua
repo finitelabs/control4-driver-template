@@ -167,11 +167,15 @@ do
   run(m, level(80, 2000), choose(80, RED))
   local cmds = take(m)
   T.eq("two commands", #cmds, 2)
-  T.eq("the pre-on first: lit, at once, in the on color", flags(cmds[1]), "preOn on=true L=1 C=1 off=1")
+  T.eq("the pre-on first: lit, at once, in a color", flags(cmds[1]), "preOn on=true L=1 C=1 off=1")
   T.eq("at the bottom step", cmds[1].level, 1 / 255)
   T.eq("0 ms", cmds[1].transitionMs, 0)
-  T.eq("its change follows, not from off, and carries the on color too", flags(cmds[2]), "change on=true L=1 C=1 off=0")
-  T.eq("the same color on both", { cmds[1].color.x, cmds[2].color.x }, { RED.x, RED.x })
+  T.eq("its change follows, not from off, and carries the on color", flags(cmds[2]), "change on=true L=1 C=1 off=0")
+  T.check(
+    "with no color known the pre-on puts the light in D65, and the change fades it to the on color",
+    near(cmds[1].color.x, Color.forDevice(Color.D65, device()).x) and cmds[2].color.x == RED.x,
+    { cmds[1].color, cmds[2].color }
+  )
   T.eq("from the bottom step", cmds[2].from.level, 1 / 255)
   T.eq("over the rate", cmds[2].transitionMs, 2000)
   run(m, level(20, 0))
@@ -466,8 +470,8 @@ T.section("the walk: 0-time steps every stepMs")
 do
   local m = make(device({ fade = WALK }), { level = 0 })
   run(m, level(100, 1000), choose(100))
-  T.eq("nothing at once", #take(m), 0)
-  local steps = {}
+  local steps = take(m)
+  T.eq("from off the first step lights it at once, at the line's start", { #steps, steps[1].level }, { 1, 0.01 })
   for _ = 1, 12 do
     clock.run(100)
     for _, cmd in ipairs(take(m)) do
@@ -1056,15 +1060,15 @@ do
   )
 end
 
-T.section("a fade to or from off under half way to Min On reads as off")
+T.section("a fade from off under half way to Min On reads as off; one to off is lit until it ends")
 do
   local m = make(device({ fade = PRE_ON }), { level = 1 })
   run(m, off(4000))
   take(m)
   clock.run(3990)
-  T.eq("near the end of a fade to off the light reads off", m:view().level, 0)
+  T.check("near the end of a fade to off the light is still lit", m:view().level > 0, m:view().level)
   run(m, on(1000), choose(100))
-  T.eq("so the next on opens with a pre-on", take(m)[1].kind, "preOn")
+  T.eq("so the next on ramps from there, with no pre-on", take(m)[1].kind, "change")
   local up = make(device(), { level = 0 })
   run(up, level(60, 4000))
   clock.run(10)
@@ -1183,9 +1187,9 @@ do
   T.check("and no step set the level", not levels)
 end
 
-T.section("on a hold device a color after a walk's off step carries no off: it waits for the next on")
+T.section("on a hold device a color during a walk to off goes with no off step: it waits for the next on")
 do
-  -- With Min On at 20 the walk reads off once under half way to it, a step before its ramp ends.
+  -- With Min On at 20 the walk goes down to 20 % and sends its off at its end.
   local m = make(device({ fade = WALK, colorWhileOff = "hold" }), { level = 0.5, color = RED }, settings(20, 100))
   run(m, off(1000))
   take(m)
@@ -1233,29 +1237,257 @@ do
   T.check("and its ramp still runs", m:now().levelRamping)
 end
 
-T.section("a color stop that ends a walk sends the level set at once while the color walked")
+T.section("a level set at once while the color walks goes at once, and a color stop then holds the color")
 do
   local m = make(device({ fade = WALK }), { level = 0.2, color = RED })
   run(m, color(BLUE, 1000))
   take(m)
   clock.run(50)
   run(m, level(96, 0))
-  T.eq("the level waits for the walk's next step", #take(m), 0)
-  run(m, { kind = "stopColor", source = "proxy" })
   local sent = take(m)
   local c = sent[1]
   T.check(
-    "one change goes to the level, with the color where it stopped",
+    "the level goes at once, alone, in the color the walk has sent",
     #sent == 1
-      and c.kind == "change"
-      and c.on
       and c.setsLevel
-      and c.setsColor
-      and near(c.level, Range.toDevice(96, 1, 100)),
+      and not c.setsColor
+      and near(c.level, Range.toDevice(96, 1, 100))
+      and near(c.color.x, RED.x),
+    sent
+  )
+  run(m, { kind = "stopColor", source = "proxy" })
+  sent = take(m)
+  c = sent[1]
+  T.check(
+    "the color stop holds the color where it stopped, at that level",
+    #sent == 1 and c.kind == "stop" and c.setsColor and not c.setsLevel and near(c.level, Range.toDevice(96, 1, 100)),
     sent
   )
   clock.run(500)
   T.eq("and the walk is done", { #take(m), m.walking }, { 0, false })
+end
+
+T.section("a walk's off goes without a color of its own: a hold device keeps it for the next on")
+do
+  local m = make(device({ fade = WALK, colorWhileOff = "hold" }), { level = 0.5, color = RED })
+  run(m, color(BLUE, 3000))
+  run(m, off(500))
+  local offStep
+  for _ = 1, 8 do
+    clock.run(100)
+    for _, c in ipairs(take(m)) do
+      if c.setsLevel and not c.on then
+        offStep = c
+      end
+    end
+  end
+  T.check("the off sets the level alone", offStep ~= nil and not offStep.setsColor, offStep)
+  T.check("and the color fade's point waits for the next on", m:now().colorHeld)
+end
+
+T.section("an instant color during a walk goes at once, as its own command, and no step repeats it")
+do
+  local m = make(device({ fade = WALK }), { level = 0.2, color = RED })
+  run(m, level(80, 1000))
+  clock.run(250)
+  take(m)
+  run(m, color(BLUE, 0))
+  local c = take(m)[1]
+  T.check(
+    "at once, the color alone",
+    c ~= nil and c.setsColor and not c.setsLevel and c.transitionMs == 0 and near(c.color.x, BLUE.x),
+    c
+  )
+  clock.run(100)
+  local step = take(m)[1]
+  T.check("the next step moves the level alone", step ~= nil and step.setsLevel and not step.setsColor, step)
+end
+
+T.section("a walk's steps stay on the Min/Max On line until its off")
+do
+  local m = make(device({ fade = WALK }), { level = 0 }, settings(20, 80))
+  run(m, level(100, 1000), choose(100))
+  local first = take(m)[1]
+  T.check(
+    "up from off it starts at the line's start, 20 %",
+    first ~= nil and first.on and near(first.level, 0.2),
+    first
+  )
+  clock.run(1100)
+  take(m)
+  run(m, off(1000))
+  local lit, offAt = {}, nil
+  for i = 1, 12 do
+    clock.run(100)
+    for _, c in ipairs(take(m)) do
+      if c.on then
+        lit[#lit + 1] = c.level
+      elseif c.setsLevel then
+        offAt = i
+      end
+    end
+  end
+  local lowest = math.huge
+  for _, l in ipairs(lit) do
+    lowest = math.min(lowest, l)
+  end
+  T.check("down to off no step goes under the line's start", lowest >= 0.2 - 1e-9, lit)
+  T.eq("and its off goes at its end", offAt, 10)
+
+  local low = make(device({ fade = WALK }), { level = 0.05 }, settings(20, 80))
+  run(low, off(4000))
+  T.eq("a light under the Min walked to off: nothing at once", #take(low), 0)
+  run(low, { kind = "stopLevel", source = "proxy" })
+  T.eq("stopped before its first step: nothing goes out", #take(low), 0)
+  T.check("and it holds where it is, lit", low:now().on and near(low:now().level, 0.05), low:now())
+
+  local mid = make(device({ fade = WALK }), { level = 0.8 }, settings(20, 80))
+  run(mid, off(4000))
+  clock.run(3650)
+  local steps = take(mid)
+  local last = steps[#steps]
+  run(mid, level(50, 2000))
+  clock.run(100)
+  local next = take(mid)[1]
+  T.check(
+    "a level mid-walk starts from the step last sent, not under it",
+    last ~= nil and next ~= nil and next.from.level == last.level and next.level >= last.level,
+    { last = last and last.level, next = next and next.level }
+  )
+end
+
+T.section("a color stop near the end of a fade toward a white holds a white; one leaving a white is a color")
+do
+  local fourX, fourY = C4:ColorCCTtoXY(4000)
+  local FOUR = { x = fourX, y = fourY, mode = "cct", kelvin = 4000 }
+  --- The color a stop `ms` into a 4 s fade from `from` to `to` holds.
+  local function stopped(from, to, ms)
+    local m = make(nil, { level = 0.5, color = from })
+    run(m, color(to, 4000))
+    take(m)
+    clock.run(ms)
+    run(m, { kind = "stopColor", source = "proxy" })
+    local c = take(m)[1]
+    clock.run(4000 - ms)
+    return c and c.color
+  end
+  local near4000 = stopped(RED, FOUR, 3900)
+  T.check(
+    "3.9 s into a fade from red to 4000 K, on the line of whites: a white, with its Kelvin",
+    near4000 ~= nil and near4000.mode == "cct" and near4000.kelvin ~= nil,
+    near4000
+  )
+  T.eq("half way: a color", (stopped(RED, FOUR, 2000) or {}).mode, "xy")
+  T.eq("0.1 s into a fade from 4000 K to red: a color", (stopped(FOUR, RED, 100) or {}).mode, "xy")
+end
+
+T.section("a level that sends the color a ramp is on its way to takes that ramp over its own time")
+do
+  local m = make(nil, { level = 0.5, color = RED })
+  run(m, { kind = "level", level = 20, color = BLUE, rateMs = 4000, source = "scene" })
+  take(m)
+  clock.run(1000)
+  run(m, { kind = "level", level = 100, color = BLUE, rateMs = 2000, source = "scene", ramp = true })
+  local c = take(m)[1]
+  T.eq("the color goes with it, over its time", { c.setsColor, c.transitionMs }, { true, 2000 })
+  T.eq("and the color ramp lands with it", m:landing("color"), clock.now() + 2000)
+  clock.run(2000)
+end
+
+T.section("with no color known a color ramps from D65, alone and with a level")
+do
+  local d65 = Color.forDevice(Color.D65, device())
+  local m = make(nil, { level = 0.5 })
+  run(m, color(RED, 1000))
+  local v = m:view()
+  T.check(
+    "a color alone ramps from D65 over its time",
+    v.colorMs == 1000 and v.color ~= nil and near(v.color.x, d65.x),
+    v
+  )
+  clock.run(1000)
+  m = make(nil, { level = 0 })
+  run(m, level(80, 2000), choose(80, RED))
+  v = m:view()
+  T.check(
+    "an on in a color ramps it from D65 over the on's time",
+    v.colorMs == 2000 and v.color ~= nil and near(v.color.x, d65.x),
+    v
+  )
+  clock.run(2000)
+end
+
+T.section("a halted walk rests at the step it last sent")
+do
+  local m = make(device({ fade = WALK }), { level = 0.2, color = RED })
+  run(m, level(80, 1000))
+  run(m, color(BLUE, 1000))
+  clock.run(350)
+  local steps = take(m)
+  local last = steps[#steps]
+  clock.run(30)
+  m:haltAll()
+  local now = m:now()
+  T.check(
+    "the level and color of that step, not the estimate between steps",
+    last ~= nil and near(now.level, last.level) and near(now.color.x, last.color.x),
+    { now = now, last = last }
+  )
+  T.eq("and nothing runs", { now.levelRamping, now.colorRamping, m.walking }, { false, false, false })
+end
+
+T.section("late in a fade to off under a raised Min On the light is lit: no pre-on, and a Toggle turns it off")
+do
+  local m = make(device({ fade = PRE_ON }), { level = 1 }, settings(20, 100))
+  run(m, off(10000))
+  take(m)
+  clock.run(9200)
+  run(m, level(60, 2000), choose(60))
+  local cmds = take(m)
+  T.check(
+    "9.2 s into 10 s, at 8 % under a Min of 20: one change, from where the light has got to",
+    #cmds == 1 and cmds[1].kind == "change" and near(cmds[1].from.level, 0.08),
+    cmds
+  )
+  clock.run(2000)
+  run(m, off(10000))
+  take(m)
+  clock.run(9950)
+  run(m, { kind = "toggle", source = "proxy" })
+  local toggled = take(m)[1]
+  T.check("under half a level, still fading: a Toggle turns it off", toggled ~= nil and not toggled.on, toggled)
+  clock.run(100)
+end
+
+T.section("in one ms a walk sends a level once, and holds a step that falls in a command's ms")
+do
+  local m = make(device({ fade = WALK }), { level = 0.5, color = RED })
+  run(m, level(60, 0))
+  run(m, { kind = "level", level = 60, color = BLUE, rateMs = 500, source = "scene" })
+  local sent = take(m)
+  T.eq("a step to the level another command sent in the same ms walks its color alone", #sent, 1)
+  clock.run(600)
+  take(m)
+  run(m, { kind = "level", level = 60, color = RED, rateMs = 500, source = "scene" })
+  local again = take(m)
+  T.check(
+    "the same step later sends its level at once",
+    #again == 1 and again[1].setsLevel and not again[1].setsColor,
+    again
+  )
+  clock.run(600)
+  take(m)
+
+  run(m, color(BLUE, 1000))
+  clock.run(250)
+  take(m)
+  run(m, level(80, 1000))
+  T.eq("a step due in the ms a command set the ramps sends nothing", #m:step(msOf[m]), 0)
+  T.check("and the walk steps on", m.walking)
+  clock.run(100)
+  local next = take(m)[1]
+  T.check("the next step carries what moved", next ~= nil and next.setsLevel, next)
+  clock.run(1000)
 end
 
 T.section("while another hand's on waits for its level, commands take the light as lit")

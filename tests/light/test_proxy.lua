@@ -372,6 +372,31 @@ do
   p:sync(rest(false, 0))
   got = take()
   T.eq("off before it lit: Previous On's own", got[1].params.LIGHT_BRIGHTNESS_CURRENT, settings.previousOn)
+  p:sync({ on = true, level = 0, levelTarget = 0.6, levelMs = 1000, colorMs = 0 })
+  take()
+  clock.run(500)
+  p:sync({ on = false, level = 0.3, levelTarget = 0, levelMs = 1000, colorMs = 0 })
+  got = take()
+  T.eq("a fade to off half way through a ramp from off: one CHANGING, from where it had got to", {
+    #got,
+    got[1].params.LIGHT_BRIGHTNESS_CURRENT,
+    got[1].params.LIGHT_BRIGHTNESS_TARGET,
+  }, { 1, 30, 0 })
+  clock.run(1000)
+  p:sync(rest(false, 0))
+  T.eq("at its end CHANGED 0 alone: the proxy keeps the 30 it was told", names(), { "LIGHT_BRIGHTNESS_CHANGED" })
+  p:sync({ on = true, level = 0, levelTarget = 0.6, levelMs = 6000, colorMs = 0 })
+  take()
+  clock.run(5)
+  p:sync({ on = false, level = 0.0005, levelTarget = 0, levelMs = 750, colorMs = 0 })
+  take()
+  clock.run(750)
+  p:sync(rest(false, 0))
+  got = take()
+  T.eq("a fade to off before it lit: at its end the level to keep is Previous On's own", {
+    got[1].cmd,
+    got[1].params.LIGHT_BRIGHTNESS_CURRENT,
+  }, { "LIGHT_BRIGHTNESS_CHANGING", settings.previousOn })
 end
 
 T.section("the color: CHANGED and CHANGING, ahead of the level, with preset id and origin")
@@ -825,18 +850,25 @@ do
   vars = {}
 end
 
-T.section("a Button Link's colors asked before any report: its LED shows the level the light holds")
+T.section("a Button Link's colors asked before any report: its LED is off until the light reports")
 do
   vars = { [1001] = "40", [1110] = "40" }
   local p = make(LINKS)
   p:read()
   p:answer("REQUEST_BUTTON_COLORS", {}, rest(true, 0.4), LINKS.top)
   local got = take()
-  T.eq("its colors, then its LED lit", { got[1].cmd, got[2].cmd, got[2].params.STATE }, {
-    "BUTTON_COLORS",
-    "MATCH_LED_STATE",
-    true,
-  })
+  T.eq("its colors, then its LED off, though the proxy last showed it lit", {
+    got[1].cmd,
+    got[2].cmd,
+    got[2].params.STATE,
+  }, { "BUTTON_COLORS", "MATCH_LED_STATE", false })
+  p:answer("REQUEST_BUTTON_COLORS", {}, rest(true, 0.4), PROXY)
+  T.eq("asked on the proxy binding: each LED off too", #named(take(), "MATCH_LED_STATE"), 3)
+  p:online(DEVICE)
+  take()
+  p:sync(rest(false, 0.4))
+  local leds = named(take(), "MATCH_LED_STATE")
+  T.eq("the first report, off, still tells each link's LED", { #leds, leds[1] and leds[1].params.STATE }, { 3, false })
   vars = {}
 end
 
@@ -866,6 +898,63 @@ do
   values:delete("Connected")
   p:lost(false)
   T.eq("a real loss too", (values:getValue("Connected") or {}).value, false)
+end
+
+T.section("with Min On at Max On or above, a light lit any other way keeps its level lit, or is told full from off")
+do
+  local p, settings = connected({})
+  settings.lo, settings.hi = 60, 60
+  local lit = Range.toDevice(37, 60, 60)
+  p:taken({ kind = "level", level = 0, source = "proxy" })
+  p:sync(rest(false, lit, nil))
+  take()
+  p:sync(rest(true, lit, nil))
+  local s = named(take(), "LIGHT_BRIGHTNESS_CHANGED")
+  T.eq("a level 0 asked, then another hand's on: told full", s[1] and s[1].params.LIGHT_BRIGHTNESS_CURRENT, 100)
+  p:taken({ kind = "level", level = 37, source = "proxy" })
+  p:sync(rest(true, lit, nil))
+  take()
+  p:sync(rest(false, lit, nil))
+  take()
+  p:sync(rest(true, lit, nil))
+  s = named(take(), "LIGHT_BRIGHTNESS_CHANGED")
+  T.eq("an off ends what was asked: another hand's on is told full", s[1] and s[1].params.LIGHT_BRIGHTNESS_CURRENT, 100)
+  p:sync(rest(true, lit, RED))
+  T.eq("lit, with nothing asked, the level told stands", #named(take(), "LIGHT_BRIGHTNESS_CHANGED"), 0)
+end
+
+T.section(
+  "a color ramp before any color is told starts where the proxy shows: its color at the read, or D65 as a white"
+)
+do
+  local p = connected({ [1001] = "50", [1110] = "50" })
+  local d65 = { x = Color.D65.x, y = Color.D65.y, mode = "xy" }
+  p:sync({ on = true, level = 0.5, levelMs = 0, color = d65, colorTarget = RED, colorMs = 2000 })
+  local s = named(take(), "LIGHT_COLOR_CHANGING")
+  T.eq("a proxy with no color: from D65 as a white", s[1] and {
+    s[1].params.LIGHT_COLOR_CURRENT_X,
+    s[1].params.LIGHT_COLOR_CURRENT_COLOR_MODE,
+  }, { Color.D65.x, 1 })
+  clock.run(1000)
+  local halfway = { x = (Color.D65.x + RED.x) / 2, y = (Color.D65.y + RED.y) / 2, mode = "xy" }
+  p:sync({ on = true, level = 0.5, levelMs = 0, color = halfway, colorTarget = BLUE, colorMs = 2000 })
+  s = named(take(), "LIGHT_COLOR_CHANGING")
+  T.eq("a ramp replacing it: from where the color has got to, a color", s[1] and {
+    s[1].params.LIGHT_COLOR_CURRENT_X,
+    s[1].params.LIGHT_COLOR_CURRENT_COLOR_MODE,
+  }, { halfway.x, 0 })
+  p = connected({ [1001] = "50", [1110] = "50", [1200] = "0.15,0.06,0", [1210] = "0.64,0.33,0" })
+  p:sync({
+    on = true,
+    level = 0.5,
+    levelMs = 0,
+    color = RED,
+    colorTarget = { x = 0.3, y = 0.6, mode = "xy" },
+    colorMs = 2000,
+  })
+  s = named(take(), "LIGHT_COLOR_CHANGING")
+  T.eq("a proxy left mid-ramp: from the color it showed", s[1] and s[1].params.LIGHT_COLOR_CURRENT_X, 0.15)
+  vars = {}
 end
 
 T.finish()

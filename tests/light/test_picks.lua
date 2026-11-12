@@ -181,18 +181,34 @@ do
   T.check("so a level after it carries the Dim-To-Warm color", mixed ~= nil and mixed.color ~= nil, mixed)
 end
 
-T.section("the proxy's follow-up of an on is no pick, for 250 ms")
+T.section("a Navigator On opens a 250 ms window for the proxy's follow-up, which is no pick")
 do
+  local tap = intent("level", { level = 100, presetId = 1 })
+  local followUp = color(RED, { presetId = 1, presetOrigin = 1 })
   local p = Picks.new()
-  p:noted(intent("on"), OFF)
+  p:noted(tap, OFF)
   clock.run(100)
-  T.check("the window is open", p:forOn().followUp ~= nil and not p:forOn().followUp.held, p:forOn())
-  p:noted(color(RED), lit(RED))
-  T.eq("the color the on chose, sent back, is no pick", p.picked, nil)
+  T.eq("the window is open", p:forOn().followUp, true)
+  p:noted(followUp, lit(RED))
+  T.eq("the Color On Mode's preset, sent after it, is no pick", p.picked, nil)
   clock.run(200)
-  T.eq("past 250 ms the window is shut", p:forOn().followUp, nil)
-  p:noted(color(RED), lit(RED))
+  T.eq("past 250 ms the window is shut", p:forOn().followUp, false)
+  p:noted(followUp, lit(RED))
   T.check("and the same color then is a pick", same(p.picked, RED), p)
+
+  -- A bare color is a pick, in the window too, and so is every color after an on that names no preset.
+  local q = Picks.new()
+  q:noted(tap, OFF)
+  q:noted(color(RED), lit(RED))
+  T.check("in the window, the color the light heads for, bare, is a pick", same(q.picked, RED), q)
+  local r = Picks.new()
+  r:noted(intent("on"), OFF)
+  T.eq("programming's On names no preset, and opens no window", r:forOn().followUp, false)
+  r:noted(color(RED), lit(RED))
+  T.check("so the color the on chose, sent back, is a pick", same(r.picked, RED), r)
+  local mixed = choose(r, intent("level", { level = 30 }), lit(RED))
+  T.check("and a level after it carries no Dim-To-Warm color", mixed == nil or mixed.color == nil, mixed)
+  clock.run(300)
 end
 
 T.section("a Navigator On that takes the held color: its follow-up names a preset, and is no pick")
@@ -201,20 +217,11 @@ do
   p:noted(color(RED), OFF)
   local tap = intent("level", { level = 100, presetId = 1 })
   p:noted(tap, OFF)
-  local window = p:forOn().followUp
-  T.check("the window follows a held color", window and window.held, window)
+  T.eq("the window is open", p:forOn().followUp, true)
   local followUp = color(BLUE, { presetId = 1, presetOrigin = 1 })
   T.eq("the follow-up is the proxy's", choose(p, followUp, lit(RED)).followUp, true)
   p:noted(followUp, lit(RED))
   T.check("and the pick stays the held color", same(p.picked, RED), p)
-  clock.run(300)
-
-  local q = Picks.new()
-  q:noted(color(RED), OFF)
-  q:noted(intent("on"), OFF)
-  T.eq("programming's On names no preset, so its window follows no held color", q:forOn().followUp.held, false)
-  q:noted(color(BLUE, { presetId = 1, presetOrigin = 1 }), lit(RED))
-  T.check("and a color naming a preset after it is a pick", same(q.picked, BLUE), q)
   clock.run(300)
 
   -- The window takes one follow-up: a pick in it closes it, and so does the follow-up it took.
@@ -223,7 +230,7 @@ do
   r:noted(tap, OFF)
   r:noted(color(GREEN), lit(RED))
   T.check("a color picked inside the window is a pick", same(r.picked, GREEN), r)
-  T.eq("and it closes the window", r:forOn().followUp, nil)
+  T.eq("and it closes the window", r:forOn().followUp, false)
   local onPreset = color(BLUE, { presetId = 1, presetOrigin = 1 })
   T.check("so the on mode's preset after it is a choice", not (choose(r, onPreset, lit(GREEN)) or {}).followUp)
   r:noted(onPreset, lit(GREEN))
@@ -234,20 +241,40 @@ do
   s:noted(color(RED), OFF)
   s:noted(tap, OFF)
   s:noted(color(BLUE, { presetId = 1, presetOrigin = 1 }), lit(RED))
-  T.check("the follow-up is taken while the window reads open", s:forOn().followUp ~= nil, s:forOn())
+  T.eq("the follow-up is taken while the window reads open", s:forOn().followUp, true)
   s:noted(color(BLUE, { presetId = 1, presetOrigin = 1 }), lit(RED))
   T.check("a second one within 250 ms is a pick", same(s.picked, BLUE), s)
   clock.run(300)
+end
+
+T.section("an On, a Toggle or a level with no preset that takes the held color: the On color's preset after it applies")
+do
+  local presetOn = { colorOnMode = "preset", onColor = BLUE, onModes = true, onPresetId = 1, onPresetOrigin = 1 }
+  local onPreset = color(BLUE, { presetId = 1, presetOrigin = 1 })
+  for _, c in ipairs({
+    { "an On", intent("on") },
+    { "a Toggle", intent("toggle") },
+    { "a level", intent("level", { level = 100 }) },
+  }) do
+    local p = Picks.new()
+    p:noted(color(RED), OFF)
+    p:noted(c[2], OFF)
+    T.eq(c[1] .. ": no window opens", p:forOn().followUp, false)
+    T.check(c[1] .. ": the On color's preset is no follow-up", not OnColor.followUp(onPreset, p:forOn(), presetOn))
+    p:noted(onPreset, lit(RED), presetOn)
+    T.check(c[1] .. ": it is the pick", same(p.picked, BLUE), p)
+    clock.run(300)
+  end
 end
 
 T.section("a loss or Reset Driver ends every pick")
 do
   local p = Picks.new()
   p:noted(color(RED), OFF)
-  p:noted(intent("on"), OFF)
+  p:noted(intent("level", { level = 100, presetId = 1 }), OFF)
   p:noted(color(BLUE), OFF)
   p:reset()
-  T.eq("nothing held", { p.nextOn, p.picked, p:forOn().followUp }, {})
+  T.eq("nothing held", { p.nextOn, p.picked, p:forOn().followUp }, { nil, nil, false })
 end
 
 clock.restore()
