@@ -140,7 +140,7 @@ Types.API = 1
 ---   setsLevel and setsColor name the aspects stopped.
 --- @field setsColor boolean This command changes the color. With fromOff, only when a held color or an on mode's
 ---   color goes with the on; otherwise the light comes on in the color it kept, and `color` is carried. An off
----   never has it: Dim-To-Warm follows levels above 0 only.
+---   with it fades to that color as it goes dark (Dim-To-Warm's Dim color).
 --- @field transitionMs integer "device" fades only, else 0. 0 on a preOn. On a stop, the other aspect's time left
 ---   when a ramp of its own continues.
 --- @field from LightFrom
