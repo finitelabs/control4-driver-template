@@ -94,6 +94,7 @@ end
 --- @field on boolean|nil Whether the device is on at the start.
 --- @field startColor LightColor|nil The device's color at the start.
 --- @field kelvinWhites boolean|nil A white on the locus is reported as a Kelvin, whatever form it was sent in.
+--- @field writeMs integer|nil Ms each send takes, as C4:GetTime reads it on a controller. The clock's timers stay put.
 
 --- @class MemoryDevice
 --- @field o MemoryOptions
@@ -426,6 +427,7 @@ end
 --- @field dropNext boolean|nil Lose the next command on its way to the device.
 --- @field dropReads boolean|nil Answer no read.
 --- @field heard table<LightAspect, any> Each aspect's value as the light last heard it.
+--- @field written {ms: integer}|nil The world's ms spent sending: C4:GetTime runs that far ahead of the clock.
 local Memory = {}
 Memory.__index = Memory
 
@@ -606,6 +608,9 @@ end
 --- @return LightRest|nil
 function Memory:_send(cmd)
   local o = self.o
+  if o.writeMs and self.written then
+    self.written.ms = self.written.ms + o.writeMs
+  end
   local c = copy(cmd)
   c.at = self.clock.now()
   self.sent[#self.sent + 1] = c
@@ -814,6 +819,12 @@ function M.world(opts)
     end
   end
   local clock = F.virtualClock()
+  local written = { ms = 0 }
+  if opts.writeMs then
+    ShimSetClock(function()
+      return clock.now() + written.ms
+    end)
+  end
   local proxy = Fake.install(clock, {
     setup = opts.setup,
     newLight = opts.newLight,
@@ -823,6 +834,7 @@ function M.world(opts)
   local w = { clock = clock, proxy = proxy }
   local function build(device, restarting)
     local m = M.memoryLight(clock, opts, device)
+    m.written = written
     w.m, w.light, w.device = m, m.light, m.device
     if opts.noStart then
       return
