@@ -359,6 +359,23 @@ driver's `<script>`, and `make package` deletes its plain-text
 ships or uploads readable. Only `driver.lua` is encrypted, so any other file a
 driver loads from its `.c4z` stays readable. An `oss` build is encrypted only
 when it substitutes a build secret.
+{%- if embedded_drivers.split() %}
+
+### Embedded Drivers
+
+A driver update never adds a proxy item, whatever its `driver.xml` declares, so
+an installed driver can't gain one by updating. A host driver carries such an
+item as a small driver of its own instead. It puts that driver in the
+controller's driver store when it's missing, then adds it to the project and
+binds it.
+
+The `embedded_drivers` answer in `.copier-answers.yml` names each host and the
+drivers it carries, as `<host>:<driver>[,<driver>...]`. `make package` packages
+the other drivers first, then each host with their `.c4z` files under `c4z/` in
+its package. Each embedded driver also ships as its own `.c4z`, so
+`lib.driver-filenames` lists it and the OSS build's updater keeps an installed
+copy current.
+{%- endif %}
 
 ## Writing Tests
 

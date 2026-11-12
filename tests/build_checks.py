@@ -10,6 +10,7 @@ e.g. `uvx --from copier python tests/build_checks.py CHECK DIR`.
     tests/build_checks.py encrypted DIR         a build that substitutes a secret packages every distribution encrypted
     tests/build_checks.py cloud-monitoring DIR  Cloud Monitoring as CONTRIBUTING.md wires it reaches only DriverCentral
     tests/build_checks.py ui-page DIR           a page that embeds lib/ui ships it inline, in every distribution
+    tests/build_checks.py embedded DIR          a host in embedded_drivers ships each driver it names in its package
 
 encrypted, cloud-monitoring and ui-page each wire a probe into the example driver, run `make build-nodocs` with fake
 secrets, and put the files they edit back afterwards. Neither depends on how those files are formatted.
@@ -396,6 +397,35 @@ def ui_page(render):
     return report(problems, "A page that embeds lib/ui ships the kit and its components inline in every distribution, the dev login in OSS only")
 
 
+def embedded(render):
+    """A host in embedded_drivers ships each driver it names under c4z/, as that driver's own build made it."""
+    answers = (render / ".copier-answers.yml").read_text(encoding="utf-8")
+    match = re.search(r"^embedded_drivers:\s*['\"]?([^'\"\n]*)", answers, re.MULTILINE)
+    pairs = match.group(1).split() if match else []
+    if not pairs:
+        print("This render embeds no driver.")
+        return 0
+    run(["make", "build-nodocs"], render)
+    problems = []
+    for build in DISTRIBUTIONS:
+        out = Path("dist") / build / "c4z"
+        for pair in pairs:
+            host, names = pair.split(":")
+            if not (render / out / f"{host}.c4z").exists():
+                problems.append(f"the {build} build made no {host}.c4z")
+                continue
+            files = members(render, out / f"{host}.c4z")
+            if build == "drivercentral":
+                problems += encryption_problems(out / f"{host}.c4z", files)
+            for name in names.split(","):
+                own = render / out / f"{name}.c4z"
+                if not own.exists():
+                    problems.append(f"the {build} build made no {name}.c4z of its own")
+                elif files.get(f"c4z/{name}.c4z") != own.read_bytes():
+                    problems.append(f"{out / host}.c4z does not hold c4z/{name}.c4z as its own build made it")
+    return report(problems, "Each host ships the drivers it embeds under c4z/, as their own builds made them, in every distribution")
+
+
 CHECKS = {
     "doc-alerts": doc_alerts,
     "driverless": driverless,
@@ -404,6 +434,7 @@ CHECKS = {
     "encrypted": encrypted,
     "cloud-monitoring": cloud_monitoring,
     "ui-page": ui_page,
+    "embedded": embedded,
 }
 
 

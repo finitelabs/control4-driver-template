@@ -75,7 +75,7 @@ render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME
 # ─── Build leg ────────────────────────────────────────────────────────────────
 # CI's build leg is `make build-checks`: the example driver, built in the render.
 
-.PHONY: build-driverless render-example build-doc-alerts build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page build-checks
+.PHONY: build-driverless render-example build-doc-alerts build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page build-embedded build-checks
 build-driverless: ## Check the render, before it has a driver, builds and verifies nothing
 	$(PYTHON) tests/build_checks.py driverless "$(RENDER)"
 
@@ -100,6 +100,9 @@ build-cloud-monitoring: ## Check Cloud Monitoring reaches only the DriverCentral
 build-ui-page: ## Check a page that embeds lib/ui ships the kit inline
 	$(PYTHON) tests/build_checks.py ui-page "$(RENDER)"
 
+build-embedded: ## Check a host in embedded_drivers ships each driver it names in its package
+	$(PYTHON) tests/build_checks.py embedded "$(RENDER)"
+
 BUILD_LEG := render build-driverless render-example in-render-init build-doc-alerts in-render-check in-render-test \
-  build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page
+  build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page build-embedded
 build-checks: $(BUILD_LEG) ## Run CI's build leg for NAME

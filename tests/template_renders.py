@@ -81,6 +81,24 @@ def add_example(name, directory):
     if variants.exists():
         shutil.copy(variants, drivers / "example" / "variants.json")
     print(f"added the example driver to {directory}")
+    # A driver the render's embedded_drivers puts in a host's package is a copy of the example, under its own name.
+    for pair in answers(RENDERS / f"{name}.yml").get("embedded_drivers", "").split():
+        for embedded in pair.split(":")[1].split(","):
+            if (drivers / embedded).exists():
+                continue
+            shutil.copytree(drivers / "example", drivers / embedded)
+            title = embedded.replace("_", " ").title()
+            for file, old, new in (
+                ("driver.c4zproj", 'name="example"', f'name="{embedded}"'),
+                ("driver.xml", "<name>Example Driver</name>", f"<name>{title}</name>"),
+                ("driver.xml", "<model>Example Driver</model>", f"<model>{title}</model>"),
+            ):
+                path = drivers / embedded / file
+                text = path.read_text(encoding="utf-8")
+                if old not in text:
+                    sys.exit(f"{path} has no {old} to rename")
+                path.write_text(text.replace(old, new, 1), encoding="utf-8")
+            print(f"added {embedded}, a copy of the example driver, for {pair.split(':')[0]} to embed")
 
 
 def file_list(directory):
