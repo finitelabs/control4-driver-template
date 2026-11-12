@@ -119,7 +119,7 @@ end)
 -- A restart: the first report against what the proxy shows (J2)
 --------------------------------------------------------------------------------
 
-T.section("J2: a restart where the device is as the proxy shows it tells no level and no color")
+T.section("J2: a restart where the device is as the proxy shows it tells the level and the color once each")
 for _, base in ipairs({ K.ES, K.ZB, K.HOLD }) do
   case(function()
     local w = K.world(base, {}, 60)
@@ -127,8 +127,10 @@ for _, base in ipairs({ K.ES, K.ZB, K.HOLD }) do
     w.run(10000)
     w.restart()
     w.run(10000)
-    T.eq("no level told", w.proxy:count("LIGHT_BRIGHTNESS_CHANGED") + w.proxy:count("LIGHT_BRIGHTNESS_CHANGING"), 0)
-    T.eq("no color told", w.proxy:count("LIGHT_COLOR_CHANGED") + w.proxy:count("LIGHT_COLOR_CHANGING"), 0)
+    T.eq("the level told once", w.proxy:count("LIGHT_BRIGHTNESS_CHANGED"), 1)
+    T.eq("and no level ramp", w.proxy:count("LIGHT_BRIGHTNESS_CHANGING"), 0)
+    T.eq("the color told once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+    T.eq("and no color ramp", w.proxy:count("LIGHT_COLOR_CHANGING"), 0)
     T.eq("still showing 60", w.proxy.level, 60)
     w.restore()
   end)

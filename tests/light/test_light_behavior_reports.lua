@@ -93,7 +93,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J5b, J6: a moving answer is held, and the deadline adopts the latest held")
+T.section("J5b, J6: a moving answer is held, and the deadline reads the device before adopting it")
 case(function()
   local w = quiet(K.ZB, 20)
   K.target(w, 80, 2000)
@@ -102,9 +102,10 @@ case(function()
   T.eq("held: nothing told", w.proxy:changed(), {})
   w.run(1600)
   T.eq("the ramp's end is told", w.proxy:changed(), { 80 })
-  w.run(3000)
-  local told = w.proxy:changed()
-  T.eq("the deadline adopts the held answer", told[#told], 40)
+  -- A held position may lag the light: the deadline reads it once, and the device's answer, its ramp's end,
+  -- settles, so the stale 40 is never told.
+  w.run(5600)
+  T.eq("the read's answer stands: nothing more told", w.proxy:changed(), { 80 })
   w.restore()
 end)
 

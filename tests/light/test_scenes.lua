@@ -296,6 +296,15 @@ do
   for _, case in ipairs(cases) do
     T.eq(case[1] .. " " .. tostring(case[2].SCENE_ID), w.scenes[case[1]](w.scenes, case[2], NOW), case[3])
   end
+  T.eq("a stop with no scene ramp running sends no stop", w.scenes:stopRamp({ SCENE_ID = "1" }, NOW), nil)
+  w.scenes:rampUp({ SCENE_ID = "1", RATE = "1000" }, NOW)
+  w.scenes:foreign({ "level" })
+  T.eq("nor after another source took the ramp", w.scenes:stopRamp({ SCENE_ID = "1" }, NOW), nil)
+  w.scenes:rampUp({ SCENE_ID = "1", RATE = "1000" }, NOW)
+  T.eq("a scene that ignores ramps still has its ramp stopped", w.scenes:stopRamp({ SCENE_ID = "2" }, NOW), {
+    kind = "stop",
+    source = "scene",
+  })
   w.activate(1)
   w.scenes:rampUp({ SCENE_ID = "1", RATE = "1000" }, NOW)
   w.clock.run(20000)

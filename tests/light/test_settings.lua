@@ -439,4 +439,20 @@ do
   T.eq("and a stored Max On", select(2, s:onRange()), 90)
 end
 
+T.section("takeCommanded: the settings a command changed, for LightProxy to echo across a setup re-read")
+do
+  local s = fresh()
+  T.eq("nothing at first", s:takeCommanded(), {})
+  s:apply("SET_HOLD_RATE_UP", { RATE = "4000" })
+  s:apply("SET_MAX_ON_LEVEL", { LEVEL = "80" })
+  s:apply("SET_BUTTON_COLOR", { BUTTON_ID = "0", ON_COLOR = "00ff00" })
+  s:apply("UPDATE_BRIGHTNESS_RATE_DEFAULT", { RATE = "900" })
+  T.eq("each echoed setting a command set, by its key", s:takeCommanded(), {
+    [Settings.P_HOLD_RATE_UP] = true,
+    [Settings.P_MAX_ON_LEVEL] = true,
+    [Settings.P_BUTTON_COLORS] = true,
+  })
+  T.eq("and the record starts again", s:takeCommanded(), {})
+end
+
 T.finish()

@@ -34,7 +34,7 @@ local function rows(profile)
   return out
 end
 
-T.section("the profile's defaults are the contract's: every boolean false, proxy 5001, no links")
+T.section("the profile's defaults are the contract's: every boolean false, proxy 5001, no links, 65535 ms")
 do
   local p, errors = Caps.profile({ api = 1 })
   T.eq("no errors", errors, {})
@@ -50,7 +50,25 @@ do
     onModes = false,
     flash = false,
     extras = false,
+    maxMs = 65535,
   })
+end
+
+T.section("a profile's maxMs is the longest rate its static capabilities offer")
+do
+  local p, errors = Caps.profile({ api = 1, dims = true, color = true, fades = true, maxMs = 86400000 })
+  T.eq("no errors", errors, {})
+  local r = rows(p)
+  T.eq("brightness and color rates reach it", { r.brightness_rate_max, r.color_rate_max }, { "86400000", "86400000" })
+  T.eq("the default", { rows(FULL).brightness_rate_max, rows(FULL).color_rate_max }, { "65535", "65535" })
+  for _, bad in ipairs({ 0, -1, 1.5, "1000", true }) do
+    local q, errs = Caps.profile({ api = 1, maxMs = bad })
+    T.check(
+      "maxMs " .. tostring(bad) .. " is an error",
+      q == nil and (errs[1] or ""):find("profile.maxMs") ~= nil,
+      errs
+    )
+  end
 end
 
 T.section("the profile's checks")
@@ -439,28 +457,6 @@ do
   }, { false, false, false, nil })
   local colorOnly = Caps.dynamic(Caps.device({ color = true }, profile), profile)
   T.eq("a color light that does not dim still has a color stop", colorOnly.supports_color_stop, true)
-end
-
-T.section("unreflected: the keys 6661 does not show")
-do
-  local profile = profileOf({ dims = true, color = true, cct = true, fades = true })
-  local caps = Caps.dynamic(Caps.device({ dims = true, cct = { minK = 2700, maxK = 6500 } }, profile), profile)
-  local rest = Caps.unreflected(caps)
-  local apart = true
-  for k in pairs(rest) do
-    apart = apart and not Caps.REFLECTED[k]
-  end
-  for k in pairs(caps) do
-    apart = apart and (Caps.REFLECTED[k] or rest[k] ~= nil)
-  end
-  T.check("every key is reflected or in the rest, never both", apart)
-  T.eq("the rates and stops are in the rest", {
-    rest.brightness_rate_max ~= nil,
-    rest.supports_brightness_stop ~= nil,
-    rest.has_fixed_ramp_rate ~= nil,
-    rest.color_rate_max,
-    rest.dimmer,
-  }, { true, true, true, nil, nil })
 end
 
 T.section("a profile without fades offers no Ramp, in driver.xml and in what the proxy is told")
