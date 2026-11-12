@@ -179,6 +179,7 @@ local function draw(r)
   o.slow = r.chance(0.1) and 1.5 or nil
   o.pushEveryMs = r.pick({ 250, 1000 })
   o.split = r.chance(0.3)
+  o.kelvinWhites = o.color and r.chance(0.3) or nil
   o.links = r.chance(0.8) and M.LINKS or false
   o.on = r.chance(0.5)
   o.level = r.pick({ 0, 0.3, 1 })
@@ -224,6 +225,7 @@ local function describe(d)
     o.seeds and "seeds" or "",
     o.silent and "silent" or "",
     o.split and "split" or "",
+    o.kelvinWhites and "kelvin whites" or "",
     o.slow and "slow" or "",
     o.links and "links" or "no links",
     d.rest and "rest" or "",
@@ -485,6 +487,11 @@ local function color(r, o)
     local k = r.int(o.cct.minK, o.cct.maxK)
     local x, y = C4:ColorCCTtoXY(k)
     return { x = x, y = y, mode = K.CCT }
+  end
+  if r.chance(0.2) then
+    -- A white for a color light, as a Kelvin or as a full color at its point.
+    local x, y = C4:ColorCCTtoXY(r.int(2700, 6500))
+    return { x = x, y = y, mode = r.pick({ K.CCT, K.FULL }) }
   end
   return { x = 0.15 + r.float() * 0.5, y = 0.1 + r.float() * 0.5, mode = K.FULL }
 end

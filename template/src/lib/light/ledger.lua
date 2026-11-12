@@ -468,10 +468,15 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
   -- An echo of the newest command is the light's own.
   if newest and self:_echoes(aspect, value, newest.value) then
     window.held, window.heard, window.echoed = nil, true, true
-    if feedback.shows == "position" and (aspect ~= "color" or not ramping) then
-      -- The light is at the change's end: where the command sent it, not the report's rounding of it. A color
-      -- its ramp still runs to is a device that reads the color's target at once: the ramp's end tells it.
-      return self:_settle(aspect, newest.value, out)
+    if aspect ~= "color" or not ramping then
+      if feedback.shows == "position" then
+        -- The light is at the change's end: where the command sent it, not the report's rounding of it. A color
+        -- its ramp still runs to is a device that reads the color's target at once: the ramp's end tells it.
+        return self:_settle(aspect, newest.value, out)
+      elseif not self:_same(aspect, value, newest.value) then
+        -- A color the light reports in another form than it was sent is told in the light's form.
+        return self:_settle(aspect, value, out)
+      end
     end
     if not ramping then
       self:_close(aspect)
@@ -760,7 +765,7 @@ function Ledger:_settle(aspect, value, out)
   -- A value that matches the newest sent, in device units, is that command's: not the report's rounding of it.
   local window = self.windows[aspect]
   local newest = window and window.sent[#window.sent]
-  if newest and self:_echoes(aspect, value, newest.value) then
+  if newest and self:_same(aspect, value, newest.value) then
     value = newest.value
   end
   out.settle[aspect] = value
