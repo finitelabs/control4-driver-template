@@ -72,9 +72,12 @@ do
   T.eq("as the preset that set it", { choice.presetId, choice.presetOrigin, choice.unchosen }, { 5, 2, false })
   T.eq("a level while lit keeps it: no Dim-To-Warm color", choose(p, intent("level", { level = 80 }), lit(RED)), nil)
   p:noted(intent("off"), lit(RED))
-  T.eq("the off ends the pick", p.picked, nil)
-  local after = choose(p, intent("level", { level = 80 }), lit(RED))
-  T.check("so a level of the next cycle carries Dim-To-Warm again", after ~= nil and after.color ~= nil, after)
+  T.check("the off leaves it until the light reaches off", same(p.picked, RED), p)
+  local level = intent("level", { level = 80 })
+  p:noted(level, OFF)
+  T.eq("the light reached off: the pick ended", p.picked, nil)
+  local after = choose(p, level, OFF)
+  T.check("so the next cycle's level carries Dim-To-Warm again", after ~= nil and after.color ~= nil, after)
 end
 
 T.section("a color set while on is the cycle's pick")
@@ -84,10 +87,14 @@ do
   p:noted(color(BLUE), lit(RED))
   T.check("picked", same(p.picked, BLUE) and p.nextOn == nil, p)
   p:noted(intent("toggle"), lit(BLUE))
-  T.eq("a toggle while on is an off, and ends it", p.picked, nil)
+  T.check("a toggle while on leaves it until the light reaches off", same(p.picked, BLUE), p)
+  p:noted(intent("level", { level = 40 }), OFF)
+  T.eq("and once off it has ended", p.picked, nil)
   p:noted(color(BLUE), lit(RED))
   p:noted(intent("level", { level = 0 }), lit(BLUE))
-  T.eq("and so does a level of 0", p.picked, nil)
+  T.check("a level of 0 leaves it too", same(p.picked, BLUE), p)
+  p:noted(intent("on"), OFF)
+  T.eq("until the light reaches off", p.picked, nil)
 end
 
 T.section("K05: a color set while off stays a pick when another client turns the light on")
@@ -115,30 +122,62 @@ do
   T.check("another hand's level leaves the pick", same(p.picked, BLUE), p)
 end
 
-T.section("K06: a color set during a fade to off is a pick for the next on")
+T.section("K06 and #298: a color set during a fade to off is a pick until that off, and no next-on color")
 do
   local p = Picks.new()
   p:noted(intent("off", { rateMs = 3000 }), lit(RED))
   p:noted(color(BLUE), FADING_OFF)
-  T.check("it waits for the next on", same(p.nextOn, BLUE) and p.picked == nil, p)
+  T.check("it is this cycle's pick, not the next on's", same(p.picked, BLUE) and p.nextOn == nil, p)
+  local level = choose(p, intent("level", { level = 60 }), FADING_OFF)
+  T.check("a level before the off takes it, not a Dim-To-Warm mix", level and Color.alike(level.color, BLUE), level)
   local on = intent("on")
   p:noted(on, FADING_OFF)
-  T.check("an on that reverses the fade comes on in it", same(p.picked, BLUE), p)
   local choice = choose(p, on, FADING_OFF)
-  T.check("as its color", choice and Color.alike(choice.color, BLUE), choice)
+  T.check("an on that reverses the fade comes on in it", choice and Color.alike(choice.color, BLUE), choice)
+  local q = Picks.new()
+  q:noted(intent("off", { rateMs = 3000 }), lit(RED))
+  q:noted(color(BLUE), FADING_OFF)
+  q:noted(intent("on"), OFF)
+  T.eq("once the light has reached off the pick is gone, so the next On is in the On color", q.picked, nil)
 end
 
-T.section("a stop in a fade to off leaves the light lit, and the held color its pick")
+T.section("a stop in a fade to off leaves the light lit in its pick")
 do
   local p = Picks.new()
   p:noted(intent("off", { rateMs = 3000 }), lit(RED))
   p:noted(color(BLUE), FADING_OFF)
   p:noted(intent("stopLevel"), FADING_OFF)
-  T.check("the stop makes it the pick", same(p.picked, BLUE) and p.nextOn == nil, p)
+  T.check("the stop keeps it the pick", same(p.picked, BLUE) and p.nextOn == nil, p)
   local q = Picks.new()
   q:noted(color(BLUE), OFF)
   q:noted(intent("stopLevel"), OFF)
   T.check("a stop of a light already off holds it still", same(q.nextOn, BLUE) and q.picked == nil, q)
+end
+
+T.section("a pick lasts until the light reaches off: a hold down or a fade that stays lit keeps it")
+do
+  local p = Picks.new()
+  p:noted(color(BLUE), lit(RED))
+  p:noted(intent("level", { level = 0, rateMs = 2000, source = "button" }), lit(BLUE))
+  T.check("a hold down keeps it", same(p.picked, BLUE), p)
+  p:noted(intent("stopLevel", { source = "button" }), FADING_OFF)
+  T.check("and its release, with the light still lit, keeps it", same(p.picked, BLUE), p)
+  p:noted(intent("off", { rateMs = 3000 }), lit(BLUE))
+  T.check("a fade to off keeps it while the light is lit", same(p.picked, BLUE), p)
+  p:noted(intent("level", { level = 50 }), OFF)
+  T.eq("the light reached off, as an off adopted at a deadline leaves it: the pick ended", p.picked, nil)
+end
+
+T.section("a scene's color-only step is a pick; a step that sets level and color together is not")
+do
+  local p = Picks.new()
+  p:noted(intent("color", { color = BLUE, source = "scene" }), lit(RED))
+  T.check("a color-only step is the pick", same(p.picked, BLUE), p)
+  local q = Picks.new()
+  q:noted(intent("level", { level = 60, color = BLUE, source = "scene" }), lit(RED))
+  T.eq("a level-and-color step goes to the device and is no pick", q.picked, nil)
+  local mixed = choose(q, intent("level", { level = 30 }), lit(BLUE))
+  T.check("so a level after it carries the Dim-To-Warm color", mixed ~= nil and mixed.color ~= nil, mixed)
 end
 
 T.section("the proxy's follow-up of an on is no pick, for 250 ms")

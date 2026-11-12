@@ -248,7 +248,12 @@ do
   T.eq("the level carried", cmd.level, 0.5)
   T.eq("the view heads for it", { m:view().colorMs, m:view().colorTarget.x }, { 1000, RED.x })
   run(m, color(RED, 300))
-  T.eq("the color it already heads for sends nothing", #take(m), 0)
+  local again = take(m)
+  T.eq(
+    "the color it already heads for still goes out, re-timed to the new rate",
+    { #again, again[1] and again[1].transitionMs },
+    { 1, 300 }
+  )
 
   local dark = make(nil, { level = 0 })
   run(dark, color(RED, 1000))
@@ -271,7 +276,12 @@ T.section("colors in the device's form")
 do
   local whites = make(device({ color = false }), { level = 0.5 })
   run(whites, color(RED, 0))
-  T.eq("a full color for a device with CCT alone is dropped", #take(whites), 0)
+  local white = take(whites)
+  T.eq(
+    "a full color for a device with CCT alone goes as its nearest white",
+    { #white, white[1] and white[1].color.mode },
+    { 1, "cct" }
+  )
   run(whites, color({ x = 0.3, y = 0.3, mode = "cct", kelvin = 9000 }, 0))
   local cmd = take(whites)[1]
   T.eq("a white past the range goes at its end", cmd.color.kelvin, 6500)
@@ -895,6 +905,219 @@ do
   T.check(string.format("%d commands, each within the rules", count), #broken == 0, broken[1])
 end
 
+T.section("ESPHome's oracle: a color goes out though the light has it; fading to off, the level re-times")
+do
+  local m = make(device(), { level = 0.5, color = RED })
+  run(m, color(RED, 1000))
+  local same = take(m)
+  T.eq("a color the light shows still goes out", #same, 1)
+  T.eq("but no ramp from it to itself: told as reached", m:view().colorMs, 0)
+  local fading = make(device({ fade = RETIMES }), { level = 0.8, color = RED })
+  run(fading, off(4000))
+  take(fading)
+  clock.run(1000)
+  local at = fading:view().level
+  run(fading, color(BLUE, 0))
+  local cmd = take(fading)[1]
+  T.eq("off, the color goes over what the fade has left", cmd.transitionMs, 3000)
+  T.check(
+    "and the level restarts from where it is, as ESPHome restarts every channel",
+    fading.levelRamp ~= nil and near(fading.levelRamp.from, at) and fading.levelRamp.startMs == C4:GetTime(),
+    fading.levelRamp
+  )
+end
+
+T.section("ESPHome's oracle: a ramp whose start is its target is told at once; a re-time at its target ends it")
+do
+  local m = make(device(), { level = 0.5, color = RED })
+  run(m, color(BLUE, 2000))
+  run(m, color(RED, 2000))
+  T.eq("a color back to where the light still is: no ramp", m:view().colorMs, 0)
+  local lv = make(device(), { level = 0.6 })
+  run(lv, level(20, 2000))
+  run(lv, level(60, 2000))
+  T.eq("a level back to where the light still is: no ramp", lv:view().levelMs, 0)
+  local rt = make(device({ fade = RETIMES }), { level = 0.5, color = RED })
+  run(rt, level(30, 1000))
+  clock.run(999)
+  run(rt, color(BLUE, 2000))
+  T.eq("a color re-times a level ramp already at its target by ending it", rt:view().levelMs, 0)
+end
+
+T.section("ESPHome's oracle: Dim-To-Warm follows the level it reaches")
+do
+  local forOn = {
+    defaultOn = true,
+    onLo = 1,
+    onHi = 100,
+    presetLevel = 100,
+    colorOnMode = "fade",
+    onColor = RED,
+    dimColor = BLUE,
+  }
+  local dev = device()
+  local function mix(c4)
+    return OnColor.dimToWarm(c4, dev, forOn)
+  end
+  local m = make(dev, { level = 0.2, color = mix(20) }, settings(1, 100, forOn))
+  run(m, level(80, 4000), choose(80, mix(80), true))
+  take(m)
+  clock.run(2000)
+  local v = m:view()
+  local want = mix(Range.toLevel(v.level, 1, 100))
+  T.check("a carried color part way is the mix for the level reached", near(v.color.x, want.x), v.color)
+
+  run(m, level(0, 4000), choose(0, mix(0), true))
+  clock.run(2000)
+  run(m, { kind = "stopLevel", source = "proxy" })
+  local stop = take(m)
+  local last = stop[#stop]
+  T.check(
+    "a level stop on a fade to off takes the mix for the stop level",
+    last ~= nil and near(last.color.x, mix(Range.toLevel(last.level, 1, 100)).x),
+    last
+  )
+
+  local carried = make(device({ fade = RETIMES }), { level = 0.2, color = mix(20) }, settings(1, 100, forOn))
+  run(carried, level(100, 4000), choose(100, mix(100), true))
+  clock.run(2000)
+  run(carried, level(100, 4000), choose(100, mix(100), true))
+  T.check(
+    "a level whose mix is the carried ramp's target keeps it, re-timed to the new command",
+    carried.colorRamp ~= nil and carried.colorRamp.startMs == C4:GetTime() and carried:view().colorMs == 4000,
+    carried.colorRamp
+  )
+
+  local stopped = make(dev, { level = 0.2, color = mix(20) }, settings(1, 100, forOn))
+  run(stopped, level(80, 4000), choose(80, mix(80), true))
+  clock.run(1000)
+  run(stopped, { kind = "stopColor", source = "proxy" })
+  clock.run(1000)
+  run(stopped, { kind = "stopLevel", source = "proxy" })
+  local after = take(stopped)
+  local ls = after[#after]
+  T.check(
+    "after a color stop, a level stop still takes the mix for its level",
+    ls ~= nil and near(ls.color.x, mix(Range.toLevel(ls.level, 1, 100)).x),
+    ls
+  )
+end
+
+T.section("an off under Dim-To-Warm fades to the Dim color in its one command, and an on goes to the mix")
+do
+  local forOn = {
+    defaultOn = true,
+    onLo = 1,
+    onHi = 100,
+    presetLevel = 100,
+    colorOnMode = "fade",
+    onColor = RED,
+    dimColor = BLUE,
+  }
+  local dev = device()
+  local dim = OnColor.dimToWarm(0, dev, forOn)
+  local m = make(dev, { level = 0.8, color = OnColor.dimToWarm(80, dev, forOn) }, settings(1, 100, forOn))
+  run(m, off(2000), choose(0, dim, true))
+  local cmds = take(m)
+  T.eq("one command", #cmds, 1)
+  T.eq("an off that sets the color", flags(cmds[1]), "change on=false L=1 C=1 off=0")
+  T.check("the Dim color", near(cmds[1].color.x, BLUE.x) and near(cmds[1].color.y, BLUE.y), cmds[1].color)
+  clock.run(1000)
+  local v = m:view()
+  local want = OnColor.dimToWarm(Range.toLevel(v.level, 1, 100), dev, forOn)
+  T.check("part way, the light shows the mix for the level it has reached", near(v.color.x, want.x), v.color)
+  clock.run(2000)
+  run(m, on(1000), choose(100, OnColor.dimToWarm(100, dev, forOn), true))
+  local lit = take(m)
+  T.eq("an on is one command too", #lit, 1)
+  T.check(
+    "in the On color, with the brightness",
+    lit[1].setsLevel and lit[1].setsColor and near(lit[1].color.x, RED.x),
+    lit[1]
+  )
+end
+
+T.section("ESPHome's oracle: a stop re-times the ramp that runs on, on a device that re-times")
+do
+  local m = make(device({ fade = RETIMES }), { level = 0.2, color = RED })
+  run(m, level(80, 4000))
+  run(m, color(BLUE, 4000))
+  clock.run(1000)
+  local estimate = m:view().color
+  run(m, { kind = "stopLevel", source = "proxy" })
+  T.check(
+    "the color restarts from where it is, over its time left",
+    m.colorRamp ~= nil and near(m.colorRamp.from.x, estimate.x) and m.colorRamp.startMs == C4:GetTime(),
+    m.colorRamp
+  )
+end
+
+T.section("ESPHome's oracle: a fade to or from off under half way to Min On reads as off")
+do
+  local m = make(device({ fade = PRE_ON }), { level = 1 })
+  run(m, off(4000))
+  take(m)
+  clock.run(3990)
+  T.eq("near the end of a fade to off the light reads off", m:view().level, 0)
+  run(m, on(1000), choose(100))
+  T.eq("so the next on opens with a pre-on", take(m)[1].kind, "preOn")
+  local up = make(device(), { level = 0 })
+  run(up, level(60, 4000))
+  clock.run(10)
+  run(up, level(0, 2000))
+  T.eq("a ramp up just begun, sent back to off: no ramp, told at once", up:view().levelMs, 0)
+end
+
+T.section("haltAll and the stop of both aspects")
+do
+  local m = make(device({ fade = RETIMES }), { level = 0.2, color = RED })
+  run(m, level(80, 4000))
+  run(m, color(BLUE, 4000))
+  take(m)
+  clock.run(1000)
+  local v = m:view()
+  m:haltAll()
+  T.check(
+    "haltAll ends every ramp where its estimate is, sending nothing",
+    m.levelRamp == nil
+      and m.colorRamp == nil
+      and near(m.level, v.level)
+      and near(m.color.x, v.color.x)
+      and #take(m) == 0
+  )
+  local both = make(device(), { level = 0.2, color = RED })
+  run(both, level(80, 4000))
+  run(both, color(BLUE, 4000))
+  take(both)
+  clock.run(1000)
+  run(both, { kind = "stop", source = "scene" })
+  local stops = take(both)
+  T.eq("a stop of both is one command", #stops, 1)
+  T.eq("that names both aspects", flags(stops[1]), "stop on=true L=1 C=1 off=0")
+  T.eq("on a whole C4 level", stops[1].level, Range.toDevice(Range.toLevel(stops[1].level, 1, 100), 1, 100))
+  T.check("both ramps end", both.levelRamp == nil and both.colorRamp == nil)
+  run(both, { kind = "stop", source = "scene" })
+  T.eq("with neither ramping, nothing", #take(both), 0)
+end
+
+T.section("the fuzzer's seed 2263: a light that doesn't dim is sent level 1, whatever level it kept")
+do
+  local m = make(device({ dims = false }), { level = 0.9, color = RED })
+  run(m, color(BLUE, 0))
+  local cmd = take(m)[1]
+  T.eq("a color while on carries level 1", cmd and cmd.level, 1)
+end
+
+T.section("the fuzzer's seed 267: a light that doesn't dim runs a color over its own lengths")
+do
+  local m = make(device({ dims = false, fade = OWN }), { level = 1, color = RED })
+  run(m, { kind = "level", level = 100, color = BLUE, source = "scene" })
+  T.check(
+    "the color the level carries runs over the change length, with no level ramp",
+    m.colorRamp ~= nil and m.colorRamp.ms == 200 and m.levelRamp == nil,
+    m.colorRamp
+  )
+end
 
 clock.restore()
 T.finish()

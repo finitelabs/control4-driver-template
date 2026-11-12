@@ -128,10 +128,11 @@ do
     OnColor.choose(intent("on"), inputs({ device = DIMMER, settings = preset })).color,
     nil
   )
-  T.eq(
-    "a CCT light cannot take a full color, so none",
-    OnColor.choose(intent("on"), inputs({ device = CCT_ONLY, settings = preset })).color,
-    nil
+  local white = OnColor.choose(intent("on"), inputs({ device = CCT_ONLY, settings = preset })).color
+  T.check(
+    "a CCT light takes a full color as its nearest white, as released ESPHome lights it (L-CCTONLY)",
+    white ~= nil and white.mode == "cct" and white.kelvin ~= nil,
+    white
   )
   local white = OnColor.choose(
     intent("on"),
@@ -196,9 +197,6 @@ end
 
 T.section("an intent that lights nothing and follows nothing has no choice")
 for _, c in ipairs({
-  { "an off", intent("off"), ON },
-  { "a toggle while on", intent("toggle"), ON },
-  { "a level of 0", intent("level", { level = 0 }), ON },
   { "a stop", intent("stopLevel"), ON },
   { "a color stop", intent("stopColor"), ON },
   { "a color with no window open", intent("color", { color = RED }), ON },
@@ -259,12 +257,63 @@ do
     OnColor.followUp(intent("color", { color = BLUE, presetId = 1, presetOrigin = 1 }), ON, held, { onModes = false }),
     true
   )
+  -- The color the light heads for, in the window: bare or in the Color On Mode's preset, the echo; naming
+  -- another preset, a choice told in it.
+  local modes = { onModes = true, onPresetId = 7, onPresetOrigin = 1 }
+  T.eq(
+    "the color it heads for, in the Color On Mode's own preset: the echo",
+    OnColor.followUp(intent("color", { color = RED, presetId = 7, presetOrigin = 1 }), ON, open, modes),
+    true
+  )
+  T.eq(
+    "the color it heads for, naming another preset: told in that preset",
+    OnColor.followUp(intent("color", { color = RED, presetId = 5, presetOrigin = 2 }), ON, open, modes),
+    false
+  )
+  T.eq(
+    "and with no settings to read",
+    OnColor.followUp(intent("color", { color = RED, presetId = 5, presetOrigin = 2 }), ON, open),
+    false
+  )
   local choice = OnColor.choose(intent("color", { color = RED }), inputs({ now = ON, picks = open }))
   T.eq("choose says follow-up, with the light's own color and level", {
     choice.followUp,
     near(choice.color, RED),
     choice.level,
   }, { true, true, 50 })
+end
+
+T.section("an off under Dim-To-Warm fades to the Dim color: the formula's color at level 0")
+do
+  local fade = { colorOnMode = "fade", onColor = COOL, dimColor = WARM }
+  for _, c in ipairs({
+    { "an off", intent("off") },
+    { "a level of 0", intent("level", { level = 0 }) },
+    { "a toggle of a lit light", intent("toggle") },
+  }) do
+    local choice = OnColor.choose(c[2], inputs({ now = ON, settings = fade }))
+    T.check(
+      c[1] .. ": the Dim color, unchosen",
+      choice ~= nil and choice.level == 0 and near(choice.color, WARM) and choice.unchosen == true,
+      choice
+    )
+  end
+  T.eq(
+    "an off to a light already off: nothing",
+    OnColor.choose(intent("off"), inputs({ now = OFF, settings = fade })),
+    nil
+  )
+  T.eq(
+    "a pick holds Dim-To-Warm off until the off: no Dim color",
+    OnColor.choose(intent("off"), inputs({ now = ON, settings = fade, picks = { picked = { color = BLUE } } })),
+    nil
+  )
+  T.eq("without Dim-To-Warm an off chooses nothing", OnColor.choose(intent("off"), inputs({ now = ON })), nil)
+  T.eq(
+    "on a light with no color, nothing",
+    OnColor.choose(intent("off"), inputs({ now = ON, settings = fade, device = DIMMER })),
+    nil
+  )
 end
 
 T.finish()

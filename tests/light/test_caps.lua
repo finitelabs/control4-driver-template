@@ -356,7 +356,7 @@ do
     is("dimmer", dims)
     is("set_level", dims)
     is("supports_target", dims)
-    is("ramp_level", dims)
+    is("ramp_level", dims and p.fades)
     is("on_off", true)
     is("supports_default_on", p.defaultOn)
     is("supports_brightness_stop", dims and p.fades)
@@ -461,6 +461,23 @@ do
     rest.color_rate_max,
     rest.dimmer,
   }, { true, true, true, nil, nil })
+end
+
+T.section("a profile without fades offers no Ramp, in driver.xml and in what the proxy is told")
+do
+  local profile = assert(Caps.profile({ api = 1, dims = true, color = true }))
+  local ramp
+  for _, row in ipairs(Caps.static(profile)) do
+    if row.key == "ramp_level" then
+      ramp = row.value
+    end
+  end
+  T.eq("driver.xml: ramp_level False", ramp, "False")
+  local device = assert(Caps.device({ dims = true, color = true }, profile))
+  T.eq("dynamic: ramp_level false", Caps.dynamic(device, profile).ramp_level, false)
+  local fading = assert(Caps.profile({ api = 1, dims = true, fades = true }))
+  local d = assert(Caps.device({ dims = true, color = false }, fading))
+  T.eq("a profile with fades: ramp_level true", Caps.dynamic(d, fading).ramp_level, true)
 end
 
 T.finish()

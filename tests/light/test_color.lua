@@ -137,7 +137,7 @@ do
     { "full color stays", { 0.64, 0.33, "xy", true, true }, { 0.64, 0.33, "xy" } },
     { "a white on a CCT light goes to its locus point", { x, y, "cct", true, true }, { lx, ly, "cct" } },
     { "a white on a CCT-only light likewise", { x, y, "cct", false, true }, { lx, ly, "cct" } },
-    { "a white on a color-only light is a full color", { x, y, "cct", true, false }, { x, y, "xy" } },
+    { "a white on a color-only light is a full color on the locus", { x, y, "cct", true, false }, { lx, ly, "xy" } },
     { "a white on neither stays as given", { x, y, "cct", false, false }, { x, y, "cct" } },
   }) do
     local a = case[2]
@@ -177,13 +177,42 @@ do
     y = 0.33,
     mode = "xy",
   })
-  T.eq("full color on a CCT-only light has no form", Color.forDevice({ x = 0.64, y = 0.33, mode = "xy" }, cctOnly), nil)
+  local nearest = Color.forDevice({ x = 0.64, y = 0.33, mode = "xy" }, cctOnly)
+  T.check(
+    "a full color on a CCT-only light is its nearest white, in the range",
+    nearest ~= nil and nearest.mode == "cct" and nearest.kelvin >= 2700 and nearest.kelvin <= 6500,
+    nearest
+  )
+  local hot = Color.forDevice(white(9000), colorOnly)
+  local hx, hy = Color.kelvinToXY(Color.WHITE_MAX_K)
+  T.check(
+    "a white past the default range on a color-only light is the range's end, as a full color",
+    hot.mode == "xy" and near(hot.x, hx, 1e-9) and near(hot.y, hy, 1e-9),
+    hot
+  )
   local asColor = Color.forDevice(white(3000), colorOnly)
   T.eq("a white on a color-only light is a full color", asColor.mode, "xy")
   T.eq("any color on neither", Color.forDevice(white(3000), neither), nil)
 end
 
-T.section("dimToWarm: the Dim color at 0 to the On color at 100, in the On color's mode")
+T.section("dimToWarm: the Dim color at 0 to the On color at 100, straight across xy, in the On color's mode")
+do
+  local dim = { x = 0.30, y = 0.60, mode = "xy" }
+  local on = { x = 0.64, y = 0.33, mode = "xy" }
+  for _, case in ipairs({
+    { 0, 0.30, 0.60 },
+    { 100, 0.64, 0.33 },
+    { 50, 0.47, 0.465 },
+    { -5, 0.30, 0.60 },
+    { 150, 0.64, 0.33 },
+  }) do
+    local c = Color.dimToWarm(dim, on, case[1])
+    T.check("level " .. case[1], near(c.x, case[2], 1e-12) and near(c.y, case[3], 1e-12) and c.mode == "xy", c)
+  end
+  T.eq("an On color with no mode is full color", Color.dimToWarm(dim, { x = 0.4, y = 0.2 }, 50).mode, "xy")
+end
+
+T.section("dimToWarm between two whites is straight across xy too, in the On color's mode (Control4's formula)")
 do
   local dim = { x = 0.55, y = 0.40, mode = "cct" }
   local on = { x = 0.45, y = 0.41, mode = "cct" }
@@ -191,13 +220,10 @@ do
     { 0, 0.55, 0.40 },
     { 100, 0.45, 0.41 },
     { 50, 0.50, 0.405 },
-    { -5, 0.55, 0.40 },
-    { 150, 0.45, 0.41 },
   }) do
     local c = Color.dimToWarm(dim, on, case[1])
     T.check("level " .. case[1], near(c.x, case[2], 1e-12) and near(c.y, case[3], 1e-12) and c.mode == "cct", c)
   end
-  T.eq("an On color with no mode is full color", Color.dimToWarm(dim, { x = 0.4, y = 0.4 }, 50).mode, "xy")
 end
 
 T.finish()

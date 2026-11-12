@@ -232,6 +232,13 @@ CASES["J2: the first report"] = {
     steps = { { hear = { kind = "push", level = 0.4 } } },
     want = { H({ settle = { level = 0.4 } }) },
   },
+  {
+    name = "a full color at the xy the library holds as a white is news: colors compare with their mode",
+    fresh = true,
+    now = { color = { x = 0.64, y = 0.33, mode = "cct" } },
+    steps = { { hear = { kind = "push", on = true, level = 0.5, color = RED } } },
+    want = { H({ settle = { color = RED } }) },
+  },
 }
 
 CASES["J3: seeds"] = {
@@ -316,6 +323,18 @@ CASES["J4: no window"] = {
     },
     want = { H({ foreign = { "on" }, ask = true }), H(), H({ settle = { on = true } }, "on") },
   },
+  {
+    name = "an on answered alone waits for its level: the on is told with the level, never at the level kept",
+    dev = { refresh = true, shows = "position" },
+    now = { on = false },
+    steps = {
+      { hear = { kind = "push", on = true } },
+      { hear = { kind = "seed", on = true, level = 1 } },
+      { hear = { kind = "final", on = true } },
+      { hear = { kind = "final", level = 0.2 } },
+    },
+    want = { H({ foreign = { "on" }, ask = true }), H(), H(), H({ settle = { level = 0.2, on = true } }) },
+  },
 }
 
 CASES["J5a, J5b: answers to a read"] = {
@@ -337,6 +356,12 @@ CASES["J5a, J5b: answers to a read"] = {
     dev = { shows = "position", refresh = true },
     steps = { { send = { level = 0.8 }, land = 500 }, { hear = { kind = "moving", level = 0.6 } }, { run = 1500 } },
     want = { H(), H({ settle = { level = 0.6 } }, "level") },
+  },
+  {
+    name = "a final that matches the newest sent in device steps settles on the sent value, not its rounding",
+    dev = { shows = "position" },
+    steps = { { send = { level = 0.5 } }, { hear = { kind = "final", level = 0.5013 } } },
+    want = { H({ settle = { level = 0.5 } }) },
   },
 }
 
@@ -417,6 +442,53 @@ CASES["J5d: history"] = {
     steps = { { send = { on = true, fromOff = true } }, { hear = { kind = "push", on = false } }, { run = 1000 } },
     -- The on from off set the level too: its window closes on the command at the deadline.
     want = { H(), H({ settle = { on = false } }, "on"), H(nil, "level") },
+  },
+  {
+    name = "once the newest command's echo is heard, the value from before is another hand's",
+    steps = {
+      { send = { level = 0.3, fromLevel = 1.0 }, land = 5000, now = { levelRamping = true } },
+      { hear = { kind = "push", level = 0.3 } },
+      { hear = { kind = "push", level = 1.0 } },
+    },
+    want = { H(), H({ settle = { level = 1.0 }, foreign = { "level" } }) },
+  },
+  {
+    name = "under target, history during the aspect's ramp is dropped, so the deadline keeps the ramp",
+    steps = {
+      { send = { color = BLUE, fromColor = RED, setsLevel = false }, land = 5000, now = { colorRamping = true } },
+      { hear = { kind = "push", color = RED } },
+      { run = 6000 },
+    },
+    want = { H(), H(nil, "color") },
+  },
+  {
+    name = "under position the same report may be the light on its way: held, and adopted at the deadline",
+    dev = { shows = "position" },
+    steps = {
+      { send = { color = BLUE, fromColor = RED, setsLevel = false }, land = 5000, now = { colorRamping = true } },
+      { hear = { kind = "push", color = RED } },
+      { run = 6000 },
+    },
+    want = { H(), H({ settle = { color = RED } }, "color") },
+  },
+  {
+    name = "a report another hand made is its state whole: an on held as history comes with its foreign level",
+    now = { on = false },
+    steps = {
+      { send = { on = true, fromOff = true, level = 0.6 } },
+      { send = { on = false } },
+      { hear = { kind = "push", on = true, level = 0.8 } },
+    },
+    want = { H({ settle = { level = 0.8, on = true }, foreign = { "level", "on" } }) },
+  },
+  {
+    name = "an off held as history carries that stale state's kept level, never a lit one",
+    now = { on = false },
+    steps = {
+      { send = { on = true, fromOff = true, level = 0.6 } },
+      { hear = { kind = "push", on = false, level = 0.87 } },
+    },
+    want = { H() },
   },
 }
 
@@ -508,6 +580,11 @@ CASES["J6: the deadline"] = {
       { run = 100 },
     },
     want = { H(), H(nil, "level") },
+  },
+  {
+    name = "an off ends the window of the level before it: that level's deadline never comes",
+    steps = { { send = { level = 0.7 } }, { send = { on = false, level = 0.7 } }, { run = 2000 } },
+    want = { H(nil, "on") },
   },
 }
 

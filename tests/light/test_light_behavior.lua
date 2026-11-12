@@ -246,13 +246,13 @@ case(function()
   w.m.sent = {}
   K.color(w, K.RED.x, K.RED.y)
   w.run(2000)
-  local colored = 0
+  local full = 0
   for _, c in ipairs(w.m.sent) do
-    if c.setsColor then
-      colored = colored + 1
+    if c.setsColor and c.color and c.color.mode ~= "cct" then
+      full = full + 1
     end
   end
-  T.eq("no color goes to a device that has none", colored, 0)
+  T.eq("no full color goes to a device that lost color: CCT alone, it takes the nearest white", full, 0)
   w.restore()
 end)
 

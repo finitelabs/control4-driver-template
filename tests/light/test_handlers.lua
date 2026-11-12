@@ -242,7 +242,6 @@ do
     "SET_BRIGHTNESS_TARGET",
     "SET_COLOR_TARGET",
     "SET_BRIGHTNESS_STOP",
-    "GET_LIGHT_LEVEL",
     "ACTIVATE_SCENE",
     "TOGGLE_SCENE",
     "STOP_RAMP_SCENE",
@@ -254,6 +253,11 @@ do
   T.eq("a setting still lands", #run(light, PROXY, "SET_MAX_ON_LEVEL", { LEVEL = "80" }), 1)
   T.eq("a scene is still stored", #run(light, PROXY, "PUSH_SCENE", {}), 1)
   T.eq("the connected state is still answered", #run(light, PROXY, "GET_CONNECTED_STATE", {}), 1)
+  T.eq(
+    "GET_LIGHT_LEVEL still reaches the light, which answers a suspended light's kept level",
+    #run(light, PROXY, "GET_LIGHT_LEVEL", {}),
+    1
+  )
 end
 
 T.section("families the profile leaves out take none of their commands")

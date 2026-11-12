@@ -277,10 +277,18 @@ do
   w.push(1, { { level = 60, rate = 3000 }, { level = 20, delay = 5000 } })
   w.push(2, { { level = 60 } }, { IGNORE_RAMP = "True" })
   local cases = {
-    { "rampUp", { SCENE_ID = "1", RATE = "4000" }, { kind = "level", level = 100, rateMs = 4000, source = "scene" } },
-    { "rampDown", { SCENE_ID = "1", RATE = "2000" }, { kind = "level", level = 0, rateMs = 2000, source = "scene" } },
-    { "rampUp", { RATE = "1000" }, { kind = "level", level = 100, rateMs = 1000, source = "scene" } },
-    { "stopRamp", { SCENE_ID = "1" }, { kind = "stopLevel", source = "scene" } },
+    {
+      "rampUp",
+      { SCENE_ID = "1", RATE = "4000" },
+      { kind = "level", level = 100, rateMs = 4000, source = "scene", ramp = true },
+    },
+    {
+      "rampDown",
+      { SCENE_ID = "1", RATE = "2000" },
+      { kind = "level", level = 0, rateMs = 2000, source = "scene", ramp = true },
+    },
+    { "rampUp", { RATE = "1000" }, { kind = "level", level = 100, rateMs = 1000, source = "scene", ramp = true } },
+    { "stopRamp", { SCENE_ID = "1" }, { kind = "stop", source = "scene" } },
     { "rampUp", { SCENE_ID = "2", RATE = "1000" }, nil },
     { "rampDown", { SCENE_ID = "2", RATE = "1000" }, nil },
     { "stopRamp", { SCENE_ID = "2" }, nil },
@@ -292,6 +300,24 @@ do
   w.scenes:rampUp({ SCENE_ID = "1", RATE = "1000" }, NOW)
   w.clock.run(20000)
   T.eq("a ramp ends the run", #w.got, 1)
+  w.clock.restore()
+end
+
+T.section("a scene ramp carries the color of the scene's last element")
+do
+  local w = world()
+  w.push(
+    3,
+    { { level = 60, color = { x = 0.6, y = 0.32 } }, { level = 20, color = { x = 0.15, y = 0.06 }, delay = 2000 } }
+  )
+  local up = w.scenes:rampUp({ SCENE_ID = "3", RATE = "3000" }, NOW)
+  T.eq(
+    "the last element's color, with the ramp to full",
+    { up.level, up.color and up.color.x, up.ramp },
+    { 100, 0.15, true }
+  )
+  w.push(4, { { level = 60, color = { x = 0.6, y = 0.32 } }, { level = 20 } })
+  T.eq("none when the last element sets no color", w.scenes:rampDown({ SCENE_ID = "4", RATE = "3000" }, NOW).color, nil)
   w.clock.restore()
 end
 
