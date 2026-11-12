@@ -46,7 +46,7 @@ end
 --- Take an intent, before the on's choice reads the picks.
 --- @param intent LightIntent
 --- @param now LightNow
---- @param settings LightOnSettings|nil Whose on modes decide the proxy's follow-up; nil reads it by Hatch's rule.
+--- @param settings LightOnSettings|nil Whose on modes decide the proxy's follow-up; nil takes any named preset as the follow-up.
 function Picks:noted(intent, now, settings)
   if self.followSpent then
     self.followUntil, self.followSpent = nil, false
@@ -67,7 +67,7 @@ function Picks:noted(intent, now, settings)
     end
     self.followUntil = nil
     local pick = { color = intent.color, presetId = intent.presetId, presetOrigin = intent.presetOrigin }
-    -- A light still lit on its way to off takes it as this cycle's pick, which ends at that off (#298).
+    -- A light still lit on its way to off takes it as this cycle's pick, which ends at that off.
     if now.on or now.levelRamping then
       self.picked = pick
     else

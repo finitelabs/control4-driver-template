@@ -1,6 +1,6 @@
---- Ledger: weighs each device report against the commands the library sent, by rules J1 to J6 (design v3,
---- section 3). It owns one window per aspect, from a command to its deadline, and the deadline timers. It
---- decides what a report means; Light carries out the answer.
+--- Ledger: weighs each device report against the commands the library sent. It owns one window per aspect,
+--- from a command to its deadline, and the deadline timers. It decides what a report means; Light carries out
+--- the answer.
 
 local log = require("lib.logging")
 local Color = require("lib.light.color")
@@ -10,7 +10,7 @@ require("drivers-common-public.global.timer")
 
 --- @alias LightAspectValue boolean|number|LightColor
 
---- The aspects, in the order a report is weighed: an on can decide whether a color is news (J1).
+--- The aspects, in the order a report is weighed: an on can decide whether a color is news.
 --- @type LightAspect[]
 local ASPECTS = { "on", "level", "color" }
 
@@ -19,7 +19,7 @@ local ASPECTS = { "on", "level", "color" }
 --- @field device LightDevice|nil
 --- @field windows table<LightAspect, LightWindow> The open window of each aspect.
 --- @field unheard table<LightAspect, boolean> The aspects whose first report since construction or reset has
----   not come (J2).
+---   not come.
 --- @field libraryOn boolean|nil The on the library holds: from Motion at each report and deadline, then from
 ---   each command that changes the output and each on settled. While another hand's on waits for its level
 ---   (a learning window), it is on.
@@ -136,7 +136,7 @@ function Ledger:heard(report, now)
   return out
 end
 
---- An aspect's deadline (J6).
+--- An aspect's deadline.
 --- @param aspect LightAspect
 --- @param now LightNow
 --- @return LightHeard
@@ -194,7 +194,7 @@ function Ledger:closeAll()
   end
 end
 
---- The run replaced: every window closes, and each aspect's next report is its first again (J2).
+--- The run replaced: every window closes, and each aspect's next report is its first again.
 function Ledger:reset()
   self:closeAll()
   self.unheard = { on = true, level = true, color = true }
@@ -212,22 +212,22 @@ end
 -- The rules
 -----------------------------------------------------------------------------------------------------
 
---- J1 to J5 for one aspect of a report.
+--- Weigh one aspect of a report.
 --- @private
 --- @param aspect LightAspect
 --- @param value LightAspectValue
 --- @param report LightReport
 --- @param now LightNow
 --- @param out LightHeard
---- @return "history"|nil history The value was held as history (J5d).
+--- @return "history"|nil history The value was held as history.
 function Ledger:_weigh(aspect, value, report, now, out)
-  -- J1: while a "hold" device is off with a color told but not sent, a report that doesn't say on carries no
+  -- While a "hold" device is off with a color told but not sent, a report that doesn't say on carries no
   -- color news: the color the proxy shows stands for the next on.
   if aspect == "color" and now.colorHeld == true and report.on ~= true then
     return
   end
   local window = self.windows[aspect]
-  -- J2: the first report carrying the aspect is weighed against what the library holds. With a command
+  -- The first report carrying the aspect is weighed against what the library holds. With a command
   -- already out for it, the window weighs it instead.
   if self.unheard[aspect] then
     self.unheard[aspect] = false
@@ -239,7 +239,7 @@ function Ledger:_weigh(aspect, value, report, now, out)
       return
     end
   end
-  -- J3: a seed after the first fills nothing.
+  -- A seed after the first fills nothing.
   if report.kind == "seed" then
     return
   end
@@ -249,7 +249,7 @@ function Ledger:_weigh(aspect, value, report, now, out)
   return self:_inWindow(aspect, window, value, report, now, out)
 end
 
---- J4: no command out for the aspect.
+--- A report with no command out for the aspect.
 --- @private
 --- @param aspect LightAspect
 --- @param value LightAspectValue
@@ -302,7 +302,7 @@ function Ledger:_noWindow(aspect, value, report, now, out)
   self:_foreign(aspect, value, out)
 end
 
---- J5: a command is out for the aspect.
+--- A report while a command is out for the aspect.
 --- @private
 --- @param aspect LightAspect
 --- @param window LightWindow
@@ -310,11 +310,11 @@ end
 --- @param report LightReport
 --- @param now LightNow
 --- @param out LightHeard
---- @return "history"|nil history The value was held as history (d).
+--- @return "history"|nil history The value was held as history.
 function Ledger:_inWindow(aspect, window, value, report, now, out)
   local kind = report.kind
   local feedback = self.device.feedback
-  -- f: a learning window settles on the first report carrying the aspect. Another hand's on waits for its
+  -- A learning window settles on the first report carrying the aspect. Another hand's on waits for its
   -- level, as a device may answer the read one attribute at a time: the on is told with the level, or at the
   -- deadline. An off instead ends the wait.
   if window.kind == "learning" then
@@ -328,7 +328,7 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
     end
     return self:_learned(aspect, out)
   end
-  -- g: after J6's ask, the first push or final settles. Under "position" only the read's own answer does, or
+  -- After the deadline's ask, the first push or final settles. Under "position" only the read's own answer does, or
   -- an echo: a push may still be the light on its way.
   local newest = window.sent[#window.sent]
   if
@@ -344,20 +344,20 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
     self:_settle(aspect, value, out)
     return self:_learned(aspect, out)
   end
-  -- a: a final settles, whatever it shows.
+  -- A final settles, whatever it shows.
   if kind == "final" then
     if self:_waitForLevel(aspect, window, value, report, now) then
       return
     end
     return self:_settle(aspect, value, out)
   end
-  -- b: a moving answer is held.
+  -- A moving answer is held.
   if kind == "moving" then
     return self:_hold(window, value)
   end
   -- The on rides the level: it is moving while the level's ramp runs.
   local ramping = (aspect ~= "color" and now.levelRamping) or (aspect == "color" and now.colorRamping)
-  -- c: an echo of the newest command is the light's own.
+  -- An echo of the newest command is the light's own.
   if newest and self:_same(aspect, value, newest.value) then
     window.held, window.heard, window.echoed = nil, true, true
     if feedback.shows == "position" then
@@ -369,7 +369,7 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
     end
     return
   end
-  -- d: until the newest command's echo comes, an older command's value, or the value before the window, is
+  -- Until the newest command's echo comes, an older command's value, or the value before the window, is
   -- history. Under "target" one that comes while the aspect's ramp runs says nothing of where the light is,
   -- and is dropped, so the deadline can't revert the ramp.
   if not window.echoed and (self:_older(aspect, window, value) or self:_same(aspect, value, window.before)) then
@@ -386,7 +386,7 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
     end
     return "history"
   end
-  -- e: a value no command sent.
+  -- A value no command sent.
   if feedback.shows == "target" then
     return self:_foreign(aspect, value, out)
   end

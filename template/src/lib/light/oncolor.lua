@@ -69,8 +69,8 @@ end
 
 --- Whether a color intent is the proxy's follow-up of the on or level just before it, or the color the light already
 --- heads for, sent back bare or in the Color On Mode's preset. After a Navigator On that took the held color, the
---- follow-up names a preset: on a profile with on modes the Color On Mode's own (zb:2020-2027), as any other is a color
---- someone chose; without on modes any preset, as Hatch's app sends.
+--- follow-up names a preset: on a profile with on modes the Color On Mode's own, as any other is a color someone
+--- chose; without on modes any preset.
 --- @param intent LightIntent
 --- @param now LightNow
 --- @param picks LightOnPicks

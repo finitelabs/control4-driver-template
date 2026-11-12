@@ -47,7 +47,7 @@ local INVARIANTS = {
     name = "ramps",
     says = "a CHANGING starts where the proxy last saw the light, and a ramp run out ends at its target",
   },
-  { name = "once", says = "one CHANGING per ramp per aspect (review P5)" },
+  { name = "once", says = "one CHANGING per ramp per aspect" },
   {
     name = "binds",
     says = "while lost the proxy hears only offline, at most one off and dark LEDs, and nothing is sent",
@@ -57,7 +57,7 @@ local INVARIANTS = {
   { name = "asks", says = "the library asks a refresh only of a device that offers it, at most once per window" },
   { name = "quiet", says = "a level command the device takes plainly tells at most one CHANGED per aspect" },
   { name = "window", says = "no deadline falls before its aspect's ramp has ended" },
-  { name = "malformed", says = "a malformed report changes nothing and logs one error (review T9)" },
+  { name = "malformed", says = "a malformed report changes nothing and logs one error" },
   { name = "errors", says = "no error escapes: no raise, no timer callback raise, no logged error" },
 }
 

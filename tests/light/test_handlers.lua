@@ -303,9 +303,24 @@ do
     sorted = sorted and (i == 1 or Handlers.COMMANDS[i - 1] < command)
   end
   T.check("sorted", sorted)
-  for _, command in ipairs({ "ON", "SET_COLOR_TARGET", "PUSH_SCENE", "SET_PRESET_LEVEL", "GET_LIGHT_LEVEL", "DO_PUSH" }) do
+  -- One of each set the handlers dispatch on: a motion command, a family member, a scene op, a setting, an
+  -- ask, both ignored ones, and a link action.
+  for _, command in ipairs({
+    "ON",
+    "SET_COLOR_TARGET",
+    "UPDATE_BRIGHTNESS_ON_MODE",
+    "REQUEST_BUTTON_COLORS",
+    "PUSH_SCENE",
+    "STOP_SCENE_RAMP",
+    "SET_PRESET_LEVEL",
+    "GET_LIGHT_LEVEL",
+    "ALL_SCENES_PUSHED",
+    "SET_COLOR_ON_MODE",
+    "DO_PUSH",
+  }) do
     T.check("includes " .. command, seen[command])
   end
+  T.eq("and no more than them", #Handlers.COMMANDS, 45)
 end
 
 T.finish()

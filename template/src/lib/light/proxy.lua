@@ -6,6 +6,7 @@
 
 local log = require("lib.logging")
 local values = require("lib.values")
+local Buttons = require("lib.light.buttons")
 local Caps = require("lib.light.caps")
 local Color = require("lib.light.color")
 local Range = require("lib.light.range")
@@ -17,9 +18,8 @@ require("lib.utils")
 local VAR_LEVEL, VAR_LEVEL_TARGET = 1001, 1110
 local VAR_COLOR, VAR_COLOR_TARGET = 1200, 1210
 
--- The proxy's three buttons, by the ids BUTTON_ACTION and the setup name them.
-local TOP, BOTTOM, TOGGLE = 0, 1, 2
-local BUTTON_NAMES = { [TOP] = "Top", [BOTTOM] = "Bottom", [TOGGLE] = "Toggle" }
+-- The names the setup gives the proxy's three buttons.
+local BUTTON_NAMES = { [Buttons.TOP] = "Top", [Buttons.BOTTOM] = "Bottom", [Buttons.TOGGLE] = "Toggle" }
 
 --- What the proxy was told of the level.
 --- @class LightToldLevel
@@ -113,7 +113,7 @@ function LightProxy:_holdSettings()
   for _, echo in ipairs(self:_echoValues()) do
     self.echoes[echo.notify] = echo.value
   end
-  for _, button in ipairs({ TOP, BOTTOM, TOGGLE }) do
+  for _, button in ipairs(Buttons.ALL) do
     local on, off = self.settings:buttonColors(button)
     self.buttons[button] = { on = on, off = off }
   end
@@ -229,7 +229,7 @@ function LightProxy:online(device)
   if links then
     -- The three buttons, a string per the NUMBER_BUTTONS notify, then each one's name and colors.
     SendToProxy(proxy, "NUMBER_BUTTONS", "3", "NOTIFY")
-    for _, button in ipairs({ TOP, BOTTOM, TOGGLE }) do
+    for _, button in ipairs(Buttons.ALL) do
       local on, off = self.settings:buttonColors(button)
       SendToProxy(proxy, "BUTTON_INFO", {
         BUTTON_ID = button,
@@ -240,7 +240,7 @@ function LightProxy:online(device)
       self.buttons[button] = { on = on, off = off }
     end
     -- A keypad keeps the colors it was last told, which may be from before the proxy's were read.
-    for _, button in ipairs({ TOP, BOTTOM, TOGGLE }) do
+    for _, button in ipairs(Buttons.ALL) do
       self:_tellLinkColors(button)
     end
   end
@@ -589,7 +589,7 @@ function LightProxy:_syncSettings()
       end
     end
     if not commanded[self.settings.P_BUTTON_COLORS] then
-      for _, button in ipairs({ TOP, BOTTOM, TOGGLE }) do
+      for _, button in ipairs(Buttons.ALL) do
         local on, off = self.settings:buttonColors(button)
         self.buttons[button] = { on = on, off = off }
       end
@@ -606,7 +606,7 @@ function LightProxy:_syncSettings()
   if not self.profile.links then
     return
   end
-  for _, button in ipairs({ TOP, BOTTOM, TOGGLE }) do
+  for _, button in ipairs(Buttons.ALL) do
     local on, off = self.settings:buttonColors(button)
     local told = self.buttons[button]
     if on ~= told.on or off ~= told.off then
@@ -627,33 +627,17 @@ end
 --- @param button integer
 --- @return integer|nil
 function LightProxy:_link(button)
-  local links = self.profile.links
-  if not links then
-    return nil
-  end
-  if button == TOP then
-    return links.top
-  elseif button == BOTTOM then
-    return links.bottom
-  end
-  return links.toggle
+  return Buttons.link(self.profile.links, button)
 end
 
 --- The button a link binding drives, or nil for the proxy binding and any other.
 --- @param idBinding integer|nil
 --- @return integer|nil
 function LightProxy:_button(idBinding)
-  local links = self.profile.links
-  if not links or idBinding == nil then
+  if idBinding == nil then
     return nil
-  elseif idBinding == links.top then
-    return TOP
-  elseif idBinding == links.bottom then
-    return BOTTOM
-  elseif idBinding == links.toggle then
-    return TOGGLE
   end
-  return nil
+  return Buttons.forLink(self.profile.links, idBinding)
 end
 
 --- @param button integer
@@ -751,7 +735,7 @@ function LightProxy:answer(strCommand, _tParams, _view, idBinding)
       SendToProxy(idBinding, "MATCH_LED_STATE", { STATE = self:_ledsHeld() }, "NOTIFY", true)
       return
     end
-    for _, button in ipairs({ TOP, BOTTOM, TOGGLE }) do
+    for _, button in ipairs(Buttons.ALL) do
       local on, off = self.settings:buttonColors(button)
       SendToProxy(proxy, "BUTTON_COLORS", { BUTTON_ID = button, ON_COLOR = on, OFF_COLOR = off }, "NOTIFY")
     end

@@ -47,7 +47,7 @@ local function near(a, b)
   return a ~= nil and b ~= nil and math.abs(a - b) < 1e-6
 end
 
-T.section("the persisted keys are the 16 of the copies, verbatim, and scenes is not one")
+T.section("the persisted keys are kept verbatim, 16 of them, and scenes is not one")
 do
   local names = {}
   for _, key in ipairs(KEYS) do

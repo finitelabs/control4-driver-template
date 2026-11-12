@@ -98,7 +98,7 @@ do
   T.eq("until the light reaches off", p.picked, nil)
 end
 
-T.section("K05: a color set while off stays a pick when another client turns the light on")
+T.section("a color set while off stays a pick when another client turns the light on")
 do
   local p = Picks.new()
   p:noted(color(RED), OFF)
@@ -123,7 +123,7 @@ do
   T.check("another hand's level leaves the pick", same(p.picked, BLUE), p)
 end
 
-T.section("K06 and #298: a color set during a fade to off is a pick until that off, and no next-on color")
+T.section("a color set during a fade to off is a pick until that off, and no next-on color")
 do
   local p = Picks.new()
   p:noted(intent("off", { rateMs = 3000 }), lit(RED))

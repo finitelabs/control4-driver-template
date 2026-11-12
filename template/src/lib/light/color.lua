@@ -148,8 +148,7 @@ function Color.kelvinToXY(kelvin)
   return C4:ColorCCTtoXY(kelvin)
 end
 
---- How far from the black-body locus a color still goes to a light's white channels: ESPHome's released
---- white-channel test, Euclidean in xy.
+--- How far from the black-body locus a color still goes to a light's white channels, Euclidean in xy.
 --- @type number
 Color.WHITE_BAND = 0.012
 

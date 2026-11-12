@@ -96,7 +96,7 @@ T.section("onLocus: within the white band of the locus between two Kelvins")
 do
   local x, y = Color.kelvinToXY(3000)
   local BAND = Color.WHITE_BAND
-  T.eq("the band is ESPHome's released white-channel test", BAND, 0.012)
+  T.eq("the white band is 0.012 in xy", BAND, 0.012)
   T.eq("a point on the locus inside the range", Color.onLocus(x, y, 2000, 6500), true)
   -- Off the locus along its normal at 3000 K, so the nearest point on it stays near 3000 K.
   local ax, ay = Color.kelvinToXY(2990)
