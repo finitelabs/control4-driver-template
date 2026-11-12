@@ -262,7 +262,7 @@ Types.API = 1
 -- The library's own shapes
 -----------------------------------------------------------------------------------------------------
 
---- @alias LightIntentKind "on"|"off"|"toggle"|"level"|"color"|"stopLevel"|"stopColor"
+--- @alias LightIntentKind "on"|"off"|"toggle"|"level"|"color"|"stopLevel"|"stopColor"|"stop"
 --- @alias LightSource "proxy"|"button"|"scene"
 
 --- What a proxy command, a link press or a scene step asks of the light.
