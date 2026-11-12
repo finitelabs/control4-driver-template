@@ -1233,6 +1233,31 @@ do
   T.check("and its ramp still runs", m:now().levelRamping)
 end
 
+T.section("a color stop that ends a walk sends the level set at once while the color walked")
+do
+  local m = make(device({ fade = WALK }), { level = 0.2, color = RED })
+  run(m, color(BLUE, 1000))
+  take(m)
+  clock.run(50)
+  run(m, level(96, 0))
+  T.eq("the level waits for the walk's next step", #take(m), 0)
+  run(m, { kind = "stopColor", source = "proxy" })
+  local sent = take(m)
+  local c = sent[1]
+  T.check(
+    "one change goes to the level, with the color where it stopped",
+    #sent == 1
+      and c.kind == "change"
+      and c.on
+      and c.setsLevel
+      and c.setsColor
+      and near(c.level, Range.toDevice(96, 1, 100)),
+    sent
+  )
+  clock.run(500)
+  T.eq("and the walk is done", { #take(m), m.walking }, { 0, false })
+end
+
 T.section("while another hand's on waits for its level, commands take the light as lit")
 do
   local m = make(nil, { level = 0 })

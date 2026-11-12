@@ -437,4 +437,79 @@ case(function()
   w.restore()
 end)
 
+T.section("Dim-To-Warm: a color picked while on stays through every level command until the light goes off")
+for _, base in ipairs({ K.ZB, K.ES }) do
+  case(function()
+    local w = K.world(base, {}, 0)
+    K.onMode(w, K.WARM, K.DIM)
+    w.proxy:send("ON")
+    w.run(15000)
+    K.color(w, GREEN.x, GREEN.y)
+    w.run(15000)
+    local steps = {
+      {
+        "Set Level",
+        function()
+          w.proxy:send("SET_LEVEL", { LEVEL = 50 })
+        end,
+      },
+      {
+        "a rated dim",
+        function()
+          K.target(w, 10, 4000)
+        end,
+      },
+      {
+        "Ramp To Level",
+        function()
+          w.proxy:send("RAMP_TO_LEVEL", { LEVEL = 30, TIME = 2000 })
+        end,
+      },
+      {
+        "a held Toggle",
+        function()
+          K.button(w, 2, 1)
+          w.run(1000)
+          K.button(w, 2, 0)
+        end,
+      },
+      {
+        "a scene step that sets a level alone",
+        function()
+          K.scene(w, 7, { { level = 40, rate = 1000 } })
+          w.proxy:send("ACTIVATE_SCENE", { SCENE_ID = 7 })
+        end,
+      },
+      {
+        "On",
+        function()
+          w.proxy:send("ON")
+        end,
+      },
+    }
+    for _, s in ipairs(steps) do
+      w.m.sent = {}
+      w.proxy:mark()
+      s[2]()
+      w.run(15000)
+      T.eq(s[1] .. ": no color sent", #colored(w), 0)
+      T.eq(s[1] .. ": none told", w.proxy:count("LIGHT_COLOR_CHANGED") + w.proxy:count("LIGHT_COLOR_CHANGING"), 0)
+    end
+    w.restore()
+  end)
+end
+
+T.section("Dim-To-Warm: with nothing picked, a scene step that sets a level alone takes the mix")
+case(function()
+  local w = K.world(K.ES, {}, 0)
+  K.onMode(w, K.WARM, K.DIM)
+  w.proxy:send("ON")
+  w.run(15000)
+  w.m.sent = {}
+  K.scene(w, 7, { { level = 40, rate = 1000 } })
+  w.proxy:send("ACTIVATE_SCENE", { SCENE_ID = 7 })
+  w.run(15000)
+  T.eq("the step sends the mix", #colored(w), 1)
+  w.restore()
+end)
 T.finish()

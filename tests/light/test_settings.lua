@@ -206,6 +206,7 @@ do
   T.eq("removing it leaves no on mode", s:forOn().onModeLevel, nil)
   s:apply("UPDATE_BRIGHTNESS_ON_MODE", { BRIGHTNESS_PRESET_ID = "1", BRIGHTNESS_PRESET_LEVEL = "65" })
   T.eq("UPDATE_BRIGHTNESS_ON_MODE sets it at once", s:forOn().onModeLevel, 65)
+  T.eq("a Top click goes to it", s:clickLevel(), 65)
   s:apply("UPDATE_BRIGHTNESS_PRESET", { ID = "10", LEVEL = "33" })
   T.eq("Previous On's level is its preset 10's", s:previousOnLevel(), 33)
 end
@@ -225,6 +226,7 @@ do
   })
   local on = s:forOn()
   T.eq("no brightness on mode and no color on mode", { on.onModeLevel, on.colorOnMode }, { nil, "none" })
+  T.eq("so a Top click goes to the Default On level", s:clickLevel(), s:presetLevel())
   T.eq("and the profile's Default On", on.defaultOn, false)
 end
 

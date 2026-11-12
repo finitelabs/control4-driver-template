@@ -599,9 +599,49 @@ CASES["J6: the deadline"] = {
     want = { H(), H(nil, "level") },
   },
   {
-    name = "an off ends the window of the level before it: that level's deadline never comes",
+    name = "on a refresh device a report from before the command, held at the deadline, is read once first",
+    dev = { refresh = true },
+    steps = {
+      { send = { color = BLUE, fromColor = RED } },
+      { hear = { kind = "push", color = RED } },
+      { run = 1000 },
+      { hear = { kind = "push", color = BLUE } },
+    },
+    -- The command may have landed unheard: the read, not the stale report, says where the light is.
+    want = { H(), H({ ask = true }, "color"), H({ settle = { color = BLUE } }) },
+  },
+  {
+    name = "an off just after a turn-on: the turn-on's late echo is history, and nothing is told",
+    now = { on = false, level = 0.6 },
+    steps = {
+      { send = { level = 0.6 } },
+      -- 5 ms in, the light has barely left its bottom step: that is the level the off keeps.
+      { send = { on = false, level = 0.02 } },
+      { hear = { kind = "push", on = true, level = 0.6 } },
+      { hear = { kind = "push", on = false, level = 0.02 } },
+    },
+    want = { H(), H() },
+  },
+  {
+    name = "an off keeps the window of the level before it, whose deadline adopts and asks nothing",
+    dev = { refresh = true },
     steps = { { send = { level = 0.7 } }, { send = { on = false, level = 0.7 } }, { run = 2000 } },
-    want = { H(nil, "on") },
+    want = { H(nil, "level"), H({ ask = true }, "on"), H(nil, "on") },
+  },
+  {
+    name = "an off after the level's read was asked: its window waits out the off's fade and tells nothing",
+    dev = { shows = "position", refresh = true },
+    steps = {
+      { send = { level = 0.6 } },
+      { run = 1000 },
+      { send = { on = false, level = 0.6, fromLevel = 0.6 }, land = 3000, now = { levelRamping = true } },
+      { hear = { kind = "push", on = true, level = 0.3 } },
+      { run = 3500 },
+      { now = { levelRamping = false } },
+      { run = 1000 },
+    },
+    -- The position on its way to off is the fade's own, and the read's late answer is moot once the light is off.
+    want = { H({ ask = true }, "level"), H(), H({ ask = true }, "on"), H(nil, "level") },
   },
 }
 
@@ -708,7 +748,17 @@ CASES["One attribute at a time, and walks"] = {
     want = { H() },
   },
   {
-    name = "a walk from off: a poll that still shows off after the first step is dropped, never adopted at the deadline",
+    name = "a walk from off that has not lit the light: an off report's level is only the level kept",
+    dev = { walk = true, refresh = true, waitMs = 2000, levelSteps = 100 },
+    now = { on = false, level = 0.3 },
+    steps = {
+      { now = { levelRamping = true } },
+      { hear = { kind = "push", on = false, level = 0.9 } },
+    },
+    want = { H() },
+  },
+  {
+    name = "a walk from off: a poll that still shows off after the first step is never adopted, and read when the walk ends",
     dev = { walk = true, refresh = true, waitMs = 2000, levelSteps = 100 },
     now = { on = false, level = 0.6 },
     steps = {
@@ -716,8 +766,25 @@ CASES["One attribute at a time, and walks"] = {
       { send = { fromOff = true, level = 0.1 } },
       { hear = { kind = "push", on = false, level = 0.6 } },
       { run = 2500 },
+      { now = { levelRamping = false } },
+      { run = 2000 },
     },
-    want = { H(), H(nil, "on"), H({ ask = true }, "level") },
+    -- The level's deadline waits while the walk runs.
+    want = { H(), H(nil, "on"), H(nil, "level"), H({ ask = true }, "level") },
+  },
+  {
+    name = "a deadline before a walk's first step waits for it: what the window held is not told",
+    dev = { walk = true, shows = "position", waitMs = 1000, levelSteps = 100 },
+    steps = {
+      { send = { level = 0.8 } },
+      { hear = { kind = "push", level = 0.6 } },
+      { now = { levelRamping = true } },
+      { run = 1000 },
+      { send = { level = 0.7, fromLevel = 0.8 } },
+      { now = { levelRamping = false } },
+      { run = 1000 },
+    },
+    want = { H(), H(nil, "level"), H(nil, "level") },
   },
   {
     name = "after a walk to off is lit, another hand's off is still news",

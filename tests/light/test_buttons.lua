@@ -39,6 +39,9 @@ local function world(lo, hi)
   function settings:presetLevel()
     return PRESET
   end
+  function settings:clickLevel()
+    return w.clickLevel or PRESET
+  end
   local light = {}
   function light:_gateEnded()
     local intent = w.buttons:gateEnded(w.now)
@@ -157,6 +160,17 @@ do
   w.buttons:noted({ kind = "level", level = 100, rateMs = 4000, source = "scene", ramp = true }, w.now)
   w.act(TOP, PRESS)
   T.eq("a light that doesn't dim stops nothing at a release", w.act(TOP, HOLD), nil)
+  w.clock.restore()
+end
+
+T.section("a Top click goes to the brightness on mode's level when one is set")
+do
+  local w = world()
+  w.clickLevel = 40
+  w.now = at(0)
+  w.act(TOP, PRESS)
+  w.clock.run(110)
+  T.eq("Top from off, under an on mode at 40", w.act(TOP, CLICK).level, 40)
   w.clock.restore()
 end
 
