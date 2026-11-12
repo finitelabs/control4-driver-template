@@ -160,6 +160,8 @@ local function draw(r)
     refresh = r.chance(0.6),
   }
   o.latency = r.pick({ 0, 20, 40, 150 })
+  -- A device's wait outlasts its echo's round trip.
+  o.feedback.waitMs = math.max(o.feedback.waitMs, 2 * o.latency + 100)
   o.answers = r.chance(0.5)
   o.readbackMs = r.chance(0.3) and r.pick({ 300, 1500 }) or nil
   o.seeds = r.chance(0.15)
@@ -180,7 +182,8 @@ local function draw(r)
   return {
     o = o,
     kind = kind,
-    rest = o.dims and r.chance(0.1),
+    -- A rest is a device's own doing; a walk's steps are the driver's, so a walking light rests nowhere else.
+    rest = o.dims and r.chance(0.1) and o.fade.kind ~= "walk",
     inside = r.chance(0.1),
     drops = r.chance(0.15) and r.pick({ 0.05, 0.2 }) or 0,
     delays = r.chance(0.15),
@@ -259,6 +262,7 @@ end
 --- @field trace string[]
 --- @field actions FuzzAction[]
 --- @field notes FakeProxyNote[] Every notify since the world was made, across restarts.
+--- @field flashes boolean|nil A flash scene was pushed, which repeats until stopped.
 --- @field sent LightCommand[] Every command the adapter was given, each with `at`.
 --- @field reports MemoryReport[]
 --- @field reached table<integer, boolean> The device's C4 levels, as it passed them.
@@ -376,10 +380,28 @@ local function instrument(run)
   light._due = function(self, aspect)
     local now = w.clock.now()
     local ramp = aspect == "color" and self.motion.colorRamp or (aspect == "level" and self.motion.levelRamp or nil)
-    local open = self.ledger.windows[aspect] ~= nil
-    run.dues[#run.dues + 1] =
-      { at = now, aspect = aspect, late = open and ramp ~= nil and ramp.startMs + ramp.ms > now + 1 }
-    return due(self, aspect)
+    local window = self.ledger.windows[aspect]
+    local kind, asked = window and window.kind, window and window.asked
+    local settled = false
+    local prior = self._heard
+    self._heard = function(l, h)
+      settled = h.ask or next(h.settle) ~= nil or next(h.foreign) ~= nil
+      return prior(l, h)
+    end
+    due(self, aspect)
+    self._heard = prior
+    -- A deadline put off for a walk's next step, its window kept as it was, has not fallen.
+    local kept = not settled
+      and window ~= nil
+      and self.ledger.windows[aspect] == window
+      and window.kind == kind
+      and window.asked == asked
+      and window.deadline > now
+    run.dues[#run.dues + 1] = {
+      at = now,
+      aspect = aspect,
+      late = window ~= nil and not kept and ramp ~= nil and ramp.startMs + ramp.ms > now + 1,
+    }
   end
   local send = m._send
   m._send = function(self, cmd)
@@ -708,7 +730,9 @@ local function moves(run)
         }
       end
       act(run, "a scene " .. id .. " pushed and run", function()
-        K.scene(w, id, steps, r.chance(0.3))
+        local flash = r.chance(0.3)
+        run.flashes = run.flashes or flash
+        K.scene(w, id, steps, flash)
         w.proxy:send("ACTIVATE_SCENE", { SCENE_ID = id })
       end, LONGEST)
     end,
@@ -857,6 +881,62 @@ local function judgeLatest(run, asked)
   end
 end
 
+--- Every range in force during the ms `at`: the one it opened with and each one set within it.
+--- @param run FuzzRun
+--- @param at integer
+--- @return { lo: integer, hi: integer }[]
+local function rangesAt(run, at)
+  local lo, hi = rangeAt(run, at - 1)
+  local out = { { lo = lo, hi = hi } }
+  for _, rg in ipairs(run.ranges) do
+    if rg.at == at then
+      out[#out + 1] = { lo = rg.lo, hi = rg.hi }
+    end
+  end
+  return out
+end
+
+--- Whether a command spanned the told level `lvl`, or the device reached it, under the range lo to hi.
+--- @param run FuzzRun
+--- @param i integer The note's index.
+--- @param n FakeProxyNote
+--- @param lvl integer
+--- @param lo integer
+--- @param hi integer
+--- @return boolean
+local function toldSeen(run, i, n, lvl, lo, hi)
+  local slack = Range.slack(lo, hi, run.d.o.levelSteps) + 1
+  local seen = false
+  for l = math.max(1, lvl - slack), math.min(100, lvl + slack) do
+    seen = seen or run.reached[l] == true
+  end
+  -- A walk sends its first step a stepMs after the intent it was told for.
+  local walk = run.d.o.fade.kind == "walk" and (run.d.o.fade.stepMs or 100) or 0
+  for _, c in ipairs(run.sent) do
+    if c.at <= n.at + walk and not seen then
+      local a = Range.toLevel(c.level, lo, hi)
+      local b = Range.toLevel(c.from and c.from.level or c.level, lo, hi)
+      seen = lvl >= math.min(a, b) - slack and lvl <= math.max(a, b) + slack
+      -- A rest the adapter returned is where it said the device rests, told as the command goes out.
+      if not seen and c.rest and c.rest.level then
+        seen = math.abs(lvl - Range.toLevel(c.rest.level, lo, hi)) <= slack
+      end
+    end
+  end
+  for j = 1, i - 1 do
+    local p = run.notes[j]
+    seen = seen or (p.cmd == "LIGHT_BRIGHTNESS_CHANGED" and tonumber(p.params.LIGHT_BRIGHTNESS_CURRENT) == lvl)
+  end
+  for _, rep in ipairs(run.reports) do
+    local rl = rep.report.level
+    if not seen and rep.at <= n.at and rl and rep.report.on ~= false then
+      seen = math.abs(Range.toLevel(rl, lo, hi) - lvl) <= slack
+    end
+  end
+  local previous = run.w.light.settings:previousOnLevel()
+  return seen or (previous ~= nil and math.abs(previous - lvl) <= slack)
+end
+
 --- @param run FuzzRun
 local function judgeTold(run)
   for i, n in ipairs(run.notes) do
@@ -867,37 +947,10 @@ local function judgeTold(run)
     end
     if n.binding == M.PROXY and lvl and lvl > 0 then
       run.judged.told = true
-      local slack = slackAt(run, n.at)
-      local lo, hi = rangeAt(run, n.at)
       local seen = false
-      for l = math.max(1, lvl - slack), math.min(100, lvl + slack) do
-        seen = seen or run.reached[l] == true
+      for _, rg in ipairs(rangesAt(run, n.at)) do
+        seen = seen or toldSeen(run, i, n, lvl, rg.lo, rg.hi)
       end
-      -- A walk sends its first step a stepMs after the intent it was told for.
-      local walk = run.d.o.fade.kind == "walk" and (run.d.o.fade.stepMs or 100) or 0
-      for _, c in ipairs(run.sent) do
-        if c.at <= n.at + walk and not seen then
-          local a = Range.toLevel(c.level, lo, hi)
-          local b = Range.toLevel(c.from and c.from.level or c.level, lo, hi)
-          seen = lvl >= math.min(a, b) - slack and lvl <= math.max(a, b) + slack
-          -- A rest the adapter returned is where it said the device rests, told as the command goes out.
-          if not seen and c.rest and c.rest.level then
-            seen = math.abs(lvl - Range.toLevel(c.rest.level, lo, hi)) <= slack
-          end
-        end
-      end
-      for j = 1, i - 1 do
-        local p = run.notes[j]
-        seen = seen or (p.cmd == "LIGHT_BRIGHTNESS_CHANGED" and tonumber(p.params.LIGHT_BRIGHTNESS_CURRENT) == lvl)
-      end
-      for _, rep in ipairs(run.reports) do
-        local rl = rep.report.level
-        if not seen and rep.at <= n.at and rl and rep.report.on ~= false then
-          seen = math.abs(Range.toLevel(rl, lo, hi) - lvl) <= slack
-        end
-      end
-      local previous = run.w.light.settings:previousOnLevel()
-      seen = seen or (previous ~= nil and math.abs(previous - lvl) <= slack)
       if not seen then
         violate(run, "told", "%s %s at %d: no command spanned it and the device never reached it", n.cmd, lvl, n.at)
       end
@@ -917,6 +970,23 @@ local function heardBetween(run, from, to)
   end
   for _, a in ipairs(run.actions) do
     if a.at > from and a.at <= to then
+      return true
+    end
+  end
+  return false
+end
+
+--- Whether the library sent a level at `at` other than the C4 level `target`: a scene's next step, due as the
+--- step before it ran out.
+--- @param run FuzzRun
+--- @param at integer
+--- @param target integer
+--- @param slack integer
+--- @return boolean
+local function sentElsewhere(run, at, target, slack)
+  local lo, hi = rangeAt(run, at)
+  for _, c in ipairs(run.sent) do
+    if c.at == at and c.setsLevel and math.abs((c.on and Range.toLevel(c.level, lo, hi) or 0) - target) > slack then
       return true
     end
   end
@@ -955,7 +1025,7 @@ local function judgeRamps(run)
         -- A LightRest rests the light where the adapter says, not at the ramp's target.
         if rate > 0 and n.at >= prev.at + rate - 2 and not run.d.rest and not heardBetween(run, prev.at, n.at) then
           run.judged.ramps = true
-          if math.abs(level - target) > slack then
+          if math.abs(level - target) > slack and not sentElsewhere(run, n.at, target, slack) then
             violate(run, "ramps", "a ramp to %s from %d ran out and ended at %s", target, prev.at, level)
           end
         end
@@ -1119,8 +1189,10 @@ local function judgeSends(run)
         n = n + 1
       end
     end
-    -- A run's changes last at most LONGEST: scene steps chain, so allow each of up to four.
-    local bound = math.floor(math.min(to - from, 4 * LONGEST) / stepMs) + 2 + 2 * 4
+    -- A run's changes last at most LONGEST: scene steps chain, so allow each of up to four. A flash repeats
+    -- until something stops it.
+    local span = run.flashes and to - from or math.min(to - from, 4 * LONGEST)
+    local bound = math.floor(span / stepMs) + 2 + 2 * 4
     run.judged.sends = true
     if n > bound then
       violate(run, "sends", "%d commands between %d and %d on a %d ms walk", n, from, to, stepMs)
@@ -1165,10 +1237,20 @@ end
 local function judgeQuiet(run, a, to)
   run.judged.quiet = true
   local levels, colors = 0, 0
+  -- A re-tell of the value the proxy already shows changes nothing it shows.
+  local level, color
   for _, n in ipairs(run.notes) do
-    if n.binding == M.PROXY and n.at >= a.at and n.at < to then
-      levels = levels + (n.cmd == "LIGHT_BRIGHTNESS_CHANGED" and 1 or 0)
-      colors = colors + (n.cmd == "LIGHT_COLOR_CHANGED" and 1 or 0)
+    if n.binding == M.PROXY and n.at < to then
+      local q = n.params
+      if n.cmd == "LIGHT_BRIGHTNESS_CHANGED" then
+        local was = level
+        level = tostring(q.LIGHT_BRIGHTNESS_CURRENT)
+        levels = levels + ((n.at >= a.at and level ~= was) and 1 or 0)
+      elseif n.cmd == "LIGHT_COLOR_CHANGED" then
+        local was = color
+        color = tostring(q.LIGHT_COLOR_CURRENT_X) .. "," .. tostring(q.LIGHT_COLOR_CURRENT_Y)
+        colors = colors + ((n.at >= a.at and color ~= was) and 1 or 0)
+      end
     end
   end
   if levels > 1 or colors > 1 then

@@ -760,6 +760,16 @@ function M.world(opts)
   --- at the restart, so a check sees what the restart told.
   function w.restart()
     w.m.online = false
+    -- A restart drops every timer the old driver set.
+    local names = {}
+    for name in pairs(Timer or {}) do
+      if type(name) == "string" then
+        names[#names + 1] = name
+      end
+    end
+    for _, name in ipairs(names) do
+      CancelTimer(name)
+    end
     build(w.device, true)
     return w
   end
