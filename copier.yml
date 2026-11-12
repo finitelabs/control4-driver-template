@@ -48,7 +48,6 @@ _exclude:
   - "{% if 'light' not in vendor_modules.split() %}test/light_harness.lua{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}test/light_setup{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}test/test_light_proxy.lua{% endif %}"
-  - "{% if 'light' not in vendor_modules.split() %}test/test_light_fuzz.lua{% endif %}"
   - "{% if not cloud_diagnostics %}src/lib/diagnostics.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_reporting.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_scrub.lua{% endif %}"
@@ -96,7 +95,7 @@ icon_style:
 
 vendor_modules:
   type: str
-  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui light). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: the house style.css and page.js for a page to embed, the variable browser (variables.js and .css, lib.ui.devices), with expressions the expression editor (expressions.js and .css, lib.ui.expression-tab), the widgets (collapse, menu, combobox, color and pickgrid, each a .js and .css pair), and the driver side (lib.ui.page, lib.ui.page-params, lib.ui.tab-properties). light ships the Light V2 library (src/lib/light.lua and src/lib/light/), its test kit (test/light_harness.lua, test/light_setup/) and its suites (test/test_light_proxy.lua, test/test_light_fuzz.lua); a Light V2 driver is then an adapter over it."
+  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui light). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: the house style.css and page.js for a page to embed, the variable browser (variables.js and .css, lib.ui.devices), with expressions the expression editor (expressions.js and .css, lib.ui.expression-tab), the widgets (collapse, menu, combobox, color and pickgrid, each a .js and .css pair), and the driver side (lib.ui.page, lib.ui.page-params, lib.ui.tab-properties). light ships the Light V2 library (src/lib/light.lua and src/lib/light/), its test kit (test/light_harness.lua, test/light_setup/) and its suite (test/test_light_proxy.lua); a Light V2 driver is then an adapter over it."
   default: ""
 
 cloud_diagnostics:

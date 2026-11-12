@@ -483,10 +483,9 @@ proxy, a reference device, and a contract run that the driver's own
 transport. Each check of the run is a case of its own: one that raises fails by
 name, and the run goes on.
 
-The library, the kit and their suites are the template's: a change made to them
+The library, its kit and its suite are the template's: a change made to them
 here is merge surface on every `copier update`, so it goes to the template,
-which runs `test/test_light_fuzz.lua` big before it. `make test` runs a few
-seconds of its seeded runs, from one fixed seed.
+which runs its fuzzer big before it.
 {%- endif %}
 
 ### Tools tests

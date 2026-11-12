@@ -19,10 +19,6 @@ override RENDER := $(abspath $(RENDER))
 # A leg's steps run in order.
 .NOTPARALLEL:
 
-# The long run of the Light V2 fuzzer, where a render's own make test runs its first 300 runs.
-LIGHT_FUZZ_RUNS ?= 20000
-LIGHT_FUZZ_SEED ?= 1
-
 # ─── Help ─────────────────────────────────────────────────────────────────────
 
 .PHONY: help
@@ -70,10 +66,8 @@ render-ui-js: ## Check the render's lib/ui scripts under Node, each one the rend
 		done; \
 	else echo "This render has no lib/ui."; fi
 
-render-light-fuzz: ## Run the render's Light V2 fuzzer long: LIGHT_FUZZ_RUNS seeded runs from LIGHT_FUZZ_SEED
-	@if [ -f "$(RENDER)/test/test_light_fuzz.lua" ]; then \
-		LIGHT_FUZZ_RUNS=$(LIGHT_FUZZ_RUNS) LIGHT_FUZZ_SEED=$(LIGHT_FUZZ_SEED) "$(RENDER)/test/run_test.sh" test_light_fuzz.lua; \
-	else echo "This render has no lib.light."; fi
+render-light-fuzz: ## Run the Light V2 fuzzer against the render's lib.light, if it has one
+	"$(RENDER)/test/run_test.sh" "$(CURDIR)/tests/light_fuzz.lua"
 
 RENDER_LEG := render render-snapshot render-lib-loads render-crypto render-ui-js in-render-test render-light-fuzz
 render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME

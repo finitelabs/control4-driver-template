@@ -2,16 +2,23 @@
 -- the device, over MemoryLight in every declaration the header allows, with its transport drawn per
 -- run. Each run is judged by invariants, each taken from a sentence of src/lib/light.lua's header.
 --
--- Run from the driver root:
---   make test
--- or big, a job per seed, as the template runs it before a change to the library:
---   LIGHT_FUZZ_RUNS=25000 LIGHT_FUZZ_SEED=1 ./test/run_test.sh test_light_fuzz.lua
+-- The template's own test: it drives only the kit's MemoryLight, so it renders into no driver repo.
+-- Run against a render with the light token, from the template repo:
+--   make render-light-fuzz NAME=light
+-- 20,000 runs from seed 1; before a change to the library, other seeds too, a job each:
+--   LIGHT_FUZZ_SEED=<n> make render-light-fuzz NAME=light
 -- A failure names its seed and run; LIGHT_FUZZ_SEED=<seed> LIGHT_FUZZ_RUN=<run> replays that run alone
--- and prints its steps. LIGHT_FUZZ_SHOW sets how many failures of each invariant are listed.
+-- and prints its steps. LIGHT_FUZZ_RUNS sets the count, LIGHT_FUZZ_SHOW how many failures of each
+-- invariant are listed.
 
 local T = require("testlib")
 
 require("c4_shim")
+
+if not pcall(require, "lib.light") then
+  print("This render has no lib.light.")
+  return
+end
 
 local H = require("light_harness")
 local Light = require("lib.light")
@@ -19,7 +26,7 @@ local Range = require("lib.light.range")
 local persist = require("lib.persist")
 local log = require("lib.logging")
 
-local RUNS = tonumber(os.getenv("LIGHT_FUZZ_RUNS")) or 300
+local RUNS = tonumber(os.getenv("LIGHT_FUZZ_RUNS")) or 20000
 local SEED = tonumber(os.getenv("LIGHT_FUZZ_SEED")) or 1
 local ONLY = tonumber(os.getenv("LIGHT_FUZZ_RUN"))
 local SHOW = tonumber(os.getenv("LIGHT_FUZZ_SHOW")) or 5
