@@ -173,20 +173,51 @@ case(function()
   w.restore()
 end)
 
-T.section("a report made between a white and an off, landing after the off, is the white's echo and from before")
+T.section("a report made between any command and an off, landing after the off, is from before the off")
+for _, c in ipairs({
+  { name = "a level", level = 60 },
+  { name = "a level fade", level = 60, rate = 2000 },
+  { name = "a color", color = K.GREEN },
+  { name = "a color fade", color = K.GREEN, rate = 2000 },
+  { name = "a white sent as a white", color = K.WARM, mode = K.CCT },
+  { name = "a white sent as a color", color = K.WARM },
+}) do
+  case(function()
+    local base = K.copy(K.ES)
+    base.cct = nil
+    local w = K.world(base, { kelvinWhites = true }, 15)
+    K.color(w, K.RED.x, K.RED.y)
+    w.run(3000)
+    w.proxy:mark()
+    if c.level then
+      K.target(w, c.level, c.rate)
+    else
+      K.color(w, c.color.x, c.color.y, c.rate, c.mode)
+    end
+    w.run(15)
+    K.target(w, 0, 0)
+    w.run(3000)
+    local told, off = w.proxy:changed(), nil
+    for i, level in ipairs(told) do
+      off = off or (level == 0 and i or nil)
+    end
+    T.check(c.name .. ": the proxy is told off once, and nothing after", off ~= nil and off == #told, told)
+    T.eq(c.name .. ": and the light is off", K.device(w).on, false)
+    w.restore()
+  end)
+end
+
+T.section("a white sent in xy that the light reports as a Kelvin is told as a Kelvin, as the light's own")
 case(function()
-  local base = K.copy(K.ES)
-  base.cct = nil
-  local w = K.world(base, { kelvinWhites = true }, 15)
+  local w = K.world(K.ES, { kelvinWhites = true }, 50)
   K.color(w, K.RED.x, K.RED.y)
   w.run(3000)
   w.proxy:mark()
-  K.color(w, K.WARM.x, K.WARM.y, 0, K.CCT)
-  w.run(15)
-  K.target(w, 0, 0)
+  K.color(w, K.WARM.x, K.WARM.y)
   w.run(3000)
-  T.eq("the proxy is told off once and never on", w.proxy:changed(), { 0 })
-  T.eq("and the light is off", K.device(w).on, false)
+  local c = w.proxy.color or {}
+  T.check("the proxy shows the white as a Kelvin", c.mode == K.CCT and math.abs(c.x - K.WARM.x) < 0.003, c)
+  T.eq("and no level is told", w.proxy:changed(), {})
   w.restore()
 end)
 
