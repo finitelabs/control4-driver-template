@@ -1,7 +1,7 @@
 local T = require("testlib")
 local Types = require("lib.light.types")
 
-local CONTRACT = { api = 1, hash = 1660679960 }
+local CONTRACT = { api = 1, hash = 1527959268 }
 
 --- @return string
 local function source()
