@@ -1394,6 +1394,23 @@ do
   clock.run(2000)
 end
 
+T.section("a color for a running color ramp's target sends nothing, unless it lands sooner")
+do
+  local m = make(nil, { level = 0.5, color = RED })
+  run(m, color(BLUE, 4000))
+  take(m)
+  local lands = m:landing("color")
+  clock.run(1000)
+  run(m, color(BLUE, 4000))
+  T.eq("no command: the ramp is on its way there already", #take(m), 0)
+  T.eq("and it lands when it would have", m:landing("color"), lands)
+  run(m, color(BLUE, 1000))
+  local c = take(m)[1]
+  T.eq("landing sooner, it goes over its own time", c and { c.setsColor, c.transitionMs }, { true, 1000 })
+  T.eq("and the ramp lands then", m:landing("color"), clock.now() + 1000)
+  clock.run(1000)
+end
+
 T.section("with no color known a color ramps from D65, alone and with a level")
 do
   local d65 = Color.forDevice(Color.D65, device())
