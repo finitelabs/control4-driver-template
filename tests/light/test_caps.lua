@@ -41,6 +41,7 @@ do
   T.eq("defaults", p, {
     api = 1,
     proxy = 5001,
+    maxMs = 65535,
     dims = false,
     color = false,
     known = false,
@@ -461,6 +462,25 @@ do
     rest.color_rate_max,
     rest.dimmer,
   }, { true, true, true, nil, nil })
+end
+
+T.section("profile.maxMs: the longest rate the static capabilities offer")
+do
+  local p = assert(Caps.profile({ api = 1, dims = true, fades = true }))
+  T.eq("defaults to 65535", p.maxMs, 65535)
+  local long = assert(Caps.profile({ api = 1, dims = true, fades = true, maxMs = 86400000 }))
+  T.eq("a longer one is kept", long.maxMs, 86400000)
+  local rows = {}
+  for _, row in ipairs(Caps.static(long)) do
+    rows[row.key] = row.value
+  end
+  T.eq(
+    "and written as both rate maximums",
+    { rows.brightness_rate_max, rows.color_rate_max },
+    { "86400000", "86400000" }
+  )
+  local bad, errors = Caps.profile({ api = 1, maxMs = 0 })
+  T.check("one at 0 is refused, by name", bad == nil and tostring(errors[1]):find("profile.maxMs") ~= nil, errors)
 end
 
 T.finish()

@@ -62,7 +62,7 @@ local PROFILE_BOOLEANS = {
   extras = true,
 }
 
-local PROFILE_FIELDS = { api = true, proxy = true, links = true, cct = true }
+local PROFILE_FIELDS = { api = true, proxy = true, links = true, cct = true, maxMs = true }
 
 local DEVICE_FIELDS = {
   dims = true,
@@ -141,7 +141,7 @@ function Caps.profile(p)
   end
   local errors = {}
   --- @type LightProfile
-  local out = { api = p.api, proxy = Caps.PROXY }
+  local out = { api = p.api, proxy = Caps.PROXY, maxMs = Caps.RATE_MAX }
   for _, k in ipairs(sortedKeys(p)) do
     local v = p[k]
     if PROFILE_BOOLEANS[k] then
@@ -160,6 +160,13 @@ function Caps.profile(p)
       out.proxy = p.proxy
     else
       errors[#errors + 1] = "profile.proxy must be a binding id"
+    end
+  end
+  if p.maxMs ~= nil then
+    if whole(p.maxMs) and p.maxMs > 0 then
+      out.maxMs = p.maxMs
+    else
+      errors[#errors + 1] = "profile.maxMs must be a whole number of ms above 0"
     end
   end
   if p.links ~= nil and p.links ~= false then
@@ -530,7 +537,7 @@ function Caps.static(profile)
     row("has_fixed_ramp_rate", "False"),
     row("fixed_ramp_rate", "0"),
     row("brightness_rate_min", "0"),
-    row("brightness_rate_max", tostring(Caps.RATE_MAX)),
+    row("brightness_rate_max", tostring(profile.maxMs)),
     -- The proxy reads no rate default from either list, so this and color_rate_default are inert.
     row("brightness_rate_default", "0"),
     row("click_rate_min", "0"),
@@ -545,7 +552,7 @@ function Caps.static(profile)
     row("supports_color_stop", bool((dims or color or cct) and fades)),
     row("color_rate_behavior", fades and "1" or "0"),
     row("color_rate_min", "0"),
-    row("color_rate_max", tostring(Caps.RATE_MAX)),
+    row("color_rate_max", tostring(profile.maxMs)),
     row("color_rate_default", "0"),
     row("has_button_events", bool(links)),
     row("has_leds", bool(links)),
