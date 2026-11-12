@@ -921,6 +921,13 @@ do
   T.eq("an off ends what was asked: another hand's on is told full", s[1] and s[1].params.LIGHT_BRIGHTNESS_CURRENT, 100)
   p:sync(rest(true, lit, RED))
   T.eq("lit, with nothing asked, the level told stands", #named(take(), "LIGHT_BRIGHTNESS_CHANGED"), 0)
+  p:taken({ kind = "level", level = 37, source = "proxy" })
+  p:sync(rest(true, lit, RED))
+  s = named(take(), "LIGHT_BRIGHTNESS_CHANGED")
+  T.eq("a level 37 asked is told", s[1] and s[1].params.LIGHT_BRIGHTNESS_CURRENT, 37)
+  p:taken({ kind = "on", source = "proxy" })
+  p:sync(rest(true, lit, RED))
+  T.eq("then an On while lit: 37 stands, not full", #named(take(), "LIGHT_BRIGHTNESS_CHANGED"), 0)
 end
 
 T.section(

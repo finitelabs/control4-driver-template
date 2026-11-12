@@ -126,6 +126,25 @@ for _, base in ipairs({ K.ES, K.ZB, K.HOLD, K.WALK }) do
   end)
 end
 
+T.section("another hand's color ends a level fade the library walks, though its report names only the color")
+case(function()
+  local w = K.world(K.WALK, { split = true }, 50)
+  K.color(w, K.RED.x, K.RED.y)
+  w.run(10000)
+  K.target(w, 100, 4000)
+  w.run(1000)
+  w.m:other({ color = { x = K.GREEN.x, y = K.GREEN.y, mode = "xy" } })
+  w.run(50)
+  w.m.sent = {}
+  w.run(5000)
+  T.eq("no step goes out once the color is heard", #w.m.sent, 0)
+  T.check("the level stops short of the walk's target", K.devicePercent(w) < 100, K.devicePercent(w))
+  T.check("the color stays the other hand's", K.near(K.device(w).color.x, K.GREEN.x), K.device(w).color)
+  local told = w.proxy:changed()
+  T.eq("the proxy shows the level where the light is", told[#told], K.devicePercent(w))
+  w.restore()
+end)
+
 T.section("another hand's off is adopted, and the LEDs follow")
 case(function()
   local w = K.world(K.ES, {}, 50)
