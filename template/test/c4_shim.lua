@@ -1864,8 +1864,12 @@ local timers = {}
 local timer_id = 0
 
 function C4:SetTimer(delay_ms, callback, repeating)
-  -- Director refuses a delay of 0 or less with this message, and global/timer.lua prints it and makes no timer.
-  if type(delay_ms) ~= "number" or delay_ms <= 0 then
+  -- As Director answers (measured on a controller): no number, or a delay under 1 ms, is refused, and
+  -- global/timer.lua prints the refusal and makes no timer.
+  delay_ms = tonumber(delay_ms)
+  if delay_ms == nil then
+    error("milliseconds should be a number", 0)
+  elseif delay_ms < 1 then
     error("Invalid argument value", 0)
   end
   timer_id = timer_id + 1
