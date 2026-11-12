@@ -1,5 +1,5 @@
 -- The light library's behavior over MemoryLight behind the fake proxy: how reports are weighed against
--- the commands sent (v3 rules J1-J6), what a LightRest tells, and when the device is asked. The
+-- the commands sent, what a LightRest tells, and when the device is asked. The
 -- template's own test: no driver repo gets it.
 
 local HERE = debug.getinfo(1, "S").source:match("@(.*[/\\])") or "./"
@@ -43,7 +43,7 @@ end
 -- Echoes and positions
 --------------------------------------------------------------------------------
 
-T.section("J5c, target: an echo during a ramp ends nothing; the ramp is told CHANGED at its own end")
+T.section("target feedback: an echo during a ramp ends nothing; the ramp is told CHANGED at its own end")
 case(function()
   local w = K.world(K.ES, {}, 20)
   K.target(w, 80, 3000)
@@ -54,7 +54,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J5c, position: a device that lands before the ramp's time ends the ramp, told at its report")
+T.section("position feedback: a device that lands before the ramp's time ends the ramp, told at its report")
 case(function()
   local w = K.world(K.ZB, { slow = 0.5 }, 20)
   K.target(w, 80, 4000)
@@ -65,7 +65,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J5e, position: a push on the way tells nothing while the ramp runs")
+T.section("position feedback: a push on the way tells nothing while the ramp runs")
 case(function()
   local w = K.world(K.ZB, {}, 20)
   K.target(w, 80, 4000)
@@ -81,7 +81,7 @@ end)
 -- Read answers
 --------------------------------------------------------------------------------
 
-T.section("J5a: a final answer ends a running ramp at its value, whatever it shows")
+T.section("a final answer ends a running ramp at its value, whatever it shows")
 case(function()
   local w = quiet(K.ZB, 20)
   K.target(w, 80, 4000)
@@ -93,7 +93,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J5b, J6: a moving answer is held, and the deadline reads the device before adopting it")
+T.section("a moving answer is held, and the deadline reads the device before adopting it")
 case(function()
   local w = quiet(K.ZB, 20)
   K.target(w, 80, 2000)
@@ -113,7 +113,7 @@ end)
 -- Another hand, and history
 --------------------------------------------------------------------------------
 
-T.section("J4: another hand's change with no window open is adopted and told at once")
+T.section("another hand's change with no window open is adopted and told at once")
 for _, base in ipairs({ K.ES, K.ZB, K.HOLD, K.WALK }) do
   case(function()
     local w = K.world(base, {}, 50)
@@ -126,7 +126,7 @@ for _, base in ipairs({ K.ES, K.ZB, K.HOLD, K.WALK }) do
   end)
 end
 
-T.section("J4: another hand's off is adopted, and the LEDs follow")
+T.section("another hand's off is adopted, and the LEDs follow")
 case(function()
   local w = K.world(K.ES, {}, 50)
   w.run(10000)
@@ -138,7 +138,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J5e, target: a push matching nothing in a window is another hand's: adopted, the ramp ends")
+T.section("target feedback: a push matching nothing in a window is another hand's: adopted, the ramp ends")
 case(function()
   local w = quiet(K.ES, 20)
   K.target(w, 80, 3000)
@@ -150,7 +150,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J5d: a push of an older command is history: held, and the newest's echo clears it")
+T.section("a push of an older command is history: held, and the newest's echo clears it")
 case(function()
   local w = quiet(K.ES, 20)
   w.proxy:send("SET_LEVEL", { LEVEL = 50 })
@@ -164,7 +164,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J6: history held to the deadline, with no echo of the newest, is adopted then")
+T.section("history held to the deadline, with no echo of the newest, is adopted then")
 case(function()
   local w = quiet(K.ES, 20)
   w.proxy:send("SET_LEVEL", { LEVEL = 50 })
@@ -179,7 +179,7 @@ end)
 -- Silence and asks
 --------------------------------------------------------------------------------
 
-T.section("J6: a command nothing contradicts is never reverted")
+T.section("a command nothing contradicts is never reverted")
 for _, base in ipairs({ K.ES, K.HOLD }) do
   case(function()
     local w = quiet(base, 20)
@@ -192,7 +192,7 @@ for _, base in ipairs({ K.ES, K.HOLD }) do
   end)
 end
 
-T.section("J6: silence on a refresh device asks one read at the deadline and waits once more")
+T.section("silence on a refresh device asks one read at the deadline and waits once more")
 case(function()
   local w = quiet(K.OWN, 20)
   w.m.dropReads = true
@@ -208,7 +208,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J6: silence on a device whose refresh is costly asks nothing")
+T.section("silence on a device whose refresh is costly asks nothing")
 case(function()
   local w = quiet(K.ES, 20)
   local reads = w.m.reads
@@ -219,7 +219,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J5g: a write the device dropped is put right by the answer to the deadline's read")
+T.section("a write the device dropped is put right by the answer to the deadline's read")
 case(function()
   local w = quiet(K.OWN, 20)
   w.m.dropNext = true
@@ -229,7 +229,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J4: another hand's turn-on with no level asks one read, and the on is told with the level it brings")
+T.section("another hand's turn-on with no level asks one read, and the on is told with the level it brings")
 case(function()
   local w = quiet(K.ZB, 0)
   local reads = w.m.reads
@@ -241,7 +241,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J5d: on a refresh device, an off held against a command that lights the light asks one read")
+T.section("on a refresh device, an off held against a command that lights the light asks one read")
 case(function()
   local w = quiet(K.ZB, 0)
   local reads = w.m.reads
@@ -257,7 +257,7 @@ end)
 -- Seeds, matching and partial reports
 --------------------------------------------------------------------------------
 
-T.section("J3: a seed after the aspect's first report is dropped")
+T.section("a seed after the aspect's first report is dropped")
 case(function()
   local w = quiet(K.ZB, 50)
   w.run(10000)
@@ -268,7 +268,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J2: a seed as the first report fills the aspects not yet heard")
+T.section("a seed as the first report fills the aspects not yet heard")
 case(function()
   local w = K.world(K.ZB, { offline = true })
   w.m.online = true

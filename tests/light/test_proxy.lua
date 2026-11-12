@@ -172,7 +172,7 @@ do
   T.eq("and the color", seed.color, nil)
   p:sync(rest(true, Range.toDevice(40, 1, 100), RED))
   T.eq(
-    "so the first sync tells the light's values, which ends the proxy's ramp (ESPHome L-READ)",
+    "so the first sync tells the light's values, which ends the proxy's ramp",
     names(),
     { "LIGHT_COLOR_CHANGED", "LIGHT_BRIGHTNESS_CHANGED" }
   )

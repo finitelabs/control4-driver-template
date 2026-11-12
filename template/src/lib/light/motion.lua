@@ -7,6 +7,7 @@
 --- ramp's ends are the brightness the light shows, 0 for off.
 
 local log = require("lib.logging")
+local Caps = require("lib.light.caps")
 local Color = require("lib.light.color")
 local Fade = require("lib.light.fade")
 local Range = require("lib.light.range")
@@ -19,7 +20,7 @@ local TIMER_WALK = "Light.Walk"
 
 -- The fade before the first declare, for an estimate only: no command goes out before it.
 --- @type LightFade
-local DEFAULT_FADE = { kind = "device", curve = "linear", preOn = false, retimes = false, maxMs = 65535 }
+local DEFAULT_FADE = { kind = "device", curve = "linear", preOn = false, retimes = false, maxMs = Caps.RATE_MAX }
 
 --- Where the light is and where it is heading.
 --- @class LightMotion
@@ -921,7 +922,7 @@ function Motion:_walk(from, kept)
     self.walkKept = kept
   end
   self.walking = true
-  SetTimer(TIMER_WALK, self:_fade().stepMs or 100, function()
+  SetTimer(TIMER_WALK, self:_fade().stepMs, function()
     self.light:_walkStep()
   end)
 end

@@ -11,7 +11,7 @@ K.copy = M.copy
 -- The proxy's color modes.
 K.FULL, K.CCT = 0, 1
 
--- A Zigbee bulb through its device driver: it fades itself, keeps its level while off, reports where it
+-- A bulb behind a device driver: it fades itself, keeps its level while off, reports where it
 -- has got to, and the transport reads it back after each change, answering moving or final.
 K.ZB = {
   dims = true,
@@ -24,7 +24,7 @@ K.ZB = {
   readbackMs = 1500,
 }
 
--- An ESPHome light: it fades on a smootherstep, keeps its level while off, and reports its targets.
+-- A light that fades on a smootherstep, keeps its level while off, and reports its targets.
 K.ES = {
   dims = true,
   color = true,

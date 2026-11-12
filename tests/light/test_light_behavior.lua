@@ -57,7 +57,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J2: a fresh proxy, which shows nothing yet, is told the device's first state, off included")
+T.section("a fresh proxy, which shows nothing yet, is told the device's first state, off included")
 for _, on in ipairs({ true, false }) do
   case(function()
     local w = K.world(K.ES, { offline = true, on = on, level = 0.4 })
@@ -116,10 +116,10 @@ case(function()
 end)
 
 --------------------------------------------------------------------------------
--- A restart: the first report against what the proxy shows (J2)
+-- A restart: the first report against what the proxy shows
 --------------------------------------------------------------------------------
 
-T.section("J2: a restart where the device is as the proxy shows it tells the level and the color once each")
+T.section("a restart where the device is as the proxy shows it tells the level and the color once each")
 for _, base in ipairs({ K.ES, K.ZB, K.HOLD }) do
   case(function()
     local w = K.world(base, {}, 60)
@@ -136,7 +136,7 @@ for _, base in ipairs({ K.ES, K.ZB, K.HOLD }) do
   end)
 end
 
-T.section("J2: a device that moved while the driver was down is told at its first report")
+T.section("a device that moved while the driver was down is told at its first report")
 case(function()
   local w = K.world(K.ES, {}, 60)
   w.device:set({ on = true, level = 0.3 })
@@ -146,7 +146,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J2: a proxy still ramping at the restart (1110 not 1001) takes the device's word")
+T.section("a proxy still ramping at the restart (1110 not 1001) takes the device's word")
 case(function()
   local w = K.world(K.ES, {}, 40)
   w.proxy.vars["1110"] = { value = "80" }
@@ -226,7 +226,7 @@ case(function()
   w.restore()
 end)
 
-T.section("declare: a changed fade ends the running ramps at their targets (tp:4647-4653)")
+T.section("declare: a changed fade ends the running ramps at their targets")
 case(function()
   local w = K.world(K.ES, {}, 20)
   K.target(w, 80, 4000)
@@ -374,7 +374,7 @@ case(function()
   w.restore()
 end)
 
-T.section("own 0: every change is told CHANGED alone, as the command goes out (section 6: hatch)")
+T.section("own 0: every change is told CHANGED alone, as the command goes out")
 case(function()
   local w = K.world(K.HOLD, {}, 0)
   K.target(w, 60, 3000)
@@ -411,7 +411,7 @@ case(function()
   w.restore()
 end)
 
-T.section("the walk: a stop sends one last 0-time step at the estimate (section 6: tplink Fades=Driver)")
+T.section("the walk: a stop sends one last 0-time step at the estimate")
 case(function()
   local w = K.world(K.WALK, {}, 20)
   K.target(w, 80, 2000)

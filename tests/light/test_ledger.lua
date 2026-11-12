@@ -1,4 +1,4 @@
--- The Ledger's rules J1 to J6 (design v3, section 3), case by case: what each report and deadline
+-- The Ledger's rules, case by case: what each report and deadline
 -- tells Light to adopt, which aspects another hand moved, and when it asks the device.
 --
 -- Run against a render with the light token:
@@ -99,7 +99,7 @@ end
 --- @field dev LedgerCaseDevice|nil
 --- @field now LightNow|nil Motion's values at the start; by default on at 0.5 in red.
 --- @field unknown LightAspect[]|nil Aspects Motion does not know at the start.
---- @field fresh boolean|nil Start before the first report, so J2 applies.
+--- @field fresh boolean|nil Start before the first report, so the first-report rule applies.
 --- @field steps LedgerStep[]
 --- @field want LedgerOut[]
 
@@ -153,7 +153,7 @@ end
 --- @type table<string, LedgerCase[]>
 local CASES = {}
 
-CASES["J1: a held color"] = {
+CASES["a held color"] = {
   {
     name = "while a color is held, an off report carries no color news, its first included",
     dev = { colorWhileOff = "hold" },
@@ -185,7 +185,7 @@ CASES["J1: a held color"] = {
     dev = { colorWhileOff = "hold" },
     now = { on = false, colorHeld = true },
     steps = { { hear = { kind = "push", on = true, color = BLUE } } },
-    -- The held color kept the start's report from being the color's first: this one is, so J2 adopts it.
+    -- The held color kept the start's report from being the color's first: this one is, so the first-report rule adopts it.
     want = { H({ settle = { on = true, color = BLUE }, foreign = { "on" }, first = { "color" } }) },
   },
   {
@@ -197,7 +197,7 @@ CASES["J1: a held color"] = {
   },
 }
 
-CASES["J2: the first report"] = {
+CASES["the first report"] = {
   {
     name = "a match with what the library holds tells nothing",
     fresh = true,
@@ -251,7 +251,7 @@ CASES["J2: the first report"] = {
   },
 }
 
-CASES["J3: seeds"] = {
+CASES["seeds"] = {
   {
     name = "a seed after the first fills nothing",
     steps = { { hear = { kind = "seed", level = 0.3, color = BLUE } } },
@@ -264,7 +264,7 @@ CASES["J3: seeds"] = {
   },
 }
 
-CASES["J4: no window"] = {
+CASES["no command out"] = {
   {
     name = "a report of what the library holds is nothing",
     steps = { { hear = { kind = "push", level = 0.5 } } },
@@ -348,7 +348,7 @@ CASES["J4: no window"] = {
   },
 }
 
-CASES["J5a, J5b: answers to a read"] = {
+CASES["answers to a read"] = {
   {
     name = "a final settles whatever it shows, and the window closes",
     steps = { { send = { level = 0.8 }, land = 500 }, { hear = { kind = "final", level = 0.6 } }, { run = 3000 } },
@@ -382,7 +382,7 @@ CASES["J5a, J5b: answers to a read"] = {
   },
 }
 
-CASES["J5c: the newest command's echo"] = {
+CASES["the newest command's echo"] = {
   {
     name = "under target with no ramp running, it closes the window",
     steps = { { send = { level = 0.8 } }, { hear = { kind = "push", level = 0.8 } }, { run = 2000 } },
@@ -425,7 +425,7 @@ CASES["J5c: the newest command's echo"] = {
   },
 }
 
-CASES["J5d: history"] = {
+CASES["history"] = {
   {
     name = "an older command's value is held, and the newest's echo clears it",
     steps = {
@@ -509,7 +509,7 @@ CASES["J5d: history"] = {
   },
 }
 
-CASES["J5e: a value no command sent"] = {
+CASES["a value no command sent"] = {
   {
     name = "under target, it is another hand's and closes the window",
     steps = { { send = { level = 0.8 } }, { hear = { kind = "push", level = 0.2 } }, { run = 2000 } },
@@ -533,7 +533,7 @@ CASES["J5e: a value no command sent"] = {
   },
 }
 
-CASES["J5g: after the deadline's ask"] = {
+CASES["after the deadline's ask"] = {
   {
     name = "the first push settles, even one that reads as history",
     dev = { refresh = true },
@@ -558,7 +558,7 @@ CASES["J5g: after the deadline's ask"] = {
   },
 }
 
-CASES["J6: the deadline"] = {
+CASES["the deadline"] = {
   {
     name = "heard with nothing held keeps the command",
     steps = {
@@ -866,16 +866,16 @@ CASES["The start tell: each aspect's first report"] = {
 }
 
 local ORDER = {
-  "J1: a held color",
-  "J2: the first report",
-  "J3: seeds",
-  "J4: no window",
-  "J5a, J5b: answers to a read",
-  "J5c: the newest command's echo",
-  "J5d: history",
-  "J5e: a value no command sent",
-  "J5g: after the deadline's ask",
-  "J6: the deadline",
+  "a held color",
+  "the first report",
+  "seeds",
+  "no command out",
+  "answers to a read",
+  "the newest command's echo",
+  "history",
+  "a value no command sent",
+  "after the deadline's ask",
+  "the deadline",
   "One attribute at a time, and walks",
   "Another hand, and fades on their way",
   "The start tell: each aspect's first report",

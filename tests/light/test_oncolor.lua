@@ -130,7 +130,7 @@ do
   )
   local white = OnColor.choose(intent("on"), inputs({ device = CCT_ONLY, settings = preset })).color
   T.check(
-    "a CCT light takes a full color as its nearest white, as released ESPHome lights it (L-CCTONLY)",
+    "a CCT light takes a full color as its nearest white",
     white ~= nil and white.mode == "cct" and white.kelvin ~= nil,
     white
   )
@@ -241,7 +241,7 @@ do
   for _, c in ipairs(cases) do
     T.eq(c[1], OnColor.followUp(c[2], c[3], c[4]), c[5])
   end
-  -- On a profile with on modes the held on's follow-up is the Color On Mode's own preset (zb:2020-2027).
+  -- On a profile with on modes the held on's follow-up is the Color On Mode's own preset.
   local onModes = { onModes = true, onPresetId = 7, onPresetOrigin = 1 }
   local withModes = {
     { "with on modes: the Color On Mode's own preset", { presetId = 7, presetOrigin = 1 }, true },
@@ -253,7 +253,7 @@ do
     T.eq(c[1], OnColor.followUp(named, ON, held, onModes), c[3])
   end
   T.eq(
-    "without on modes: any named preset, Hatch's rule",
+    "without on modes: any named preset",
     OnColor.followUp(intent("color", { color = BLUE, presetId = 1, presetOrigin = 1 }), ON, held, { onModes = false }),
     true
   )

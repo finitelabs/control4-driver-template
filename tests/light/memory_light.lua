@@ -1,4 +1,4 @@
---- MemoryLight: a v3 LightAdapter over an in-memory device, for the light library's own suite. The device
+--- MemoryLight: a LightAdapter over an in-memory device, for the light library's own suite. The device
 --- fades as its LightDevice facts say (device, own or walk), reports as its feedback says (where a change
 --- ends or where the light has got to), and its transport can be slow, stale, lossy or silent. M.world puts
 --- one behind the fake proxy on a virtual clock, started and online.
@@ -247,7 +247,7 @@ function Device:_fadeColor(to, ms, now)
   end
 end
 
---- One transition for every channel, as an ESPHome light runs: a channel the command leaves alone runs on
+--- One transition for every channel: a channel the command leaves alone runs on
 --- from where it is to its target over the command's time, at once with none.
 --- @private
 --- @param cmd LightCommand

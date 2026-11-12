@@ -80,7 +80,7 @@ for _, base in ipairs({ K.HOLD, K.WALK }) do
   end)
 end
 
-T.section("J1: on a hold device, a report that says off carries no color news")
+T.section("on a hold device, a report that says off carries no color news")
 case(function()
   local w = K.world(K.HOLD, {}, 0)
   K.color(w, RED.x, RED.y)
@@ -93,7 +93,7 @@ case(function()
   w.restore()
 end)
 
-T.section("J1: a restart keeps the held color: the proxy's stands at the first report, and the next On carries it")
+T.section("a restart keeps the held color: the proxy's stands at the first report, and the next On carries it")
 case(function()
   local w = K.world(K.HOLD, {}, 0)
   K.color(w, RED.x, RED.y)
@@ -124,7 +124,7 @@ case(function()
   w.restore()
 end)
 
-T.section("a color preset is told with its id and its origin (Rule 3.5)")
+T.section("a color preset is told with its id and its origin")
 case(function()
   local w = K.world(K.ES, {}, 100)
   K.color(w, RED.x, RED.y, 0, K.FULL, { id = 3, origin = 2 })
@@ -261,7 +261,7 @@ case(function()
   w.run(3000)
   w.m.sent = {}
   w.proxy:send("SET_LEVEL", { LEVEL = 50 })
-  -- Rule 3.7 (K05, K06): a color set in an on cycle is a pick until the next off, so the mix waits for it.
+  -- A color set in an on cycle is a pick until the next off, so the mix waits for it.
   T.eq("a color set is a pick: the next level brings no mix", #colored(w), 0)
   w.run(5000)
   w.proxy:send("OFF")
@@ -275,7 +275,7 @@ case(function()
   w.restore()
 end)
 
-T.section("Dim-To-Warm with the On and Dim colors the same: a level fade tells no color event (WLED dig2go, 11-10)")
+T.section("Dim-To-Warm with the On and Dim colors the same: a level fade tells no color event")
 for _, base in ipairs({ K.ES, K.ZB, K.WALK }) do
   for _, pair in ipairs({
     { name = "a white", on = K.WARM, dim = { id = 2, origin = 1, x = K.WARM.x, y = K.WARM.y, mode = K.CCT } },
@@ -330,7 +330,7 @@ case(function()
   w.restore()
 end)
 
-T.section("colorUnchosen: Previous On's color, and a level change's Dim-To-Warm color, but not an on's (zb:1479-1482)")
+T.section("colorUnchosen: Previous On's color, and a level change's Dim-To-Warm color, but not an on's")
 case(function()
   local w = K.world(K.ES, {}, 100)
   K.color(w, GREEN.x, GREEN.y)
@@ -397,7 +397,7 @@ case(function()
   w.restore()
 end)
 
-T.section("K05: a color set while off stays a pick when another client turns the light on")
+T.section("a color set while off stays a pick when another client turns the light on")
 case(function()
   local w = K.world(K.ES, {}, 0)
   K.onMode(w, K.WARM, K.DIM)
@@ -414,7 +414,7 @@ case(function()
   w.restore()
 end)
 
-T.section("K06: a color set during a fade to off is a pick until that off")
+T.section("a color set during a fade to off is a pick until that off")
 case(function()
   local w = K.world(K.ES, {}, 100)
   K.onMode(w, K.WARM, K.DIM)

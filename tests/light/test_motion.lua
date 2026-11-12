@@ -907,7 +907,7 @@ do
   T.check(string.format("%d commands, each within the rules", count), #broken == 0, broken[1])
 end
 
-T.section("ESPHome's oracle: a color goes out though the light has it; fading to off, the level re-times")
+T.section("a color goes out though the light has it; fading to off, the level re-times")
 do
   local m = make(device(), { level = 0.5, color = RED })
   run(m, color(RED, 1000))
@@ -923,13 +923,13 @@ do
   local cmd = take(fading)[1]
   T.eq("off, the color goes over what the fade has left", cmd.transitionMs, 3000)
   T.check(
-    "and the level restarts from where it is, as ESPHome restarts every channel",
+    "and the level restarts from where it is, as a device that re-times restarts every channel",
     fading.levelRamp ~= nil and near(fading.levelRamp.from, at) and fading.levelRamp.startMs == C4:GetTime(),
     fading.levelRamp
   )
 end
 
-T.section("ESPHome's oracle: a ramp whose start is its target is told at once; a re-time at its target ends it")
+T.section("a ramp whose start is its target is told at once; a re-time at its target ends it")
 do
   local m = make(device(), { level = 0.5, color = RED })
   run(m, color(BLUE, 2000))
@@ -946,7 +946,7 @@ do
   T.eq("a color re-times a level ramp already at its target by ending it", rt:view().levelMs, 0)
 end
 
-T.section("ESPHome's oracle: Dim-To-Warm follows the level it reaches")
+T.section("Dim-To-Warm follows the level it reaches")
 do
   local forOn = {
     defaultOn = true,
@@ -1041,7 +1041,7 @@ do
   )
 end
 
-T.section("ESPHome's oracle: a stop re-times the ramp that runs on, on a device that re-times")
+T.section("a stop re-times the ramp that runs on, on a device that re-times")
 do
   local m = make(device({ fade = RETIMES }), { level = 0.2, color = RED })
   run(m, level(80, 4000))
@@ -1056,7 +1056,7 @@ do
   )
 end
 
-T.section("ESPHome's oracle: a fade to or from off under half way to Min On reads as off")
+T.section("a fade to or from off under half way to Min On reads as off")
 do
   local m = make(device({ fade = PRE_ON }), { level = 1 })
   run(m, off(4000))
