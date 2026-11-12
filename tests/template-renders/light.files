@@ -46,6 +46,7 @@ src/lib/light/proxy.lua
 src/lib/light/range.lua
 src/lib/light/scenes.lua
 src/lib/light/settings.lua
+src/lib/light/timer.lua
 src/lib/light/types.lua
 src/lib/logging.lua
 src/lib/lru.lua
