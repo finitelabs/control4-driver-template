@@ -63,6 +63,7 @@ Types.API = 1
 --- @field cct LightCctRange|boolean|nil A range: every device has it. true: each device names its own.
 --- @field known boolean|nil Every device is as the profile says: its capabilities never change at runtime.
 --- @field fades boolean|nil Some device can fade: stops, click and hold rates, color_rate_behavior 1.
+--- @field maxMs integer|nil The longest rate the static capabilities offer, for every device. Default 65535.
 --- @field defaultOn boolean|nil supports_default_on. Without it an ON with no on mode resumes at the device's level.
 --- @field scenes boolean|nil Advanced Lighting Scenes.
 --- @field onModes boolean|nil The brightness and color on modes.
