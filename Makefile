@@ -19,10 +19,6 @@ override RENDER := $(abspath $(RENDER))
 # A leg's steps run in order.
 .NOTPARALLEL:
 
-# The long run of the Light V2 fuzzer, where a render's own make test runs its first 300 runs.
-LIGHT_FUZZ_RUNS ?= 20000
-LIGHT_FUZZ_SEED ?= 1
-
 # ─── Help ─────────────────────────────────────────────────────────────────────
 
 .PHONY: help
@@ -70,10 +66,8 @@ render-ui-js: ## Check the render's lib/ui scripts under Node, each one the rend
 		done; \
 	else echo "This render has no lib/ui."; fi
 
-render-light-fuzz: ## Run the render's Light V2 fuzzer long: LIGHT_FUZZ_RUNS seeded runs from LIGHT_FUZZ_SEED
-	@if [ -f "$(RENDER)/test/test_light_fuzz.lua" ]; then \
-		LIGHT_FUZZ_RUNS=$(LIGHT_FUZZ_RUNS) LIGHT_FUZZ_SEED=$(LIGHT_FUZZ_SEED) "$(RENDER)/test/run_test.sh" test_light_fuzz.lua; \
-	else echo "This render has no lib.light."; fi
+render-light-fuzz: ## Run the Light V2 fuzzer against the render's lib.light, if it has one
+	"$(RENDER)/test/run_test.sh" "$(CURDIR)/tests/light_fuzz.lua"
 
 RENDER_LEG := render render-snapshot render-lib-loads render-crypto render-ui-js in-render-test render-light-fuzz
 render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME
@@ -81,7 +75,7 @@ render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME
 # ─── Build leg ────────────────────────────────────────────────────────────────
 # CI's build leg is `make build-checks`: the example driver, built in the render.
 
-.PHONY: build-driverless render-example build-doc-alerts build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page build-checks
+.PHONY: build-driverless render-example build-doc-alerts build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page build-embedded build-checks
 build-driverless: ## Check the render, before it has a driver, builds and verifies nothing
 	$(PYTHON) tests/build_checks.py driverless "$(RENDER)"
 
@@ -106,6 +100,9 @@ build-cloud-monitoring: ## Check Cloud Monitoring reaches only the DriverCentral
 build-ui-page: ## Check a page that embeds lib/ui ships the kit inline
 	$(PYTHON) tests/build_checks.py ui-page "$(RENDER)"
 
+build-embedded: ## Check a host in embedded_drivers ships each driver it names in its package
+	$(PYTHON) tests/build_checks.py embedded "$(RENDER)"
+
 BUILD_LEG := render build-driverless render-example in-render-init build-doc-alerts in-render-check in-render-test \
-  build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page
+  build-idempotent build-readme-images build-encrypted build-cloud-monitoring build-ui-page build-embedded
 build-checks: $(BUILD_LEG) ## Run CI's build leg for NAME

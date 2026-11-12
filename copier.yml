@@ -48,7 +48,6 @@ _exclude:
   - "{% if 'light' not in vendor_modules.split() %}test/light_harness.lua{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}test/light_setup{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}test/test_light_proxy.lua{% endif %}"
-  - "{% if 'light' not in vendor_modules.split() %}test/test_light_fuzz.lua{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}test/test_light_contract.lua{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}test/light_drivers.lua{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}tools/light-caps.lua{% endif %}"
@@ -99,7 +98,7 @@ icon_style:
 
 vendor_modules:
   type: str
-  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui light). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: the house style.css and page.js for a page to embed, the variable browser (variables.js and .css, lib.ui.devices), with expressions the expression editor (expressions.js and .css, lib.ui.expression-tab), the widgets (collapse, menu, combobox, color and pickgrid, each a .js and .css pair), and the driver side (lib.ui.page, lib.ui.page-params, lib.ui.tab-properties). light ships the Light V2 library (src/lib/light.lua and src/lib/light/), its test kit (test/light_harness.lua, test/light_drivers.lua, test/light_setup/), its suites (test/test_light_proxy.lua, test/test_light_fuzz.lua), the adapter contract run over the repo's light_v2 drivers (test/test_light_contract.lua, with the driver's own test/light_rigs.lua) and make light-caps (tools/light-caps.lua); a Light V2 driver is then an adapter over it."
+  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui light). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: the house style.css and page.js for a page to embed, the variable browser (variables.js and .css, lib.ui.devices), with expressions the expression editor (expressions.js and .css, lib.ui.expression-tab), the widgets (collapse, menu, combobox, color and pickgrid, each a .js and .css pair), and the driver side (lib.ui.page, lib.ui.page-params, lib.ui.tab-properties). light ships the Light V2 library (src/lib/light.lua and src/lib/light/), its test kit (test/light_harness.lua, test/light_drivers.lua, test/light_setup/), its suite (test/test_light_proxy.lua), the adapter contract run over the repo's light_v2 drivers (test/test_light_contract.lua, with the driver's own test/light_rigs.lua) and make light-caps (tools/light-caps.lua); a Light V2 driver is then an adapter over it."
   default: ""
 
 cloud_diagnostics:
@@ -129,6 +128,13 @@ extra_required_checks:
   default: ""
   validator: >-
     {% for check in extra_required_checks.split() %}{% if not check | regex_search('^[A-Za-z0-9._-]+$') %}{{ check }} is not a check name tools/github-setup can require: use letters, digits, '.', '_' and '-'. {% endif %}{% endfor %}
+
+embedded_drivers:
+  type: str
+  help: "Space-separated <host>:<driver>[,<driver>...] pairs, each a drivers/ folder: make package packages each driver named before its host and puts its .c4z in the host's package under c4z/, for a host that adds that driver to the project itself, since a driver update never adds a proxy item. Each embedded driver also ships as its own .c4z."
+  default: ""
+  validator: >-
+    {% for pair in embedded_drivers.split() %}{% if not pair | regex_search('^[A-Za-z0-9_-]+:[A-Za-z0-9_-]+(,[A-Za-z0-9_-]+)*$') %}{{ pair }} is not <host>:<driver>[,<driver>...], each a drivers/ folder name. {% endif %}{% endfor %}
 
 stale_issues:
   type: bool
