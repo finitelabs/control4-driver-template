@@ -157,7 +157,11 @@ do
   T.eq("a ramp of an earlier load leaves the level unknown", seed.level, nil)
   T.eq("and the color", seed.color, nil)
   p:sync(rest(true, Range.toDevice(40, 1, 100), RED))
-  T.eq("but the proxy's values still stand as told", names(), {})
+  T.eq(
+    "so the first sync tells the light's values, which ends the proxy's ramp (ESPHome L-READ)",
+    names(),
+    { "LIGHT_COLOR_CHANGED", "LIGHT_BRIGHTNESS_CHANGED" }
+  )
 
   vars = { [1001] = "100" }
   seed = make():read()
@@ -556,19 +560,10 @@ do
   T.eq("connected", { got[1].cmd, got[1].params.STATE }, { "ONLINE_CHANGED", true })
   p:answer("GET_LIGHT_LEVEL", {}, rest(true, 0.5))
   got = take()
-  T.eq(
-    "at rest: the level told",
-    { got[1].cmd, got[1].params.LIGHT_BRIGHTNESS_CURRENT },
-    { "LIGHT_BRIGHTNESS_CHANGED", 50 }
-  )
+  T.eq("at rest: LIGHT_LEVEL, the level held", { got[1].cmd, got[1].params }, { "LIGHT_LEVEL", "50" })
   p:answer("GET_LIGHT_LEVEL", {}, { on = true, level = 0.6, levelTarget = 0.9, levelMs = 700, colorMs = 0 })
   got = take()
-  T.eq("in a ramp: where it has got to", {
-    got[1].cmd,
-    got[1].params.LIGHT_BRIGHTNESS_CURRENT,
-    got[1].params.LIGHT_BRIGHTNESS_TARGET,
-    got[1].params.RATE,
-  }, { "LIGHT_BRIGHTNESS_CHANGING", 60, 90, 700 })
+  T.eq("in a ramp: still the level held", { got[1].cmd, got[1].params }, { "LIGHT_LEVEL", "50" })
   p:answer("REQUEST_BUTTON_COLORS", {}, rest(true, 0.5))
   T.eq("each button's colors, then each LED again", names(), {
     "BUTTON_COLORS",
@@ -613,11 +608,7 @@ do
   take()
   p:answer("GET_LIGHT_LEVEL", {}, rest(true, 0.5))
   local got = take()
-  T.eq(
-    "once told, the level told",
-    { got[1].cmd, got[1].params.LIGHT_BRIGHTNESS_CURRENT },
-    { "LIGHT_BRIGHTNESS_CHANGED", 50 }
-  )
+  T.eq("once told, the level held", { got[1].cmd, got[1].params }, { "LIGHT_LEVEL", "50" })
   vars = {}
 end
 
@@ -639,6 +630,130 @@ do
   T.eq("then its LED: the light's own state", { got[2].cmd, got[2].params.STATE }, { "MATCH_LED_STATE", true })
   p:answer("REQUEST_BUTTON_COLORS", {}, rest(true, 0.5), PROXY)
   T.eq("on the proxy binding: each button's, then each LED", #take(), 6)
+end
+
+--- A proxy that has read the given variables and come online, with nothing sent since.
+local function connected(variables, links)
+  vars = variables
+  local p, settings = make(links)
+  p:read()
+  p:offline()
+  p:online(DEVICE)
+  sent = {}
+  return p, settings
+end
+
+--- The sends of one command, by name.
+local function named(list, cmd)
+  local out = {}
+  for _, s in ipairs(list) do
+    if s.cmd == cmd then
+      out[#out + 1] = s
+    end
+  end
+  return out
+end
+
+T.section("GET_LIGHT_LEVEL: LIGHT_LEVEL with the level the light holds, online or not")
+do
+  local function answered(p)
+    sent = {}
+    p:answer("GET_LIGHT_LEVEL", {}, rest(true, 1, nil))
+    local s = named(take(), "LIGHT_LEVEL")
+    return s[1] and s[1].params
+  end
+  local p = connected({ [1001] = "100" })
+  T.eq("inside the first report's ONLINE_CHANGED: the level the proxy showed at start", answered(p), "100")
+  p:sync(rest(true, Range.toDevice(40, 1, 100), nil))
+  T.eq("online: the level last told", answered(p), "40")
+  p:lost(true)
+  T.eq("suspended: the level it keeps", answered(p), "40")
+  p:lost(false)
+  T.eq("lost: the off its loss told", answered(p), "0")
+  vars = {}
+  p = make()
+  p:read()
+  T.eq("nothing read and nothing told: no answer", answered(p), nil)
+end
+
+T.section("the link LEDs: told at the first report after a load and after a suspend")
+do
+  local level = Range.toDevice(60, 1, 100)
+  local p = connected({ [1001] = "60", [1110] = "60" }, LINKS)
+  p:sync(rest(true, level, nil))
+  local all = take()
+  T.eq("after a load the LEDs are told, though the level is as the proxy shows", #named(all, "MATCH_LED_STATE"), 3)
+  T.eq("and no level", #named(all, "LIGHT_BRIGHTNESS_CHANGED"), 0)
+  p:lost(true)
+  p:online(DEVICE)
+  sent = {}
+  p:sync(rest(true, level, nil))
+  T.eq("after a suspend, again", #named(take(), "MATCH_LED_STATE"), 3)
+  p:lost(false)
+  p:online(DEVICE)
+  sent = {}
+  p:sync(rest(false, level, nil))
+  T.eq("after a loss, whose off told them, not again", #named(take(), "MATCH_LED_STATE"), 0)
+end
+
+T.section("a replacing color ramp's CHANGING starts where the color has got to")
+do
+  local p = connected({})
+  p:sync({ on = true, level = 1, levelMs = 0, color = RED, colorMs = 0 })
+  p:sync({ on = true, level = 1, levelMs = 0, color = RED, colorTarget = BLUE, colorMs = 3000 })
+  sent = {}
+  local mid = { x = 0.4, y = 0.2, mode = "xy" }
+  p:sync({ on = true, level = 1, levelMs = 0, color = mid, colorTarget = RED, colorMs = 2000 })
+  local s = named(take(), "LIGHT_COLOR_CHANGING")
+  T.eq(
+    "from the color it has got to",
+    s[1] and { s[1].params.LIGHT_COLOR_CURRENT_X, s[1].params.LIGHT_COLOR_CURRENT_Y },
+    {
+      0.4,
+      0.2,
+    }
+  )
+end
+
+T.section("with Min On at Max On or above, a level command is told the level it asked")
+do
+  local p, settings = connected({})
+  settings.lo, settings.hi = 60, 60
+  p:taken({ kind = "level", level = 37, source = "proxy" })
+  p:sync(rest(true, Range.toDevice(37, 60, 60), nil))
+  local s = named(take(), "LIGHT_BRIGHTNESS_CHANGED")
+  T.eq("37 is told, though every level sits at one brightness", s[1] and s[1].params.LIGHT_BRIGHTNESS_CURRENT, 37)
+end
+
+T.section("a command for what the proxy shows tells nothing: the tell is a diff")
+do
+  local level = Range.toDevice(40, 1, 100)
+  local p = connected({ [1001] = "40", [1110] = "40", [1200] = "0.64,0.33,0", [1210] = "0.64,0.33,0" })
+  p:sync(rest(true, level, RED))
+  sent = {}
+  p:taken({ kind = "level", level = 40, source = "proxy" })
+  p:sync(rest(true, level, RED))
+  T.eq("a level command for the level shown", names(), {})
+  p:taken({ kind = "color", color = RED, source = "proxy" })
+  p:sync(rest(true, level, RED))
+  T.eq("a color command for the color shown", names(), {})
+end
+
+T.section("a color preset picked while off is told its preset at once, though its color is the one held")
+do
+  local p = connected({ [1001] = "0", [1200] = "0.64,0.33,0", [1210] = "0.64,0.33,0" })
+  p:sync(rest(false, 0.5, RED))
+  sent = {}
+  p:taken({ kind = "color", color = RED, presetId = 5, presetOrigin = 1, source = "proxy" })
+  local view = rest(false, 0.5, RED)
+  view.colorPreset, view.colorPresetOrigin = 5, 1
+  p:sync(view)
+  local s = named(take(), "LIGHT_COLOR_CHANGED")
+  T.eq(
+    "CHANGED with the preset",
+    s[1] and { s[1].params.LIGHT_COLOR_CURRENT_PRESET_ID, s[1].params.LIGHT_COLOR_CURRENT_PRESET_ORIGIN },
+    { 5, 1 }
+  )
 end
 
 clock.restore()
