@@ -289,4 +289,19 @@ do
   T.eq("the light's commands still reach the light", #run(light, PROXY, "ON"), 1)
 end
 
+T.section("COMMANDS: every command the handlers take, once, sorted")
+do
+  local Handlers = require("lib.light.handlers")
+  local seen, sorted = {}, true
+  for i, command in ipairs(Handlers.COMMANDS) do
+    T.check("listed once: " .. command, not seen[command])
+    seen[command] = true
+    sorted = sorted and (i == 1 or Handlers.COMMANDS[i - 1] < command)
+  end
+  T.check("sorted", sorted)
+  for _, command in ipairs({ "ON", "SET_COLOR_TARGET", "PUSH_SCENE", "SET_PRESET_LEVEL", "GET_LIGHT_LEVEL", "DO_PUSH" }) do
+    T.check("includes " .. command, seen[command])
+  end
+end
+
 T.finish()
