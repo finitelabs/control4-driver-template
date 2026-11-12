@@ -1864,6 +1864,10 @@ local timers = {}
 local timer_id = 0
 
 function C4:SetTimer(delay_ms, callback, repeating)
+  -- Director refuses a delay of 0 or less with this message, and global/timer.lua prints it and makes no timer.
+  if type(delay_ms) ~= "number" or delay_ms <= 0 then
+    error("Invalid argument value", 0)
+  end
   timer_id = timer_id + 1
   local id = timer_id
 

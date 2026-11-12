@@ -337,6 +337,7 @@ function Light:_move(intent)
   end
   self.picks:noted(intent, self.motion:now(), self.settings:forOn())
   self.buttons:noted(intent, self.motion:now())
+  self.ledger:taken(intent)
   self.motion:assumeLit(self.ledger:lit())
   return self.motion:command(intent, OnColor.choose(intent, self:_onInputs()), self.settings:forMotion())
 end
