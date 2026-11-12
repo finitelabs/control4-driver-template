@@ -1,0 +1,850 @@
+-- lib.light.motion: intents into commands across the fade kinds, the ramps and their estimates, stops, the
+-- pre-on, the re-time, the walk, rests and settles, on a virtual clock. Light and Settings are fakes: the
+-- light only carries the timers back, and the settings answer the getters Motion reads.
+
+local T = require("testlib")
+local F = require("c4_fixtures")
+
+require("c4_shim")
+
+local Color = require("lib.light.color")
+local Motion = require("lib.light.motion")
+local OnColor = require("lib.light.oncolor")
+local Range = require("lib.light.range")
+
+local clock = F.virtualClock()
+
+local RED = { x = 0.64, y = 0.33, mode = "xy" }
+local BLUE = { x = 0.15, y = 0.06, mode = "xy" }
+local WARM_X, WARM_Y = C4:ColorCCTtoXY(2700)
+local WARM = { x = WARM_X, y = WARM_Y, mode = "cct", kelvin = 2700 }
+
+--- @param over table|nil Fields that replace the full-color device's; cct = false for none.
+--- @return LightDevice
+local function device(over)
+  local d = {
+    dims = true,
+    color = true,
+    cct = { minK = 2000, maxK = 6500 },
+    colorWhileOff = "send",
+    levelSteps = 255,
+    fade = { kind = "device", curve = "linear", preOn = false, retimes = false, maxMs = 65535 },
+    feedback = { shows = "target", waitMs = 1000, refresh = false },
+  }
+  for k, v in pairs(over or {}) do
+    d[k] = v
+  end
+  if d.cct == false then
+    d.cct = nil
+  end
+  return d
+end
+
+local OWN = { kind = "own", maxMs = 65535, own = { onMs = 300, offMs = 400, changeMs = 200 } }
+local WALK = { kind = "walk", maxMs = 60000, stepMs = 100 }
+local PRE_ON = { kind = "device", curve = "linear", preOn = true, retimes = false, maxMs = 65535 }
+local RETIMES = { kind = "device", curve = "linear", preOn = false, retimes = true, maxMs = 65535 }
+
+--- Settings' values as Motion takes them: a Min/Max On range, the two default rates, and the on settings.
+--- @return LightMotionSettings
+local function settings(lo, hi, forOn)
+  return {
+    lo = lo or 1,
+    hi = hi or 100,
+    rate = 500,
+    colorRate = 500,
+    on = forOn or { defaultOn = true, onLo = lo or 1, onHi = hi or 100, presetLevel = 100, colorOnMode = "none" },
+  }
+end
+
+-- What each Motion sent, kept until the test takes it, and the settings each one runs with.
+--- @type table<LightMotion, LightCommand[]>
+local sentBy = {}
+--- @type table<LightMotion, LightMotionSettings>
+local msOf = {}
+
+--- @param m LightMotion
+--- @param cmds LightCommand[]
+local function keep(m, cmds)
+  local list = sentBy[m]
+  for _, cmd in ipairs(cmds) do
+    list[#list + 1] = cmd
+  end
+end
+
+--- An intent into Motion, its commands kept.
+--- @param m LightMotion
+--- @param intent LightIntent
+--- @param choice LightOnChoice|nil
+local function run(m, intent, choice)
+  keep(m, m:command(intent, choice, msOf[m]))
+end
+
+--- The commands Motion sent since the last take.
+--- @param m LightMotion
+--- @return LightCommand[]
+local function take(m)
+  local list = sentBy[m]
+  sentBy[m] = {}
+  return list
+end
+
+--- A Motion over a fake Light, declared and seeded.
+--- @return LightMotion
+local function make(dev, seed, set)
+  local light = {}
+  local m = Motion.new(light)
+  sentBy[m], msOf[m] = {}, set or settings()
+  function light._rampEnded(_, aspect)
+    keep(m, m:ended(aspect))
+  end
+  function light._walkStep()
+    keep(m, m:step(msOf[m]))
+  end
+  m:declare(dev or device())
+  m:seed(seed or { level = 0 })
+  return m
+end
+
+local function level(c4, rate)
+  return { kind = "level", level = c4, rateMs = rate, source = "proxy" }
+end
+local function color(c, rate)
+  return { kind = "color", color = c, rateMs = rate, source = "proxy" }
+end
+local function on(rate)
+  return { kind = "on", rateMs = rate, source = "proxy" }
+end
+local function off(rate)
+  return { kind = "off", rateMs = rate, source = "proxy" }
+end
+local function choose(c4, c, unchosen)
+  return { level = c4, color = c, unchosen = unchosen == true, followUp = false }
+end
+
+--- The flags of a command, for a compact comparison.
+local function flags(cmd)
+  return string.format(
+    "%s on=%s L=%s C=%s off=%s",
+    cmd.kind,
+    tostring(cmd.on),
+    cmd.setsLevel and 1 or 0,
+    cmd.setsColor and 1 or 0,
+    cmd.fromOff and 1 or 0
+  )
+end
+
+local function near(a, b)
+  return math.abs(a - b) < 1e-6
+end
+
+T.section("a level from off on a device fade")
+do
+  local m = make()
+  run(m, level(50, 1000), choose(50))
+  local cmds = take(m)
+  T.eq("one change", #cmds, 1)
+  T.eq("it lights the light and sets the level", flags(cmds[1]), "change on=true L=1 C=0 off=1")
+  T.check("at the level's place on the line", near(cmds[1].level, Range.toDevice(50, 1, 100)), cmds[1].level)
+  T.eq("over the time asked", cmds[1].transitionMs, 1000)
+  T.eq("from dark", cmds[1].from.level, 0)
+  T.eq("its color is carried, D65 before one is known", cmds[1].color.kelvin, Color.kelvin(0.3127, 0.3290))
+  local view = m:view()
+  T.check("the view heads for it", near(view.levelTarget, cmds[1].level) and view.levelMs == 1000, view)
+  T.eq("now is the ramp's end", { m:now().on, m:now().levelRamping }, { true, true })
+  clock.run(500)
+  T.check("half way, the view is half way", near(m:view().level, cmds[1].level / 2), m:view().level)
+  clock.run(500)
+  T.eq("at its end the ramp is gone", m:now().levelRamping, false)
+  T.check("and the view is at the level", near(m:view().level, cmds[1].level))
+  T.eq("the landing of the level is now", m:landing("level"), clock.now())
+  T.eq("nothing more went out", #take(m), 0)
+end
+
+T.section("a pre-on opens a rated on from off")
+do
+  local m = make(device({ fade = PRE_ON }))
+  run(m, level(80, 2000), choose(80, RED))
+  local cmds = take(m)
+  T.eq("two commands", #cmds, 2)
+  T.eq("the pre-on first: lit, at once, in the on color", flags(cmds[1]), "preOn on=true L=1 C=1 off=1")
+  T.eq("at the bottom step", cmds[1].level, 1 / 255)
+  T.eq("0 ms", cmds[1].transitionMs, 0)
+  T.eq("its change follows, not from off, the color already sent", flags(cmds[2]), "change on=true L=1 C=0 off=0")
+  T.eq("from the bottom step", cmds[2].from.level, 1 / 255)
+  T.eq("over the rate", cmds[2].transitionMs, 2000)
+  run(m, level(20, 0))
+  T.eq("an at-once change while lit has no pre-on", flags(take(m)[1]), "change on=true L=1 C=0 off=0")
+  run(m, off(0))
+  take(m)
+  run(m, level(40, 0), choose(40))
+  local at = take(m)
+  T.eq("an at-once on from off has no pre-on", { #at, at[1].kind }, { 1, "change" })
+end
+
+T.section("off keeps the level, and an off to a light already off sends nothing")
+do
+  local m = make(nil, { level = 0.6 })
+  run(m, off(0))
+  local cmd = take(m)[1]
+  T.eq("an off", flags(cmd), "change on=false L=1 C=0 off=0")
+  T.eq("with the level kept", cmd.level, 0.6)
+  T.eq("now: off, at the level kept", { m:now().on, m:now().level }, { false, 0.6 })
+  T.eq("the view: dark", m:view().level, 0)
+  run(m, off(0))
+  T.eq("off again sends nothing", #take(m), 0)
+  run(m, on(), choose(100))
+  local back = take(m)[1]
+  T.eq("an on comes back lit", flags(back), "change on=true L=1 C=0 off=1")
+  run(m, { kind = "toggle", source = "proxy" })
+  T.eq("a toggle while lit is an off", take(m)[1].on, false)
+  run(m, { kind = "toggle", source = "proxy" }, choose(30))
+  local lit = take(m)[1]
+  T.check("a toggle while dark is an on at the choice's level", lit.on and near(lit.level, Range.toDevice(30, 1, 100)))
+end
+
+T.section("a level the light is already at sends nothing; one a ramp heads elsewhere from goes")
+do
+  local m = make(nil, { level = Range.toDevice(50, 1, 100) })
+  run(m, level(50, 0))
+  T.eq("the same level: nothing", #take(m), 0)
+  run(m, level(90, 2000))
+  take(m)
+  clock.run(500)
+  run(m, level(50, 0))
+  local cmd = take(m)[1]
+  T.eq("back to the level it left, while the ramp runs: a change", { cmd and cmd.kind, cmd and cmd.setsLevel }, {
+    "change",
+    true,
+  })
+end
+
+T.section("a light that does not dim, and Min/Max On")
+do
+  local m = make(device({ dims = false, color = false, cct = false }))
+  run(m, level(30, 1000))
+  local cmd = take(m)[1]
+  T.eq("a level lights it at once, full", { cmd.on, cmd.level, cmd.transitionMs }, { true, 1, 0 })
+  T.eq("no color on a device without one", cmd.color, nil)
+  T.eq("no ramp", m:now().levelRamping, false)
+  run(m, level(0, 1000))
+  T.eq("level 0 turns it off", flags(take(m)[1]), "change on=false L=1 C=0 off=0")
+
+  local narrow = make(nil, nil, settings(20, 80))
+  run(narrow, level(1, 0), choose(1))
+  T.check("level 1 is the Min On", near(take(narrow)[1].level, 0.2))
+  run(narrow, level(100, 0))
+  T.check("level 100 is the Max On", near(take(narrow)[1].level, 0.8))
+end
+
+T.section("a color while on, while off on a send device, and while off on a hold device")
+do
+  local m = make(nil, { level = 0.5, color = BLUE })
+  run(m, color(RED, 1000))
+  local cmd = take(m)[1]
+  T.eq("while on: the color alone, power unchanged", flags(cmd), "change on=true L=0 C=1 off=0")
+  T.eq("over the rate", cmd.transitionMs, 1000)
+  T.eq("the level carried", cmd.level, 0.5)
+  T.eq("the view heads for it", { m:view().colorMs, m:view().colorTarget.x }, { 1000, RED.x })
+  run(m, color(RED, 300))
+  T.eq("the color it already heads for sends nothing", #take(m), 0)
+
+  local dark = make(nil, { level = 0 })
+  run(dark, color(RED, 1000))
+  local sent = take(dark)[1]
+  T.eq("off, on a send device: a color for a light that stays off", flags(sent), "change on=false L=0 C=1 off=0")
+  T.eq("at once", sent.transitionMs, 0)
+  T.eq("the proxy is told it", dark:view().color.x, RED.x)
+
+  local hold = make(device({ colorWhileOff = "hold" }), { level = 0 })
+  run(hold, color(RED, 1000))
+  T.eq("off, on a hold device: nothing sent", #take(hold), 0)
+  T.eq("but the proxy is told it", hold:view().color.x, RED.x)
+  run(hold, on(), choose(100))
+  local next = take(hold)[1]
+  T.eq("the next on carries it", flags(next), "change on=true L=1 C=1 off=1")
+  T.eq("in that color", next.color.x, RED.x)
+end
+
+T.section("colors in the device's form")
+do
+  local whites = make(device({ color = false }), { level = 0.5 })
+  run(whites, color(RED, 0))
+  T.eq("a full color for a device with CCT alone is dropped", #take(whites), 0)
+  run(whites, color({ x = 0.3, y = 0.3, mode = "cct", kelvin = 9000 }, 0))
+  local cmd = take(whites)[1]
+  T.eq("a white past the range goes at its end", cmd.color.kelvin, 6500)
+  T.eq("in CCT", cmd.color.mode, "cct")
+  local full = make(device({ cct = false }), { level = 0.5 })
+  run(full, color(WARM, 0))
+  T.eq("a white for a device without CCT is a full color", take(full)[1].color.mode, "xy")
+end
+
+T.section("the re-time: on a device fade with retimes, a command for one aspect takes the other along")
+do
+  local m = make(device({ fade = RETIMES }), { level = 0.5, color = BLUE })
+  run(m, color(RED, 2000))
+  take(m)
+  clock.run(500)
+  run(m, level(90, 1000))
+  local cmd = take(m)[1]
+  T.eq(
+    "the level command carries the color's target, not as a change",
+    { cmd.color.x, cmd.setsColor },
+    { RED.x, false }
+  )
+  T.eq("the color now lands with the level", m:landing("color"), clock.now() + 1000)
+  clock.run(1000)
+  T.eq("both done together", { m:now().levelRamping, m:now().colorRamping }, { false, false })
+
+  local back = make(device({ fade = RETIMES }), { level = 0.5, color = BLUE })
+  run(back, level(90, 3000))
+  take(back)
+  clock.run(1000)
+  run(back, color(RED, 500))
+  T.eq("a color re-times the level to land with it", back:landing("level"), clock.now() + 500)
+  local later = take(back)[1]
+  T.check("carrying the level's target", near(later.level, Range.toDevice(90, 1, 100)) and not later.setsLevel)
+
+  local own = make(device({ fade = OWN }), { level = 0.5, color = BLUE })
+  run(own, color(RED, 2000))
+  take(own)
+  local landing = own:landing("color")
+  run(own, level(90, 1000))
+  T.eq("an own fade takes no time from the command", take(own)[1].transitionMs, 0)
+  T.eq("and re-times nothing", own:landing("color"), landing)
+end
+
+T.section("without retimes each aspect keeps its own ramp")
+do
+  local m = make(nil, { level = 0.5, color = BLUE })
+  run(m, color(RED, 2000))
+  take(m)
+  local colorLands = m:landing("color")
+  clock.run(500)
+  run(m, level(90, 1000))
+  local cmd = take(m)[1]
+  T.eq(
+    "the level command carries the color's target, not as a change",
+    { cmd.color.x, cmd.setsColor },
+    { RED.x, false }
+  )
+  T.eq("the color keeps its own landing", m:landing("color"), colorLands)
+  clock.run(1000)
+  T.eq("the level is done, the color still runs", { m:now().levelRamping, m:now().colorRamping }, { false, true })
+  clock.run(500)
+  T.eq("then it lands", m:now().colorRamping, false)
+
+  local back = make(nil, { level = 0.5, color = BLUE })
+  run(back, level(90, 3000))
+  take(back)
+  local levelLands = back:landing("level")
+  clock.run(1000)
+  run(back, color(RED, 500))
+  T.eq("a color leaves the level ramp running", back:landing("level"), levelLands)
+  take(back)
+  clock.run(2000)
+
+  local dark = make(nil, { level = 0.5, color = BLUE })
+  run(dark, off(2000))
+  take(dark)
+  clock.run(500)
+  run(dark, color(RED, 300))
+  T.eq("a color while fading to off runs over what the fade has left, either way", take(dark)[1].transitionMs, 1500)
+  clock.run(1500)
+end
+
+T.section("stops")
+do
+  local m = make(nil, { level = 0.2, color = BLUE })
+  run(m, level(100, 1000))
+  take(m)
+  clock.run(250)
+  run(m, { kind = "stopLevel", source = "proxy" })
+  local cmd = take(m)[1]
+  T.eq("a level stop holds where the ramp has the light", flags(cmd), "stop on=true L=1 C=0 off=0")
+  T.check("at the estimate", near(cmd.level, 0.2 + 0.8 * 0.25), cmd.level)
+  T.eq("at once", cmd.transitionMs, 0)
+  T.eq("the ramp is gone", m:now().levelRamping, false)
+  run(m, { kind = "stopLevel", source = "proxy" })
+  T.eq("a stop with no ramp sends nothing", #take(m), 0)
+
+  for _, case in ipairs({ { RETIMES, 500, "re-timed by the level to land with it" }, { device().fade, 0, "its own" } }) do
+    local both = make(device({ fade = case[1] }), { level = 0.2, color = BLUE })
+    run(both, color(RED, 2000))
+    take(both)
+    run(both, level(100, 1000))
+    take(both)
+    clock.run(500)
+    run(both, { kind = "stopLevel", source = "proxy" })
+    local held = take(both)[1]
+    local label = case[1].retimes and "with retimes" or "without"
+    T.eq(label .. ", a color of its own runs on: the stop carries its target", { held.color.x, held.setsColor }, {
+      RED.x,
+      false,
+    })
+    T.eq(label .. ": the stop asks " .. case[3], held.transitionMs, case[2])
+    T.eq(label .. ": still running", both:now().colorRamping, true)
+    both:finishAll()
+  end
+
+  local cl = make(device({ fade = RETIMES }), { level = 0.2, color = BLUE })
+  run(cl, level(100, 2000))
+  run(cl, color(RED, 2000))
+  take(cl)
+  clock.run(500)
+  run(cl, { kind = "stopColor", source = "proxy" })
+  T.eq("with retimes a color stop asks the level's time left", take(cl)[1].transitionMs, 1500)
+  local nl = make(nil, { level = 0.2, color = BLUE })
+  run(nl, level(100, 2000))
+  run(nl, color(RED, 2000))
+  take(nl)
+  clock.run(500)
+  run(nl, { kind = "stopColor", source = "proxy" })
+  T.eq("without, it holds the color at once", take(nl)[1].transitionMs, 0)
+  cl:finishAll()
+  nl:finishAll()
+
+  local c = make(nil, { level = 0.5, color = BLUE })
+  run(c, color(RED, 1000))
+  take(c)
+  clock.run(500)
+  run(c, { kind = "stopColor", source = "proxy" })
+  local stop = take(c)[1]
+  T.eq("a color stop: the color alone, power unchanged", flags(stop), "stop on=true L=0 C=1 off=0")
+  T.check("at the estimate", near(stop.color.x, (BLUE.x + RED.x) / 2), stop.color)
+
+  local up = make(nil, { level = 0 })
+  run(up, level(50, 1000), choose(50))
+  take(up)
+  clock.run(1)
+  run(up, { kind = "stopLevel", source = "proxy" })
+  T.eq("a stop just after leaving dark goes back off", flags(take(up)[1]), "stop on=false L=1 C=0 off=0")
+
+  local own = make(device({ fade = OWN }), { level = 0.2 })
+  run(own, level(100, 5000))
+  take(own)
+  clock.run(50)
+  run(own, { kind = "stopLevel", source = "proxy" })
+  T.eq("under an own fade a stop sends nothing", #take(own), 0)
+  T.eq("the device's fade runs out", own:now().levelRamping, true)
+  clock.run(200)
+end
+
+T.section("an own fade runs its own lengths")
+do
+  local m = make(device({ fade = OWN }), { level = 0 })
+  run(m, level(60, 5000), choose(60))
+  local cmd = take(m)[1]
+  T.eq("no time asked of the device", cmd.transitionMs, 0)
+  T.eq("off to on takes onMs", m:landing("level"), clock.now() + 300)
+  clock.run(300)
+  run(m, level(30, 5000))
+  take(m)
+  T.eq("on to another level takes changeMs", m:landing("level"), clock.now() + 200)
+  clock.run(200)
+  run(m, off(5000))
+  take(m)
+  T.eq("on to off takes offMs", m:landing("level"), clock.now() + 400)
+  clock.run(400)
+end
+
+T.section("the walk: 0-time steps every stepMs")
+do
+  local m = make(device({ fade = WALK }), { level = 0 })
+  run(m, level(100, 1000), choose(100))
+  T.eq("nothing at once", #take(m), 0)
+  local steps = {}
+  for _ = 1, 12 do
+    clock.run(100)
+    for _, cmd in ipairs(take(m)) do
+      steps[#steps + 1] = cmd
+    end
+  end
+  T.check("at most duration / stepMs + 2 steps", #steps >= 9 and #steps <= 12, #steps)
+  local zero, fromOff = true, 0
+  for _, cmd in ipairs(steps) do
+    zero = zero and cmd.transitionMs == 0
+    fromOff = fromOff + (cmd.fromOff and 1 or 0)
+  end
+  T.check("each step takes no time", zero)
+  T.eq("only the first lights it", { fromOff, steps[1].fromOff }, { 1, true })
+  T.eq("the last is at the target", steps[#steps].level, 1)
+  T.eq("the walk is done", { m:now().levelRamping, m.walking }, { false, false })
+
+  run(m, off(500))
+  local down = {}
+  for _ = 1, 8 do
+    clock.run(100)
+    for _, cmd in ipairs(take(m)) do
+      down[#down + 1] = cmd
+    end
+  end
+  T.eq("a walk to off ends dark, setting the level", flags(down[#down]), "change on=false L=1 C=0 off=0")
+  T.eq("keeping the level it left", down[#down].level, 1)
+
+  run(m, on(), choose(100))
+  take(m)
+  run(m, level(1, 1000))
+  clock.run(300)
+  take(m)
+  run(m, { kind = "stopLevel", source = "proxy" })
+  local stop = take(m)
+  T.eq("a stop sends one last 0-time step", { #stop, stop[1].kind, stop[1].transitionMs }, { 1, "stop", 0 })
+  clock.run(500)
+  T.eq("and nothing after", #take(m), 0)
+end
+
+T.section("Dim-To-Warm along a walk")
+do
+  local forOn = {
+    defaultOn = true,
+    onLo = 1,
+    onHi = 100,
+    presetLevel = 100,
+    colorOnMode = "fade",
+    onColor = { x = 0.33, y = 0.34, mode = "cct" },
+    dimColor = { x = 0.52, y = 0.41, mode = "cct" },
+  }
+  local dev = device({ fade = WALK })
+  local m = make(
+    dev,
+    { level = Range.toDevice(10, 1, 100), color = OnColor.dimToWarm(10, dev, forOn) },
+    settings(1, 100, forOn)
+  )
+  run(m, level(90, 400), choose(90, OnColor.dimToWarm(90, dev, forOn), true))
+  local ok = true
+  for _ = 1, 5 do
+    clock.run(100)
+    for _, cmd in ipairs(take(m)) do
+      local want = OnColor.dimToWarm(Range.toLevel(cmd.level, 1, 100), dev, forOn)
+      ok = ok and math.abs(cmd.color.x - want.x) < 2e-3
+    end
+  end
+  T.check("each step carries Dim-To-Warm's color for its level", ok)
+end
+
+T.section("a rest the adapter returns")
+do
+  local m = make(device({ color = false, cct = false }), { level = 0 })
+  run(m, level(60, 0), choose(60))
+  local cmd = take(m)[1]
+  local rested = m:sent(cmd, { level = 0.35 })
+  T.eq("the rested command carries it", rested.level, 0.35)
+  T.eq("the sent one is not touched", cmd.level ~= 0.35, true)
+  T.eq("now is there", m:now().level, 0.35)
+  T.eq("no rest: the command as sent", m:sent(cmd, nil), cmd)
+  local c = make(nil, { level = 0.5, color = BLUE })
+  run(c, color(RED, 0))
+  c:sent(take(c)[1], { color = WARM })
+  T.eq("a color rest", c:now().color.x, WARM.x)
+end
+
+T.section("settle, finishAll, reset and seed")
+do
+  local m = make(nil, { level = 0.2, color = BLUE })
+  run(m, level(100, 1000))
+  take(m)
+  m:settle({ level = 0.3 })
+  T.eq("a settled level ends its ramp there", { m:now().levelRamping, m:now().level }, { false, 0.3 })
+  m:settle({ on = false })
+  T.eq("a settled off", m:now().on, false)
+  run(m, on(), choose(100))
+  take(m)
+  m:settle({})
+  T.eq("nothing to settle changes nothing", m:now().on, true)
+
+  local f = make(nil, { level = 0.2, color = BLUE })
+  run(f, level(100, 1000))
+  run(f, color(RED, 1000))
+  take(f)
+  f:finishAll()
+  T.eq("a changed fade ends both ramps at their targets", { f:now().levelRamping, f:now().colorRamping }, {
+    false,
+    false,
+  })
+  T.eq("at the targets", { f:view().level, f:view().color.x }, { 1, RED.x })
+  clock.run(2000)
+  T.eq("and sends nothing", #take(f), 0)
+
+  local r = make(nil, { level = 0.2 })
+  run(r, level(100, 1000))
+  take(r)
+  clock.run(500)
+  r:reset()
+  T.check("reset stops the ramp at the estimate", near(r:view().level, 0.6), r:view().level)
+  clock.run(1000)
+  T.eq("and its timers send nothing after", #take(r), 0)
+
+  local s = make(nil, { level = 0.5, color = RED })
+  T.eq("a seed is where the light is", { s:now().on, s:now().level, s:now().color.x }, { true, 0.5, RED.x })
+  run(s, level(80, 0))
+  T.eq("and the device is lit: no fromOff", take(s)[1].fromOff, false)
+  local unknown = make(nil, {})
+  T.eq("an unknown seed knows nothing", { unknown:now().on, unknown:now().level }, { false, nil })
+end
+
+T.section("a scene step's level with a color is one change that sets both")
+do
+  local m = make(nil, { level = 0.2, color = BLUE })
+  run(m, { kind = "level", level = 80, color = RED, rateMs = 1000, source = "scene" })
+  local cmd = take(m)
+  T.eq("one command", #cmd, 1)
+  T.eq("setting both", flags(cmd[1]), "change on=true L=1 C=1 off=0")
+  T.eq("over the step's rate", cmd[1].transitionMs, 1000)
+  T.eq("both ramps over it", { m:landing("level"), m:landing("color") }, { clock.now() + 1000, clock.now() + 1000 })
+  clock.run(500)
+  run(m, { kind = "stopLevel", source = "proxy" })
+  local stop = take(m)[1]
+  T.eq("its color is its own: a level stop lets it run on", { stop.setsColor, m:now().colorRamping }, { false, true })
+  local dark = make(nil, { level = 0 })
+  run(dark, { kind = "level", level = 0, color = RED, rateMs = 0, source = "scene" })
+  T.eq("an off with a color sets both", flags(take(dark)[1]), "change on=false L=1 C=1 off=0")
+end
+
+T.section("the proxy's follow-up, and presets in the view")
+do
+  local m = make(nil, { level = 0.5, color = BLUE })
+  run(m, color(RED, 0), { level = 50, color = BLUE, unchosen = false, followUp = true })
+  T.eq("a follow-up moves nothing", #take(m), 0)
+  run(m, { kind = "level", level = 70, rateMs = 0, presetId = 3, source = "proxy" })
+  take(m)
+  T.eq("a level preset shows in the view", m:view().levelPreset, 3)
+  run(m, level(20, 0))
+  T.eq("another level clears it", m:view().levelPreset, nil)
+  run(m, { kind = "color", color = RED, rateMs = 0, presetId = 5, presetOrigin = 1, source = "proxy" })
+  T.eq("a color preset with its origin", { m:view().colorPreset, m:view().colorPresetOrigin }, { 5, 1 })
+  run(m, off(0))
+  take(m)
+  run(m, on(), { level = 100, color = BLUE, unchosen = false, followUp = false, presetId = 7, presetOrigin = 1 })
+  take(m)
+  T.eq("an on mode's preset rides the on", { m:view().colorPreset, m:view().colorPresetOrigin }, { 7, 1 })
+end
+
+T.section("every flag combination Motion emits")
+do
+  local cases = {
+    { "on from off, no color news", device({ color = false, cct = false }), { level = 0 }, on(), choose(100) },
+    { "on from off in a new on color", device(), { level = 0, color = BLUE }, on(), choose(100, RED) },
+    {
+      "on from off on a hold device",
+      device({ colorWhileOff = "hold" }),
+      { level = 0, color = BLUE },
+      on(),
+      choose(100),
+    },
+    { "a level while on", device(), { level = 0.2, color = BLUE }, level(80, 0) },
+    {
+      "a level while on with Dim-To-Warm's new mix",
+      device(),
+      { level = 0.2, color = BLUE },
+      level(80, 0),
+      choose(80, RED, true),
+    },
+    { "a color while on", device(), { level = 0.5, color = BLUE }, color(RED, 0) },
+    { "an off", device(), { level = 0.5, color = BLUE }, off(0) },
+    {
+      "an off with a color",
+      device(),
+      { level = 0.5, color = BLUE },
+      { kind = "level", level = 0, color = RED, source = "scene" },
+    },
+    { "a color for a light that stays off", device(), { level = 0, color = BLUE }, color(RED, 0) },
+    {
+      "a color for an off hold device",
+      device({ colorWhileOff = "hold" }),
+      { level = 0, color = BLUE },
+      color(RED, 0),
+    },
+  }
+  local want = {
+    "change on=true L=1 C=0 off=1",
+    "change on=true L=1 C=1 off=1",
+    "change on=true L=1 C=1 off=1",
+    "change on=true L=1 C=0 off=0",
+    "change on=true L=1 C=1 off=0",
+    "change on=true L=0 C=1 off=0",
+    "change on=false L=1 C=0 off=0",
+    "change on=false L=1 C=1 off=0",
+    "change on=false L=0 C=1 off=0",
+    "nothing",
+  }
+  for i, case in ipairs(cases) do
+    local m = make(case[2], case[3])
+    run(m, case[4], case[5])
+    local cmds = take(m)
+    T.eq(case[1], cmds[1] and flags(cmds[1]) or "nothing", want[i])
+  end
+end
+
+T.section("a held color: a hold device's on carries it, and only it sets the color from off")
+do
+  local hold = make(device({ colorWhileOff = "hold" }), { level = 0, color = BLUE })
+  T.eq("after a restart an off light's color counts as held", hold:now().colorHeld, true)
+  run(hold, on(0), choose(100))
+  local cmds = take(hold)
+  T.eq("the on sets it", flags(cmds[1]), "change on=true L=1 C=1 off=1")
+  T.eq("and the light is no longer holding", hold:now().colorHeld, false)
+  run(hold, off(0))
+  take(hold)
+  T.eq("an off holds nothing", hold:now().colorHeld, false)
+  run(hold, on(0), choose(100))
+  T.eq(
+    "an on with no held color and no on mode's comes on in the color it kept",
+    flags(take(hold)[1]),
+    "change on=true L=1 C=0 off=1"
+  )
+  run(hold, off(0))
+  take(hold)
+  run(hold, color(RED, 0))
+  T.eq("a color for the off light is told, not sent", #take(hold), 0)
+  T.eq("so it is held", hold:now().colorHeld, true)
+  hold:settle({ on = true, level = 0.5 })
+  T.eq("another hand lighting it ends the hold", hold:now().colorHeld, false)
+  local send = make(device(), { level = 0, color = BLUE })
+  T.eq("a send device never holds", send:now().colorHeld, false)
+  run(send, on(0), choose(100))
+  T.eq("so its on keeps the color it has", flags(take(send)[1]), "change on=true L=1 C=0 off=1")
+end
+
+T.section("the view's power is Motion's, not the estimate's")
+do
+  local m = make()
+  run(m, level(80, 1000), choose(80))
+  take(m)
+  T.eq("a rated on from off is on from its first moment", { m:view().on, m:view().level }, { true, 0 })
+  local f = make(nil, { level = 0.8 })
+  run(f, off(1000))
+  take(f)
+  clock.run(400)
+  T.check("a fade to off is off while it still shows light", not f:view().on and f:view().level > 0, f:view())
+  clock.run(600)
+end
+
+T.section("settle drops a preset only when the value it set is replaced")
+do
+  local m = make(nil, { level = 0.5, color = BLUE })
+  run(m, { kind = "color", color = RED, rateMs = 0, presetId = 3, presetOrigin = 2, source = "proxy" })
+  run(m, { kind = "level", level = 40, rateMs = 0, presetId = 7, source = "proxy" })
+  take(m)
+  m:settle({ color = RED, level = m:now().level })
+  T.eq("an echo of the same values keeps both", { m:view().colorPreset, m:view().levelPreset }, { 3, 7 })
+  m:settle({ color = BLUE })
+  T.eq("another hand's color drops the color preset", { m:view().colorPreset, m:view().colorPresetOrigin }, {})
+  T.eq("and keeps the level's", m:view().levelPreset, 7)
+  m:settle({ level = 0.9 })
+  T.eq("another hand's level drops the level preset", m:view().levelPreset, nil)
+end
+
+T.section("a seeded sweep: every command keeps the contract's rules")
+do
+  local seed = 20261112
+  local function rand(n)
+    seed = (seed * 1103515245 + 12345) % 2147483648
+    return seed % n
+  end
+  local colors = { RED, BLUE, WARM, { x = 0.3, y = 0.3, mode = "cct", kelvin = 9000 } }
+  local devices = {
+    device(),
+    device({ fade = PRE_ON }),
+    device({ fade = OWN }),
+    device({ fade = WALK }),
+    device({ colorWhileOff = "hold" }),
+    device({ dims = false, color = false, cct = false }),
+    device({ color = false }),
+    device({ fade = { kind = "device", curve = "smootherstep", preOn = true, retimes = true, maxMs = 3000 } }),
+    device({ fade = RETIMES }),
+    device({ fade = RETIMES, colorWhileOff = "hold" }),
+  }
+  local broken = {}
+  local count = 0
+  for d, dev in ipairs(devices) do
+    local m = make(dev, { level = 0 })
+    local wire = false
+    local function check(cmd, what, heldBefore)
+      count = count + 1
+      local problems = {}
+      if not (cmd.setsLevel or cmd.setsColor) then
+        problems[#problems + 1] = "changes nothing"
+      end
+      if cmd.fromOff ~= (cmd.kind ~= "stop" and cmd.on and not wire) then
+        problems[#problems + 1] = "fromOff wrong"
+      end
+      if cmd.fromOff and not cmd.setsLevel then
+        problems[#problems + 1] = "fromOff without setsLevel"
+      end
+      if not cmd.setsLevel and cmd.on ~= wire then
+        problems[#problems + 1] = "power changed without setsLevel"
+      end
+      if dev.colorWhileOff == "hold" and not cmd.on and not cmd.setsLevel then
+        problems[#problems + 1] = "a color sent to an off hold device"
+      end
+      if heldBefore and cmd.fromOff and not cmd.setsColor then
+        problems[#problems + 1] = "a hold device's on without its held color"
+      end
+      if dev.fade.kind ~= "device" and cmd.transitionMs ~= 0 then
+        problems[#problems + 1] = "a timed command to an own or walk device"
+      end
+      if cmd.kind == "preOn" and (cmd.transitionMs ~= 0 or not dev.fade.preOn) then
+        problems[#problems + 1] = "a timed or unasked pre-on"
+      end
+      if (cmd.color == nil) ~= not (dev.color or dev.cct) then
+        problems[#problems + 1] = "color presence wrong"
+      end
+      if cmd.color and cmd.color.mode == "cct" and not (cmd.color.kelvin >= 2000 and cmd.color.kelvin <= 6500) then
+        problems[#problems + 1] = "a Kelvin out of range"
+      end
+      if cmd.level < 0 or cmd.level > 1 then
+        problems[#problems + 1] = "a level out of 0-1"
+      end
+      if #problems > 0 then
+        broken[#broken + 1] =
+          string.format("device %d after %s: %s (%s)", d, what, table.concat(problems, ", "), flags(cmd))
+      end
+      wire = cmd.on
+    end
+    for _ = 1, 300 do
+      local r = rand(10)
+      local intent, choice
+      if r == 0 then
+        intent, choice =
+          on(rand(2) == 0 and 0 or 800), choose(1 + rand(100), rand(2) == 0 and colors[1 + rand(4)] or nil)
+      elseif r == 1 then
+        intent = off(rand(2) == 0 and 0 or 800)
+      elseif r == 2 then
+        intent, choice = { kind = "toggle", rateMs = rand(600), source = "proxy" }, choose(1 + rand(100))
+      elseif r <= 4 then
+        intent = level(rand(101), rand(1500))
+      elseif r == 5 then
+        intent = color(colors[1 + rand(4)], rand(1500))
+      elseif r == 6 then
+        intent = { kind = "stopLevel", source = "proxy" }
+      elseif r == 7 then
+        intent = { kind = "stopColor", source = "proxy" }
+      elseif r == 8 then
+        intent =
+          { kind = "level", level = rand(101), color = colors[1 + rand(4)], rateMs = rand(900), source = "scene" }
+      else
+        local values = { on = rand(2) == 0, level = (1 + rand(255)) / 255 }
+        m:settle(values)
+        wire = values.on
+      end
+      if intent then
+        local heldBefore = m:now().colorHeld
+        run(m, intent, choice)
+        for _, cmd in ipairs(take(m)) do
+          check(cmd, intent.kind, heldBefore)
+        end
+      end
+      clock.run(rand(400))
+      for _, cmd in ipairs(take(m)) do
+        check(cmd, "a step")
+      end
+    end
+    m:finishAll()
+  end
+  T.check(string.format("%d commands, each within the rules", count), #broken == 0, broken[1])
+end
+
+clock.restore()
+T.finish()

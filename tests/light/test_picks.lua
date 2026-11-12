@@ -1,0 +1,191 @@
+-- lib.light.picks: the next-on color, the on cycle's pick and the follow-up window, as intents and another
+-- hand's changes move them, and what OnColor makes of them.
+
+local T = require("testlib")
+local F = require("c4_fixtures")
+local Color = require("lib.light.color")
+local OnColor = require("lib.light.oncolor")
+local Picks = require("lib.light.picks")
+
+local RED = { x = 0.6, y = 0.32, mode = "xy" }
+local BLUE = { x = 0.15, y = 0.06, mode = "xy" }
+local DEVICE = { dims = true, color = true, cct = { minK = 2000, maxK = 6500 } }
+
+local OFF = { on = false, level = 0.5, levelRamping = false, colorRamping = false }
+local FADING_OFF = { on = false, level = 0, levelRamping = true, colorRamping = false }
+
+--- The light on, heading for a color.
+local function lit(color)
+  return { on = true, level = 0.5, color = color, levelRamping = false, colorRamping = false }
+end
+
+local function intent(kind, fields)
+  local i = { kind = kind, source = "proxy" }
+  for k, v in pairs(fields or {}) do
+    i[k] = v
+  end
+  return i
+end
+
+local function color(c, fields)
+  local i = intent("color", fields)
+  i.color = c
+  return i
+end
+
+--- Dim-To-Warm between two whites, so a level while on carries a color unless one was picked.
+local function dimToWarm()
+  local wx, wy = Color.kelvinToXY(2700)
+  local cx, cy = Color.kelvinToXY(5000)
+  return {
+    defaultOn = true,
+    onLo = 1,
+    onHi = 100,
+    presetLevel = 100,
+    colorOnMode = "fade",
+    dimColor = { x = wx, y = wy, mode = "cct" },
+    onColor = { x = cx, y = cy, mode = "cct" },
+  }
+end
+
+--- The choice for an intent with these picks, under Dim-To-Warm.
+local function choose(picks, i, now)
+  return OnColor.choose(i, { now = now, device = DEVICE, settings = dimToWarm(), picks = picks:forOn() })
+end
+
+local function same(pick, c)
+  return pick ~= nil and Color.alike(pick.color, c)
+end
+
+local clock = F.virtualClock()
+
+T.section("DRV-163: a color set while off is the next on's, and the cycle's pick until off")
+do
+  local p = Picks.new()
+  p:noted(color(RED, { presetId = 5, presetOrigin = 2 }), OFF)
+  T.check("a color while off waits for the next on", same(p.nextOn, RED) and p.picked == nil, p)
+  local on = intent("on")
+  p:noted(on, OFF)
+  T.check("the on takes it: the next-on color becomes the pick", p.nextOn == nil and same(p.picked, RED), p)
+  local choice = choose(p, on, OFF)
+  T.check("and the on comes on in it, ahead of Dim-To-Warm", choice and Color.alike(choice.color, RED), choice)
+  T.eq("as the preset that set it", { choice.presetId, choice.presetOrigin, choice.unchosen }, { 5, 2, false })
+  T.eq("a level while lit keeps it: no Dim-To-Warm color", choose(p, intent("level", { level = 80 }), lit(RED)), nil)
+  p:noted(intent("off"), lit(RED))
+  T.eq("the off ends the pick", p.picked, nil)
+  local after = choose(p, intent("level", { level = 80 }), lit(RED))
+  T.check("so a level of the next cycle carries Dim-To-Warm again", after ~= nil and after.color ~= nil, after)
+end
+
+T.section("a color set while on is the cycle's pick")
+do
+  local p = Picks.new()
+  clock.run(1000)
+  p:noted(color(BLUE), lit(RED))
+  T.check("picked", same(p.picked, BLUE) and p.nextOn == nil, p)
+  p:noted(intent("toggle"), lit(BLUE))
+  T.eq("a toggle while on is an off, and ends it", p.picked, nil)
+  p:noted(color(BLUE), lit(RED))
+  p:noted(intent("level", { level = 0 }), lit(BLUE))
+  T.eq("and so does a level of 0", p.picked, nil)
+end
+
+T.section("K05: a color set while off stays a pick when another client turns the light on")
+do
+  local p = Picks.new()
+  p:noted(color(RED), OFF)
+  p:foreign({ "on", "level" })
+  T.check("the held color is now the pick of a light another hand lit", same(p.picked, RED) and p.nextOn == nil, p)
+  T.eq("so no Dim-To-Warm color at the next level", choose(p, intent("level", { level = 60 }), lit(BLUE)), nil)
+  p:foreign({ "on" })
+  T.eq("another hand's off then ends that pick", p.picked, nil)
+end
+
+T.section("another hand's color voids both picks")
+do
+  local p = Picks.new()
+  p:noted(color(RED), OFF)
+  p:foreign({ "color" })
+  T.eq("the next-on color goes", p.nextOn, nil)
+  p:noted(color(BLUE), lit(RED))
+  p:foreign({ "on", "color" })
+  T.eq("and with an on in the same report, the pick goes too", { p.picked, p.nextOn }, {})
+  p:noted(color(BLUE), lit(RED))
+  p:foreign({ "level" })
+  T.check("another hand's level leaves the pick", same(p.picked, BLUE), p)
+end
+
+T.section("K06: a color set during a fade to off is a pick for the next on")
+do
+  local p = Picks.new()
+  p:noted(intent("off", { rateMs = 3000 }), lit(RED))
+  p:noted(color(BLUE), FADING_OFF)
+  T.check("it waits for the next on", same(p.nextOn, BLUE) and p.picked == nil, p)
+  local on = intent("on")
+  p:noted(on, FADING_OFF)
+  T.check("an on that reverses the fade comes on in it", same(p.picked, BLUE), p)
+  local choice = choose(p, on, FADING_OFF)
+  T.check("as its color", choice and Color.alike(choice.color, BLUE), choice)
+end
+
+T.section("a stop in a fade to off leaves the light lit, and the held color its pick")
+do
+  local p = Picks.new()
+  p:noted(intent("off", { rateMs = 3000 }), lit(RED))
+  p:noted(color(BLUE), FADING_OFF)
+  p:noted(intent("stopLevel"), FADING_OFF)
+  T.check("the stop makes it the pick", same(p.picked, BLUE) and p.nextOn == nil, p)
+  local q = Picks.new()
+  q:noted(color(BLUE), OFF)
+  q:noted(intent("stopLevel"), OFF)
+  T.check("a stop of a light already off holds it still", same(q.nextOn, BLUE) and q.picked == nil, q)
+end
+
+T.section("the proxy's follow-up of an on is no pick, for 250 ms")
+do
+  local p = Picks.new()
+  p:noted(intent("on"), OFF)
+  clock.run(100)
+  T.check("the window is open", p:forOn().followUp ~= nil and not p:forOn().followUp.held, p:forOn())
+  p:noted(color(RED), lit(RED))
+  T.eq("the color the on chose, sent back, is no pick", p.picked, nil)
+  clock.run(200)
+  T.eq("past 250 ms the window is shut", p:forOn().followUp, nil)
+  p:noted(color(RED), lit(RED))
+  T.check("and the same color then is a pick", same(p.picked, RED), p)
+end
+
+T.section("a Navigator On that takes the held color: its follow-up names a preset, and is no pick")
+do
+  local p = Picks.new()
+  p:noted(color(RED), OFF)
+  local tap = intent("level", { level = 100, presetId = 1 })
+  p:noted(tap, OFF)
+  local window = p:forOn().followUp
+  T.check("the window follows a held color", window and window.held, window)
+  local followUp = color(BLUE, { presetId = 1, presetOrigin = 1 })
+  T.eq("the follow-up is the proxy's", choose(p, followUp, lit(RED)).followUp, true)
+  p:noted(followUp, lit(RED))
+  T.check("and the pick stays the held color", same(p.picked, RED), p)
+  clock.run(300)
+
+  local q = Picks.new()
+  q:noted(color(RED), OFF)
+  q:noted(intent("on"), OFF)
+  T.eq("programming's On names no preset, so its window follows no held color", q:forOn().followUp.held, false)
+  q:noted(color(BLUE, { presetId = 1, presetOrigin = 1 }), lit(RED))
+  T.check("and a color naming a preset after it is a pick", same(q.picked, BLUE), q)
+end
+
+T.section("a loss or Reset Driver ends every pick")
+do
+  local p = Picks.new()
+  p:noted(color(RED), OFF)
+  p:noted(intent("on"), OFF)
+  p:noted(color(BLUE), OFF)
+  p:reset()
+  T.eq("nothing held", { p.nextOn, p.picked, p:forOn().followUp }, {})
+end
+
+clock.restore()
+T.finish()
