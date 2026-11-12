@@ -3,6 +3,7 @@
 --- ends or where the light has got to), and its transport can be slow, stale, lossy or silent. M.world puts
 --- one behind the fake proxy on a virtual clock, started and online.
 
+local Color = require("lib.light.color")
 local F = require("c4_fixtures")
 local Fake = require("light_proxy_fake")
 
@@ -92,6 +93,7 @@ end
 --- @field level number|nil The device's level at the start, 0 to 1.
 --- @field on boolean|nil Whether the device is on at the start.
 --- @field startColor LightColor|nil The device's color at the start.
+--- @field kelvinWhites boolean|nil A white on the locus is reported as a Kelvin, whatever form it was sent in.
 
 --- @class MemoryDevice
 --- @field o MemoryOptions
@@ -374,6 +376,10 @@ function Device:values(now, target)
   end
   if o.color or o.cct then
     st.color = copy(target and (self.ctr and self.ctr.to or self.color) or self:shownColor(now))
+    local c = st.color
+    if o.kelvinWhites and c and c.mode ~= "cct" and Color.onLocus(c.x, c.y, Color.WHITE_MIN_K, Color.WHITE_MAX_K) then
+      st.color = { x = c.x, y = c.y, mode = "cct", kelvin = Color.kelvin(c.x, c.y) }
+    end
   end
   return st
 end

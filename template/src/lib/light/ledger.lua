@@ -251,7 +251,7 @@ function Ledger:due(aspect, now)
     window.held ~= nil
     and feedback.refresh
     and not window.asked
-    and not (newest and self:_same(aspect, window.held, newest.value))
+    and not (newest and self:_echoes(aspect, window.held, newest.value))
     and (feedback.shows == "position" or (newest ~= nil and window.kind == "command"))
   then
     -- What was held isn't the newest command's: a position on its way, or a report from before the command,
@@ -434,7 +434,7 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
     window.kind == "asked"
     and (
       kind == "final"
-      or (kind == "push" and (feedback.shows ~= "position" or self:_same(aspect, value, newest and newest.value)))
+      or (kind == "push" and (feedback.shows ~= "position" or self:_echoes(aspect, value, newest and newest.value)))
     )
   then
     if self:_waitForLevel(aspect, window, value, report, now) then
@@ -465,7 +465,7 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
   -- The on rides the level: it is moving while the level's ramp runs.
   local ramping = (aspect ~= "color" and now.levelRamping) or (aspect == "color" and now.colorRamping)
   -- An echo of the newest command is the light's own.
-  if newest and self:_same(aspect, value, newest.value) then
+  if newest and self:_echoes(aspect, value, newest.value) then
     window.held, window.heard, window.echoed = nil, true, true
     if feedback.shows == "position" and (aspect ~= "color" or not ramping) then
       -- The light is at the change's end: where the command sent it, not the report's rounding of it. A color
@@ -485,7 +485,7 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
   local walked = self.device.fade.kind == "walk" and ramping and aspect ~= "on" and window.heard
   if
     not window.echoed
-    and (self:_older(aspect, window, value) or (not walked and self:_same(aspect, value, window.before)))
+    and (self:_older(aspect, window, value) or (not walked and self:_echoes(aspect, value, window.before)))
   then
     -- An off light's level is only the level kept, so an earlier command's level, late, is dropped and its
     -- deadline can't light the light.
@@ -760,7 +760,7 @@ function Ledger:_settle(aspect, value, out)
   -- A value that matches the newest sent, in device units, is that command's: not the report's rounding of it.
   local window = self.windows[aspect]
   local newest = window and window.sent[#window.sent]
-  if newest and self:_same(aspect, value, newest.value) then
+  if newest and self:_echoes(aspect, value, newest.value) then
     value = newest.value
   end
   out.settle[aspect] = value
@@ -781,6 +781,22 @@ end
 -----------------------------------------------------------------------------------------------------
 -- Matching, in device units
 -----------------------------------------------------------------------------------------------------
+
+--- Whether a report carries a value sent, or held before a command: as _same, but a color in any mode, as a
+--- device may report the white it was sent in xy as a Kelvin.
+--- @private
+--- @param aspect LightAspect
+--- @param value LightAspectValue|nil
+--- @param sent LightAspectValue|nil
+--- @return boolean
+function Ledger:_echoes(aspect, value, sent)
+  if aspect ~= "color" or value == nil or sent == nil then
+    return self:_same(aspect, value, sent)
+  end
+  --- @cast value LightColor
+  --- @cast sent LightColor
+  return math.abs(value.x - sent.x) <= Color.TOLERANCE and math.abs(value.y - sent.y) <= Color.TOLERANCE
+end
 
 --- Whether two values of an aspect are one: an on exactly, a level at the device's steps, a color in the same
 --- mode and within Color.TOLERANCE in xy (a white and a full color at one xy are two).
@@ -815,7 +831,7 @@ end
 --- @return boolean
 function Ledger:_older(aspect, window, value)
   for i = #window.sent - 1, 1, -1 do
-    if self:_same(aspect, value, window.sent[i].value) then
+    if self:_echoes(aspect, value, window.sent[i].value) then
       return true
     end
   end
