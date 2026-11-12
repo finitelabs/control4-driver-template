@@ -1201,6 +1201,10 @@ do
   ledger:taken({ kind = "color", color = BLUE, source = "proxy" })
   T.eq("a color the library takes, held or sent, ends its wait", ledger.awaiting, {})
   ledger:reset()
+  ledger:heard({ kind = "push", on = true }, now)
+  ledger:taken({ kind = "level", level = 60, source = "proxy" })
+  T.eq("and so does a level", ledger.awaiting, { color = true })
+  ledger:reset()
   ledger:heard({ kind = "push", on = false }, now)
   ledger:reset()
   T.eq("a reset ends the wait", ledger.awaiting, {})
@@ -1208,6 +1212,15 @@ do
   T.eq("and its timer", #awaited, 1)
   ledger:heard({ kind = "push", on = true, level = 0.5, color = RED }, now)
   T.eq("a whole first report awaits nothing", ledger.awaiting, {})
+  ledger:reset()
+  ledger:declare(device({ waitMs = 0 }))
+  ledger:heard({ kind = "push", on = true }, now)
+  clock.run(1)
+  T.eq(
+    "a wait of 0 ends a millisecond on",
+    awaited[2],
+    { settle = {}, foreign = {}, ask = false, first = { "level", "color" } }
+  )
   ledger:closeAll()
 end
 

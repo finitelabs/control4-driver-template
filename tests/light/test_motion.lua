@@ -1411,6 +1411,31 @@ do
   clock.run(1000)
 end
 
+T.section("a ramp due as a command re-arms its timer ends a millisecond on")
+do
+  local m = make(nil, { level = 0.5, color = RED })
+  -- Set before the ramp's own timer, the command runs first in the millisecond the ramp lands.
+  clock.at(1000, function()
+    run(m, level(80, 2000))
+  end)
+  run(m, color(BLUE, 1000))
+  clock.run(1000)
+  T.check("a level command finds the color ramp due", m.colorRamp ~= nil and m:view().colorMs == 0, m.colorRamp)
+  clock.run(1)
+  T.eq("and the color ramp ends", m.colorRamp, nil)
+  clock.run(2000)
+  m = make(nil, { level = 0.5, color = RED })
+  clock.at(1000, function()
+    run(m, color(BLUE, 2000))
+  end)
+  run(m, level(80, 1000))
+  clock.run(1000)
+  T.check("a color command finds the level ramp due", m.levelRamp ~= nil and m:view().levelMs == 0, m.levelRamp)
+  clock.run(1)
+  T.eq("and the level ramp ends", m.levelRamp, nil)
+  clock.run(2000)
+end
+
 T.section("with no color known a color ramps from D65, alone and with a level")
 do
   local d65 = Color.forDevice(Color.D65, device())
