@@ -895,6 +895,57 @@ do
   T.check(string.format("%d commands, each within the rules", count), #broken == 0, broken[1])
 end
 
+T.section("the contract's cases: Motion sends each case's commands, as adapters' wire tests take them")
+do
+  local Cases = require("light_contract_cases")
+  --- Whether two values agree, numbers within 1e-9.
+  local function alike(a, b)
+    if type(a) == "number" and type(b) == "number" then
+      return math.abs(a - b) <= 1e-9
+    end
+    if type(a) ~= "table" or type(b) ~= "table" then
+      return a == b
+    end
+    for k, v in pairs(a) do
+      if not alike(v, b[k]) then
+        return false
+      end
+    end
+    for k in pairs(b) do
+      if a[k] == nil then
+        return false
+      end
+    end
+    return true
+  end
+  for _, case in ipairs(Cases.list) do
+    --- @type LightContractSent[]
+    local sent = {}
+    local light = {}
+    local m = Motion.new(light)
+    local start = clock.now()
+    local function keepAt(cmds)
+      for _, cmd in ipairs(cmds) do
+        sent[#sent + 1] = { at = clock.now() - start, command = m:sent(cmd, nil) }
+      end
+    end
+    function light._rampEnded(_, aspect)
+      keepAt(m:ended(aspect))
+    end
+    function light._walkStep()
+      keepAt(m:step(case.settings))
+    end
+    m:declare(case.device)
+    m:seed(case.seed)
+    for _, step in ipairs(case.steps) do
+      clock.run(step.at - (clock.now() - start))
+      keepAt(m:command(step.intent, step.choice, case.settings))
+    end
+    clock.run(case.runMs)
+    m:reset()
+    T.check(case.name, alike(sent, case.commands), T.show(sent))
+  end
+end
 
 clock.restore()
 T.finish()

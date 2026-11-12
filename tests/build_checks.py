@@ -337,7 +337,10 @@ def cloud_monitoring(render):
                 files = members(render, c4z)
                 if build.startswith("drivercentral"):
                     problems += encryption_problems(c4z, files)
-                    if CLOUD_MONITORING_PROPERTY not in property_names(files.get("driver.xml", b"")):
+                    # Only the example driver carries the probe; another driver in the render, such as
+                    # example_light, has no Cloud Monitoring property of its own.
+                    probed = Path(c4z).stem == EXAMPLE.name
+                    if probed and CLOUD_MONITORING_PROPERTY not in property_names(files.get("driver.xml", b"")):
                         problems.append(f"{c4z} has no {CLOUD_MONITORING_PROPERTY} property")
                     if holds(files, values):
                         problems.append(f"{c4z} holds a secret in plain text")
