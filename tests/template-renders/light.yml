@@ -1,0 +1,3 @@
+# The Light V2 library and its own tests; with Cloud Monitoring, as every light repo has it.
+vendor_modules: light
+cloud_diagnostics: true
