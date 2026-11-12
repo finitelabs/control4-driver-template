@@ -168,6 +168,16 @@ function P.install(clock, opts)
   for id, value in pairs(opts.variables or {}) do
     p.vars[tostring(id)] = { value = value }
   end
+  -- After a restart the proxy shows what its variables hold.
+  local level = tonumber(p.vars["1001"] and p.vars["1001"].value)
+  if level then
+    p.level, p.lit = level, level > 0
+    p.lastLit = p.lit and level or nil
+  end
+  local x, y, mode = tostring(p.vars["1200"] and p.vars["1200"].value or ""):match("^([^,]+),([^,]+),([^,]+)$")
+  if x then
+    p.color = { x = x, y = y, mode = mode }
+  end
   p.held = {}
   for key, value in pairs(opts.capabilities or {}) do
     p.held[key] = value

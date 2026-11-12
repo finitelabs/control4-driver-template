@@ -786,8 +786,16 @@ function C.run(T, rig)
       p:mark()
       rig.rest(h)
       h.clock.run(ms)
-      T.eq(name .. ": one Brightness Changed", p:count("LIGHT_BRIGHTNESS_CHANGED"), 1)
+      local levels, colors = p:count("LIGHT_BRIGHTNESS_CHANGED"), p:count("LIGHT_COLOR_CHANGED")
+      T.check(name .. ": the rest is told, each aspect once", levels <= 1 and colors <= 1 and levels + colors >= 1, {
+        levels = levels,
+        colors = colors,
+      })
       T.eq(name .. ": at the level the device rests at", p.level, percent(h))
+      local rested = xyOf(h.device.state().color)
+      if rested then
+        T.check(name .. ": in the color the device rests in", sameXY(p.color, rested), T.show(p.color))
+      end
       finish(h)
     end)
   end
