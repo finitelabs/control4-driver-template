@@ -383,16 +383,19 @@ def _mdformat(text: str, wrap: int) -> str:
 # A markdown link to another page beside the docs, with or without an anchor: no scheme or path.
 _PAGE_LINK_RE = re.compile(r"(?<!!)\[([^\]]*)\]\([\w.-]+\.html(?:#[\w.-]*)?\)")
 
+# A Support section's phone link, which a DriverCentral build fills in from SUPPORT_PHONE.
+SUPPORT_PHONE_LINK = "[%%SUPPORT_PHONE%%](tel:__SUPPORT_PHONE__)"
+
 
 def readme(input_path: Path, output_path: Path) -> None:
     text = input_path.read_text(encoding="utf-8")
     # Strip <style> blocks (screen-only chrome), then normalize.
     text = re.sub(r"<style\b[^>]*>.*?</style>", "", text, flags=re.S | re.I)
     text = _PAGE_LINK_RE.sub(r"\1", text)
-    # A README is committed, so the support phone number goes back to its placeholder.
+    # A README is committed, so it keeps the support phone placeholder, set or not.
     phone = build_secret("SUPPORT_PHONE", parse_env_file(TOOLS_DIR.parent / ".env"))
+    text = text.replace(f"[{phone}](tel:{phone})", SUPPORT_PHONE_LINK)
     if phone:
-        text = text.replace(f"tel:{phone}", "tel:__SUPPORT_PHONE__")
         text = text.replace(phone, "%%SUPPORT_PHONE%%")
     output_path.write_text(_mdformat(text, 80), encoding="utf-8")
 
