@@ -922,6 +922,16 @@ CASES["One attribute at a time, and walks"] = {
 
 CASES["Another hand, and fades on their way"] = {
   {
+    name = "beside the echo of an off of ours, the level is the one the light keeps for its next on, not news",
+    dev = { shows = "target" },
+    now = { on = true, level = 0.91 },
+    steps = {
+      { send = { on = false, level = 0.91, fromLevel = 0.91 }, land = 4000, now = { levelRamping = true } },
+      { hear = { kind = "push", on = false, level = 1 } },
+    },
+    want = { H() },
+  },
+  {
     name = "a level alone below where a fade to off started is the fade on its way: neither settled nor another hand's",
     dev = { shows = "position", refresh = true },
     now = { on = true, level = 0.8 },

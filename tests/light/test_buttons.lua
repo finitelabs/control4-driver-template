@@ -44,7 +44,8 @@ local function world(lo, hi)
   end
   local light = {}
   function light:_gateEnded()
-    local intent = w.buttons:gateEnded(w.now)
+    local now = w.now
+    local intent = w.buttons:gateEnded(now, w.view or { on = now.on, level = now.on and now.level or 0, levelMs = 0 })
     if intent then
       w.got[#w.got + 1] = { at = w.clock.now() - w.start, intent = intent }
     end
@@ -103,6 +104,21 @@ do
     T.eq(case[1] .. ": the hold at 250 ms", w.got[1] and { w.got[1].at, w.got[1].intent }, { 250, case[4] })
     w.clock.restore()
   end
+end
+
+T.section("a hold that starts in a fade is scaled from where the light has got to, not from the fade's end")
+do
+  local w = world()
+  w.now = at(50)
+  w.view = { on = true, level = 0.91, levelTarget = 0.5, levelMs = 3000 }
+  w.act(BOTTOM, PRESS)
+  w.clock.run(250)
+  T.eq(
+    "Bottom 91 to 0 takes 91 % of the hold rate",
+    w.got[1] and w.got[1].intent,
+    { kind = "level", level = 0, rateMs = math.floor(RATES.holdDown * 91 / 100 + 0.5), source = "button", ramp = true }
+  )
+  w.clock.restore()
 end
 
 T.section("a release stops a hold or a scene ramp still running, inside the gate or after it, and no other fade")

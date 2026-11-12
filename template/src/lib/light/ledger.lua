@@ -130,6 +130,9 @@ function Ledger:heard(report, now)
       -- A lit light below where its fade to off started is that fade on its way, held with its on, or alone
       -- from a device that reports one attribute at a time.
       history[#history + 1] = aspect
+    elseif aspect == "level" and value ~= nil and report.on == false and self:_ourOffOut() then
+      -- Beside an off while one of ours is out, the level is only the one the light keeps for its next on.
+      value = nil
     elseif value ~= nil and self:_weigh(aspect, value, report, now, out) == "history" then
       history[#history + 1] = aspect
     end
@@ -652,6 +655,15 @@ function Ledger:_walkUnheard(now)
   local level, color = self.windows.level, self.windows.color
   return (now.levelRamping == true and level ~= nil and level.kind == "command" and not level.heard)
     or (now.colorRamping == true and color ~= nil and color.kind == "command" and not color.heard)
+end
+
+--- Whether the newest command out for the on is an off of ours.
+--- @private
+--- @return boolean
+function Ledger:_ourOffOut()
+  local window = self.windows.on
+  local newest = window and window.kind ~= "learning" and window.sent[#window.sent]
+  return newest and newest.value == false or false
 end
 
 --- Whether a lit level is a fade to off on its way, on a device that reports where its light has got to: no
