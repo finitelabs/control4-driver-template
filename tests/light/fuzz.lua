@@ -20,6 +20,16 @@ local M = require("memory_light")
 local Fake = require("light_proxy_fake")
 local Range = require("lib.light.range")
 local log = require("lib.logging")
+local Light = require("lib.light")
+
+-- The ms each scene step of the running run went at: a step is a command of its own, sent at once.
+--- @type integer[]
+local sceneSteps = {}
+local sceneStep = Light._sceneStep
+function Light:_sceneStep(id)
+  sceneSteps[#sceneSteps + 1] = C4:GetTime()
+  return sceneStep(self, id)
+end
 
 local RUNS = tonumber(os.getenv("LIGHT_FUZZ_RUNS")) or 20000
 local SEED = tonumber(os.getenv("LIGHT_FUZZ_SEED")) or 1
@@ -265,6 +275,7 @@ end
 --- @field actions FuzzAction[]
 --- @field notes FakeProxyNote[] Every notify since the world was made, across restarts.
 --- @field flashes boolean|nil A flash scene was pushed, which repeats until stopped.
+--- @field sceneSteps integer[] The ms each scene step went at.
 --- @field sent LightCommand[] Every command the adapter was given, each with `at`.
 --- @field reports MemoryReport[]
 --- @field reached table<integer, boolean> The device's C4 levels, as it passed them.
@@ -1192,9 +1203,15 @@ local function judgeSends(run)
       end
     end
     -- A run's changes last at most LONGEST: scene steps chain, so allow each of up to four. A flash repeats
-    -- until something stops it.
+    -- until something stops it, and each scene step is a command that goes at once with a walk's first step.
     local span = run.flashes and to - from or math.min(to - from, 4 * LONGEST)
-    local bound = math.floor(span / stepMs) + 2 + 2 * 4
+    local steps = 0
+    for _, at in ipairs(run.sceneSteps) do
+      if at >= from and at < to then
+        steps = steps + 1
+      end
+    end
+    local bound = math.floor(span / stepMs) + 2 + 2 * 4 + 2 * steps
     run.judged.sends = true
     if n > bound then
       violate(run, "sends", "%d commands between %d and %d on a %d ms walk", n, from, to, stepMs)
@@ -1402,6 +1419,8 @@ local function fuzz(seed)
       return nil
     end
   end
+  sceneSteps = {}
+  run.sceneSteps = sceneSteps
   local ok, err = xpcall(function()
     run.w = M.world(o)
   end, debug.traceback)

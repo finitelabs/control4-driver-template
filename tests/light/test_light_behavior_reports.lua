@@ -332,6 +332,24 @@ case(function()
   w.restore()
 end)
 
+T.section("a color held for the next on, after a first report that carries none, is told at once")
+case(function()
+  local w = K.world(K.HOLD, {}, 0)
+  w.m.dropReads = true
+  w.light:reset()
+  report(w, { on = false })
+  w.run(100)
+  w.proxy:mark()
+  w.m.sent = {}
+  K.color(w, K.GREEN.x, K.GREEN.y)
+  w.run(100)
+  T.eq("the proxy is told it at once", #K.toldColors(w), 1)
+  T.eq("and the light is sent nothing", #w.m.sent, 0)
+  w.run(6000)
+  T.eq("nor told again when the wait ends", #K.toldColors(w), 1)
+  w.restore()
+end)
+
 T.section("one aspect per report: a level that never follows the first On is told as held once the wait ends")
 case(function()
   local w = K.world(K.ZB, {}, 80)
@@ -402,4 +420,26 @@ for _, base in ipairs({ K.ES, K.ZB, K.WALK, K.OWN }) do
     w.restore()
   end)
 end
+
+T.section("a re-timing target device's push from before an off is history: the light is never told lit after it")
+case(function()
+  -- It reports its targets, may report up to 2.5 s late, and re-times every channel.
+  local base = K.copy(K.ES)
+  base.fade = { kind = "device", curve = "linear", preOn = true, retimes = true, maxMs = 86400000 }
+  base.feedback = { shows = "target", waitMs = 2500, refresh = true }
+  local w = quiet(base, 35)
+  local warm = { x = 0.3805, y = 0.3768, mode = "cct" }
+  K.color(w, warm.x, warm.y, 0, K.CCT)
+  K.target(w, 0, 0)
+  w.run(56)
+  -- The device's answer to the color, from before the off, at a level a few steps from the one the library keeps.
+  report(w, { on = true, level = 92 / 255, color = warm })
+  T.eq("the stale push tells nothing", w.proxy:changed(), { 0 })
+  w.run(1000)
+  report(w, { on = false, level = 92 / 255, color = warm })
+  w.run(5000)
+  T.eq("the off is told once, and nothing after", w.proxy:changed(), { 0 })
+  T.eq("the device is off", K.device(w).on, false)
+  w.restore()
+end)
 T.finish()

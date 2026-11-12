@@ -461,6 +461,16 @@ for _, hasSocket in ipairs({ false, true }) do
       fired = fired + 1
     end)
 
+    for _, delay in ipairs({ 0, -1 }) do
+      local ok, err = pcall(C4.SetTimer, C4, delay, function() end, false)
+      T.eq(label .. ": a delay of " .. delay .. " ms is refused as Director refuses it", { ok, err }, {
+        false,
+        "Invalid argument value",
+      })
+    end
+    T.eq(label .. ": and SetTimer makes no timer for it", SetTimer("zero", 0, function() end), nil)
+    T.check(label .. ": nor a named slot", Timer["zero"] == nil)
+
     T.check(label .. ": SetTimer registers the handle", TimerFunctions[t] ~= nil)
     T.check(label .. ": SetTimer records the named slot", Timer["ping"] == t)
 
@@ -531,6 +541,12 @@ do
   clock.run(10)
   T.eq("an error inside a timer callback is recorded", #clock.errors, 1)
   T.contains("with its message", clock.errors[1] or "", "boom")
+
+  local ok, err = pcall(C4.SetTimer, C4, 0, note("never"))
+  T.eq("a delay of 0 is refused as Director refuses it", { ok, err }, { false, "Invalid argument value" })
+  T.contains("and recorded, as global/timer.lua only prints the refusal", clock.errors[2] or "", "delay of 0")
+  clock.run(10)
+  T.check("and never fires", not table.concat(fired, " "):find("never"), fired)
 
   clock.restore()
   T.check("restore puts C4:SetTimer back", C4.SetTimer == realSetTimer)

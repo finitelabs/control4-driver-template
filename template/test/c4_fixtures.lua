@@ -222,6 +222,11 @@ function F.virtualClock(opts)
   end)
 
   function C4:SetTimer(delayMs, callback, repeating)
+    if type(delayMs) ~= "number" or delayMs <= 0 then
+      -- Refused as Director refuses it. Recorded too, as global/timer.lua only prints the refusal.
+      clock.errors[#clock.errors + 1] = "C4:SetTimer refused a delay of " .. tostring(delayMs) .. " ms"
+      error("Invalid argument value", 0)
+    end
     local handle = newproxy(true)
     local entry
     local function arm()

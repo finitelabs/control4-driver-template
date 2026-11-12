@@ -118,20 +118,22 @@ do
   T.eq("the second waits out its delay after the first's rate", #w.got, 1)
   w.clock.run(1)
   T.eq("and goes at 7500", w.got[2].at, 7500)
-  w.clock.run(699)
+  w.clock.run(700)
   T.eq("a step that only waits gives no intent, and the next waits on it", #w.got, 2)
-  w.clock.run(1)
-  T.eq("then the next goes", { w.got[3].at, w.got[3].intent.level }, { 8200, 80 })
+  w.clock.run(2)
+  -- Each step with no rate hands on after 1 ms, the shortest timer Director takes.
+  T.eq("then the next goes", { w.got[3] and w.got[3].at, w.got[3] and w.got[3].intent.level }, { 8202, 80 })
   w.clock.restore()
 end
 
-T.section("steps with no delay and no rate each go, in order")
+T.section("steps with no delay and no rate each go, in order, 1 ms apart: the shortest timer Director takes")
 do
   local w = world()
   w.push(1, { { level = 10 }, { level = 20 }, { level = 30 } })
   w.activate(1)
-  w.clock.run(0)
+  w.clock.run(2)
   T.eq("every step gave its own intent", w.levels(), { 10, 20, 30 })
+  T.eq("each a ms after the one before", { w.got[2] and w.got[2].at, w.got[3] and w.got[3].at }, { 1, 2 })
   w.clock.run(10000)
   T.eq("and nothing more", #w.got, 3)
   w.clock.restore()

@@ -922,6 +922,21 @@ CASES["One attribute at a time, and walks"] = {
 
 CASES["Another hand, and fades on their way"] = {
   {
+    name = "a target device's push from before our off: its on held as history carries that state's level, never told lit",
+    dev = { waitMs = 2500, refresh = true, retimes = true },
+    now = { level = 92 / 255, color = RED },
+    steps = {
+      { send = { color = { x = 0.3805, y = 0.3768, mode = "cct" } } },
+      { run = 20 },
+      -- The level the library keeps, a few steps from the light's own after a hold's estimate.
+      { send = { on = false, level = 92 / 255, fromLevel = 92 / 255 } },
+      { run = 36 },
+      { hear = { kind = "push", on = true, level = 89 / 255, color = { x = 0.3805, y = 0.3768, mode = "cct" } } },
+    },
+    -- The device's answer to the color's frame, from before the off; its level is not the one the library keeps.
+    want = { H() },
+  },
+  {
     name = "beside the echo of an off of ours, the level is the one the light keeps for its next on, not news",
     dev = { shows = "target" },
     now = { on = true, level = 0.91 },
@@ -1183,6 +1198,10 @@ do
   ledger:reset()
   ledger:heard({ kind = "push", on = false }, now)
   T.eq("an off alone awaits only the color: an off's level is 0", ledger.awaiting, { color = true })
+  ledger:taken({ kind = "color", color = BLUE, source = "proxy" })
+  T.eq("a color the library takes, held or sent, ends its wait", ledger.awaiting, {})
+  ledger:reset()
+  ledger:heard({ kind = "push", on = false }, now)
   ledger:reset()
   T.eq("a reset ends the wait", ledger.awaiting, {})
   clock.run(2000)
