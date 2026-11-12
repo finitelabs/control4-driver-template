@@ -125,10 +125,11 @@ function Motion:now()
   }
 end
 
---- Where the light is now and where it is heading, for LightProxy.
+--- Where the light is and where it is heading, for LightProxy.
+--- @param t integer|nil The C4:GetTime() ms to read it at; now when nil.
 --- @return LightView
-function Motion:view()
-  local t = C4:GetTime()
+function Motion:view(t)
+  t = t or C4:GetTime()
   local shown = self:_levelAt(t)
   local view = {
     on = self.on,

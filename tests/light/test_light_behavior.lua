@@ -281,6 +281,25 @@ case(function()
   w.restore()
 end)
 
+T.section("C4:GetTime moving on while a command is sent: a fade is told from where it starts, over its whole rate")
+case(function()
+  local base = K.copy(K.ES)
+  base.fade.curve = "linear"
+  local w = K.world(base, { writeMs = 2 }, 0)
+  K.target(w, 100, 300)
+  w.run(1200)
+  K.target(w, 0, 300)
+  local changing = w.proxy:last("LIGHT_BRIGHTNESS_CHANGING") or {}
+  T.eq(
+    "an off over 0.3 s, just after an on to 100, falls from 100",
+    { changing.LIGHT_BRIGHTNESS_CURRENT, changing.RATE },
+    { 100, 300 }
+  )
+  w.run(3000)
+  T.eq("and the proxy keeps 100 as Previous On", w.proxy.previousOn, 100)
+  w.restore()
+end)
+
 T.section("a rated on from off on a device that keeps its level opens with a 0-time pre-on at the bottom step")
 case(function()
   local w = K.world(K.ES, {}, 0)
