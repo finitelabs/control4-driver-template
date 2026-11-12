@@ -275,6 +275,54 @@ do
     OnColor.followUp(intent("color", { color = RED, presetId = 5, presetOrigin = 2 }), ON, open),
     false
   )
+  -- The proxy sends the on mode's color back as it holds it, though the light heads for its own form of it.
+  local offLocus = { x = WARM.x + 0.01, y = WARM.y - 0.01, mode = "cct" }
+  local projected = { x = WARM.x, y = WARM.y, mode = "cct", kelvin = 2700 }
+  local lit = { on = true, level = 1, color = projected, levelRamping = true, colorRamping = false }
+  local preset = settings({ colorOnMode = "preset", onColor = offLocus })
+  T.eq(
+    "a white off the locus, sent back bare: the echo, though the light heads for its point on the locus",
+    OnColor.followUp(intent("color", { color = offLocus }), lit, open, preset),
+    true
+  )
+  local asColor = { on = true, level = 1, color = { x = COOL.x, y = COOL.y, mode = "xy" }, levelRamping = true }
+  T.eq(
+    "a white On color on a light with no color temperature, sent back bare: the echo, though the light shows it as a color",
+    OnColor.followUp(
+      intent("color", { color = COOL }),
+      asColor,
+      open,
+      settings({ colorOnMode = "preset", onColor = COOL })
+    ),
+    true
+  )
+  T.eq(
+    "Previous On's color, sent back bare: the echo",
+    OnColor.followUp(
+      intent("color", { color = BLUE }),
+      ON,
+      open,
+      settings({ colorOnMode = "previous", previousColor = BLUE })
+    ),
+    true
+  )
+  local fade = settings({ colorOnMode = "fade", onColor = COOL, dimColor = WARM })
+  local mix = Color.dimToWarm(WARM, COOL, 50)
+  T.eq(
+    "Dim-To-Warm's mix at the level the light heads for, sent back bare: the echo",
+    OnColor.followUp(intent("color", { color = mix }), { on = true, level = 0.5, levelRamping = true }, open, fade),
+    true
+  )
+  T.eq(
+    "another color sent bare is a pick",
+    OnColor.followUp(intent("color", { color = RED }), lit, open, preset),
+    false
+  )
+  T.eq(
+    "and the on mode's color with the light off is no echo",
+    OnColor.followUp(intent("color", { color = offLocus }), OFF, open, preset),
+    false
+  )
   local choice = OnColor.choose(intent("color", { color = RED }), inputs({ now = ON, picks = open }))
   T.eq("choose says follow-up, with the light's own color and level", {
     choice.followUp,

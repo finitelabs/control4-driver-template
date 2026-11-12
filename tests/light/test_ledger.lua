@@ -24,6 +24,9 @@ local PAST_RED = { x = 0.646, y = 0.33, mode = "xy" }
 --- @field refresh boolean|nil
 --- @field colorWhileOff LightColorWhileOff|nil
 --- @field levelSteps integer|nil
+--- @field dims boolean|nil Default true.
+--- @field walk boolean|nil A walk fade, in 0 ms steps every 100 ms.
+--- @field retimes boolean|nil A device fade whose commands restart every channel.
 
 --- A checked device: every default but the case's own.
 --- @param o LedgerCaseDevice|nil
@@ -31,11 +34,12 @@ local PAST_RED = { x = 0.646, y = 0.33, mode = "xy" }
 local function device(o)
   o = o or {}
   return {
-    dims = true,
+    dims = o.dims ~= false,
     color = true,
     colorWhileOff = o.colorWhileOff or "send",
     levelSteps = o.levelSteps or 255,
-    fade = { kind = "device", curve = "linear", preOn = false, maxMs = 65535 },
+    fade = o.walk and { kind = "walk", maxMs = 60000, stepMs = 100 }
+      or { kind = "device", curve = "linear", preOn = false, retimes = o.retimes == true, maxMs = 65535 },
     feedback = { shows = o.shows or "target", waitMs = o.waitMs or 1000, refresh = o.refresh == true },
   }
 end
@@ -72,12 +76,15 @@ end
 --- @field due LightAspect|nil The deadline's aspect; nil for a report.
 --- @field heard LightHeard
 
---- @param o table|nil { settle, foreign, ask }
+--- @param o table|nil { settle, foreign, ask, first }
 --- @param due LightAspect|nil
 --- @return LedgerOut
 local function H(o, due)
   o = o or {}
-  return { due = due, heard = { settle = o.settle or {}, foreign = o.foreign or {}, ask = o.ask == true } }
+  return {
+    due = due,
+    heard = { settle = o.settle or {}, foreign = o.foreign or {}, ask = o.ask == true, first = o.first or {} },
+  }
 end
 
 --- @class LedgerStep
@@ -157,7 +164,7 @@ CASES["J1: a held color"] = {
       { hear = { kind = "push", on = true, color = RED } },
     },
     -- The color's first report is the lit one, and it matches the color the proxy shows.
-    want = { H(), H({ settle = { on = true }, foreign = { "on" } }) },
+    want = { H({ first = { "on", "level" } }), H({ settle = { on = true }, foreign = { "on" }, first = { "color" } }) },
   },
   {
     name = "a report with no on, while a color is held, carries no color news",
@@ -179,14 +186,14 @@ CASES["J1: a held color"] = {
     now = { on = false, colorHeld = true },
     steps = { { hear = { kind = "push", on = true, color = BLUE } } },
     -- The held color kept the start's report from being the color's first: this one is, so J2 adopts it.
-    want = { H({ settle = { on = true, color = BLUE }, foreign = { "on" } }) },
+    want = { H({ settle = { on = true, color = BLUE }, foreign = { "on" }, first = { "color" } }) },
   },
   {
     name = "a send device takes the color an off report carries",
     now = { on = false },
     fresh = true,
     steps = { { hear = { kind = "push", on = false, color = BLUE } } },
-    want = { H({ settle = { color = BLUE } }) },
+    want = { H({ settle = { color = BLUE }, first = { "on", "color" } }) },
   },
 }
 
@@ -195,19 +202,19 @@ CASES["J2: the first report"] = {
     name = "a match with what the library holds tells nothing",
     fresh = true,
     steps = { { hear = { kind = "push", on = true, level = 0.5, color = RED } } },
-    want = { H() },
+    want = { H({ first = { "on", "level", "color" } }) },
   },
   {
     name = "a difference is adopted, and is no other hand's",
     fresh = true,
     steps = { { hear = { kind = "final", on = false, level = 0.3 } } },
-    want = { H({ settle = { on = false, level = 0.3 } }) },
+    want = { H({ settle = { on = false, level = 0.3 }, first = { "on", "level" } }) },
   },
   {
     name = "a seed counts as the first",
     fresh = true,
     steps = { { hear = { kind = "seed", level = 0.3 } } },
-    want = { H({ settle = { level = 0.3 } }) },
+    want = { H({ settle = { level = 0.3 }, first = { "level" } }) },
   },
   {
     name = "each aspect has a first of its own",
@@ -216,28 +223,31 @@ CASES["J2: the first report"] = {
       { hear = { kind = "push", level = 0.5 } },
       { hear = { kind = "push", level = 0.3, color = BLUE } },
     },
-    want = { H(), H({ settle = { level = 0.3, color = BLUE }, foreign = { "level" } }) },
+    want = {
+      H({ first = { "level" } }),
+      H({ settle = { level = 0.3, color = BLUE }, foreign = { "level" }, first = { "color" } }),
+    },
   },
   {
     name = "within the device's step is a match",
     dev = { levelSteps = 100 },
     fresh = true,
     steps = { { hear = { kind = "push", level = 0.504 } } },
-    want = { H() },
+    want = { H({ first = { "level" } }) },
   },
   {
     name = "a value the library does not know is a difference",
     unknown = { "level" },
     fresh = true,
     steps = { { hear = { kind = "push", level = 0.4 } } },
-    want = { H({ settle = { level = 0.4 } }) },
+    want = { H({ settle = { level = 0.4 }, first = { "level" } }) },
   },
   {
     name = "a full color at the xy the library holds as a white is news: colors compare with their mode",
     fresh = true,
     now = { color = { x = 0.64, y = 0.33, mode = "cct" } },
     steps = { { hear = { kind = "push", on = true, level = 0.5, color = RED } } },
-    want = { H({ settle = { color = RED } }) },
+    want = { H({ settle = { color = RED }, first = { "on", "level", "color" } }) },
   },
 }
 
@@ -321,7 +331,8 @@ CASES["J4: no window"] = {
       { hear = { kind = "push", level = 0.8 } },
       { run = 1000 },
     },
-    want = { H({ foreign = { "on" }, ask = true }), H(), H({ settle = { on = true } }, "on") },
+    -- The command lit the light, so at the deadline the held on is one the library already holds: no news.
+    want = { H({ foreign = { "on" }, ask = true }), H(), H(nil, "on") },
   },
   {
     name = "an on answered alone waits for its level: the on is told with the level, never at the level kept",
@@ -354,8 +365,14 @@ CASES["J5a, J5b: answers to a read"] = {
   {
     name = "a moving answer is held, and adopted at the deadline",
     dev = { shows = "position", refresh = true },
-    steps = { { send = { level = 0.8 }, land = 500 }, { hear = { kind = "moving", level = 0.6 } }, { run = 1500 } },
-    want = { H(), H({ settle = { level = 0.6 } }, "level") },
+    steps = {
+      { send = { level = 0.8 }, land = 500 },
+      { hear = { kind = "moving", level = 0.6 } },
+      { run = 1500 },
+      { run = 1000 },
+    },
+    -- On a position device that reads back, a held position is read once at the deadline before it's adopted.
+    want = { H(), H({ ask = true }, "level"), H({ settle = { level = 0.6 } }, "level") },
   },
   {
     name = "a final that matches the newest sent in device steps settles on the sent value, not its rounding",
@@ -588,6 +605,199 @@ CASES["J6: the deadline"] = {
   },
 }
 
+CASES["One attribute at a time, and walks"] = {
+  {
+    name = "a pre-on's On/Off echo on a position device settles nothing: the level's ramp runs on",
+    dev = { shows = "position", refresh = true, waitMs = 1500 },
+    now = { on = false },
+    steps = {
+      { send = { fromOff = true, level = 0.0039 } },
+      { send = { level = 1 }, land = 3000 },
+      { now = { levelRamping = true } },
+      { hear = { kind = "push", on = true } },
+    },
+    want = { H() },
+  },
+  {
+    name = "a read's On/Off answer alone waits for its Level answer, and both are told together",
+    dev = { shows = "position", refresh = true },
+    now = { on = true, level = 0.2 },
+    steps = {
+      { send = { on = false, level = 0.2 } },
+      { now = { levelRamping = true } },
+      { hear = { kind = "final", on = true } },
+      { hear = { kind = "final", level = 0.0118 } },
+    },
+    want = { H(), H({ settle = { level = 0.0118, on = true } }) },
+  },
+  {
+    name = "an Off report while a lit light's level runs is held, and the device is read once",
+    dev = { shows = "position", refresh = true },
+    steps = {
+      { send = { level = 0.8 }, land = 2000 },
+      { now = { levelRamping = true } },
+      { hear = { kind = "push", on = false } },
+      { hear = { kind = "final", on = true } },
+    },
+    -- The read's answer says lit: the off was from before the command.
+    want = { H({ ask = true }), H() },
+  },
+  {
+    name = "an Off report held while a lit light's level runs is adopted at the deadline when nothing else comes",
+    dev = { shows = "position", refresh = true },
+    steps = {
+      { send = { level = 0.8 }, land = 2000 },
+      { now = { levelRamping = true } },
+      { hear = { kind = "push", on = false } },
+      { now = { levelRamping = false } },
+      { run = 3000 },
+    },
+    -- The level command was never answered, so its deadline asks; the on's adopts the held off.
+    want = { H({ ask = true }), H({ ask = true }, "level"), H({ settle = { on = false } }, "on") },
+  },
+  {
+    name = "a position device's held color is read once before the deadline adopts it",
+    dev = { shows = "position", refresh = true },
+    steps = {
+      { send = { color = BLUE }, land = 500 },
+      { hear = { kind = "push", color = NEAR_RED } },
+      { run = 1500 },
+      { hear = { kind = "push", color = PAST_RED } },
+      { hear = { kind = "final", color = BLUE } },
+    },
+    -- A push after the ask is still the light on its way; the read's answer settles.
+    want = { H(), H({ ask = true }, "color"), H(), H({ settle = { color = BLUE } }) },
+  },
+  {
+    name = "a light that doesn't dim: another hand's on is read once, and the read's on is told alone",
+    dev = { refresh = true, dims = false },
+    now = { on = false, level = 1 },
+    steps = { { hear = { kind = "push", on = true } }, { hear = { kind = "final", on = true } } },
+    want = { H({ foreign = { "on" }, ask = true }), H({ settle = { on = true } }) },
+  },
+  {
+    name = "a light that doesn't dim: a stale on the read answers off is put right, never told",
+    dev = { refresh = true, dims = false },
+    now = { on = false, level = 1 },
+    steps = { { hear = { kind = "push", on = true } }, { hear = { kind = "final", on = false } } },
+    want = { H({ foreign = { "on" }, ask = true }), H() },
+  },
+  {
+    name = "a walk to off: a poll that shows the light still lit at a step it passed is the walk's own",
+    dev = { walk = true, refresh = true, waitMs = 2000, levelSteps = 100 },
+    steps = {
+      { now = { levelRamping = true } },
+      { send = { level = 0.3 } },
+      { send = { level = 0.22 } },
+      { now = { on = false, level = 0.5 } },
+      { hear = { kind = "push", on = true, level = 0.22 } },
+      { send = { level = 0.2 } },
+      { now = { on = false, level = 0.5 } },
+      { hear = { kind = "push", on = true, level = 0.22 } },
+    },
+    want = { H(), H() },
+  },
+  {
+    name = "a walk from off: a read that shows the light still off before the first step is the walk's own",
+    dev = { walk = true, refresh = true, waitMs = 2000, levelSteps = 100 },
+    now = { on = false, level = 0.6 },
+    steps = {
+      { now = { on = true, level = 0.6, levelRamping = true } },
+      { hear = { kind = "final", on = false, level = 0.6 } },
+    },
+    want = { H() },
+  },
+  {
+    name = "a walk from off: a poll that still shows off after the first step is dropped, never adopted at the deadline",
+    dev = { walk = true, refresh = true, waitMs = 2000, levelSteps = 100 },
+    now = { on = false, level = 0.6 },
+    steps = {
+      { now = { on = true, level = 0.6, levelRamping = true } },
+      { send = { fromOff = true, level = 0.1 } },
+      { hear = { kind = "push", on = false, level = 0.6 } },
+      { run = 2500 },
+    },
+    want = { H(), H(nil, "on"), H({ ask = true }, "level") },
+  },
+  {
+    name = "after a walk to off is lit, another hand's off is still news",
+    dev = { walk = true, refresh = true, waitMs = 2000, levelSteps = 100 },
+    now = { on = false, level = 0.6 },
+    steps = {
+      { now = { on = true, level = 0.6, levelRamping = true } },
+      { send = { fromOff = true, level = 0.1 } },
+      { hear = { kind = "push", on = true, level = 0.1 } },
+      { run = 2500 },
+      { now = { levelRamping = false } },
+      { hear = { kind = "push", on = false } },
+    },
+    -- The on window stays open while the walk runs, and its deadline closes it quietly.
+    want = { H(), H(nil, "on"), H(nil, "level"), H({ settle = { on = false }, foreign = { "on" } }) },
+  },
+}
+
+CASES["Another hand, and fades on their way"] = {
+  {
+    name = "a lit report below where a fade to off started is the fade on its way: held, and the off settles",
+    dev = { shows = "position", refresh = true },
+    now = { on = true, level = 1 },
+    steps = {
+      { send = { on = false, level = 1, fromLevel = 1 }, land = 300 },
+      { now = { levelRamping = true } },
+      { hear = { kind = "push", on = true, level = 0.165 } },
+      { hear = { kind = "push", on = false } },
+    },
+    want = { H(), H() },
+  },
+  {
+    name = "on a device that re-times, another hand's report gives where every channel heads, an echo included",
+    dev = { retimes = true },
+    steps = {
+      { send = { level = 0.3 }, land = 4000 },
+      { now = { levelRamping = true } },
+      { hear = { kind = "push", on = true, level = 0.3, color = BLUE } },
+    },
+    want = { H({ settle = { color = BLUE, on = true, level = 0.3 }, foreign = { "color" } }) },
+  },
+  {
+    name = "a connection's first report in another color mode than the turn-on gave is adopted, never another hand's",
+    fresh = true,
+    now = { on = false },
+    steps = {
+      { send = { fromOff = true, level = 1 }, land = 3000 },
+      { now = { levelRamping = true } },
+      { hear = { kind = "push", on = true, color = { x = 0.64, y = 0.33, mode = "cct" } } },
+    },
+    want = { H({ settle = { color = { x = 0.64, y = 0.33, mode = "cct" } }, first = { "on", "color" } }) },
+  },
+}
+
+CASES["The start tell: each aspect's first report"] = {
+  {
+    name = "a first report that matches is still a first, so the proxy is told it once",
+    fresh = true,
+    steps = { { hear = { kind = "push", on = true, level = 0.5 } } },
+    want = { H({ first = { "on", "level" } }) },
+  },
+  {
+    name = "a first report that differs is a first and is adopted",
+    fresh = true,
+    steps = { { hear = { kind = "push", level = 0.2 } } },
+    want = { H({ settle = { level = 0.2 }, first = { "level" } }) },
+  },
+  {
+    name = "a second report is no first",
+    fresh = true,
+    steps = { { hear = { kind = "push", level = 0.5 } }, { hear = { kind = "push", level = 0.5 } } },
+    want = { H({ first = { "level" } }), H() },
+  },
+  {
+    name = "a deadline names no first",
+    steps = { { send = { level = 0.8 } }, { run = 1000 } },
+    want = { H(nil, "level") },
+  },
+}
+
 local ORDER = {
   "J1: a held color",
   "J2: the first report",
@@ -599,6 +809,9 @@ local ORDER = {
   "J5e: a value no command sent",
   "J5g: after the deadline's ask",
   "J6: the deadline",
+  "One attribute at a time, and walks",
+  "Another hand, and fades on their way",
+  "The start tell: each aspect's first report",
 }
 
 for _, title in ipairs(ORDER) do
@@ -606,6 +819,37 @@ for _, title in ipairs(ORDER) do
   for _, case in ipairs(CASES[title]) do
     T.eq(case.name, run(case), case.want)
   end
+end
+
+T.section("a command that re-times another aspect's running ramp moves that aspect's deadline")
+do
+  local dues = {}
+  local now = { on = true, level = 0.5, color = RED, levelRamping = false, colorRamping = false }
+  local ledger
+  local light = {}
+  function light._due(_, aspect)
+    dues[#dues + 1] = { aspect = aspect, at = clock.now() }
+    ledger:due(aspect, now)
+  end
+  ledger = Ledger.new(light)
+  ledger:declare(device({ retimes = true }))
+  ledger:heard({ kind = "push", on = true, level = 0.5, color = RED }, now)
+  local start = clock.now()
+  ledger:sent(command({ color = BLUE }), { on = start, level = start, color = start + 250 })
+  now.colorRamping = true
+  -- A level alone, over 2550 ms, that re-times the color ramp to land with it.
+  ledger:sent(command({ level = 0.2 }), { on = start, level = start + 2550, color = start + 2550 })
+  clock.run(2000)
+  T.eq("no color deadline at the color's first landing plus the wait", #dues, 0)
+  clock.run(2000)
+  local colorAt
+  for _, d in ipairs(dues) do
+    if d.aspect == "color" then
+      colorAt = d.at - start
+    end
+  end
+  T.eq("the color's deadline is its new landing plus the wait", colorAt, 2550 + 1000)
+  ledger:closeAll()
 end
 
 T.section("Windows and the run")
@@ -634,9 +878,15 @@ do
   clock.run(5000)
   T.eq("reset stops them too", #outs, 0)
   T.eq(
-    "and the next report is a first again: a difference is adopted, not another hand's",
+    "after a loss the next report is a first again: a difference is adopted, not another hand's",
     ledger:heard({ kind = "push", level = 0.2 }, now),
-    { settle = { level = 0.2 }, foreign = {}, ask = false }
+    { settle = { level = 0.2 }, foreign = {}, ask = false, first = { "level" } }
+  )
+  ledger:reset()
+  T.eq(
+    "and after a loss a first that matches is still a first, so it is told once",
+    ledger:heard({ kind = "push", on = true, level = 0.5 }, now),
+    { settle = {}, foreign = {}, ask = false, first = { "on", "level" } }
   )
   T.eq(
     "the deadline timers are named for their aspect",

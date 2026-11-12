@@ -533,9 +533,11 @@ function Memory:_send(cmd)
   if not self.online then
     return nil
   end
-  local rest = o.rest and o.rest(cmd) or nil
   local lost = self.dropNext or (o.drop and o.drop("command"))
   self.dropNext = nil
+  -- A rest says where a command the device takes leaves it, so a command lost on the way rests nowhere.
+  local rest = not lost and o.rest and o.rest(cmd) or nil
+  c.rest = copy(rest)
   if o.seeds then
     local seed = { on = cmd.on, level = o.dims and cmd.level or nil, color = copy(cmd.color) }
     self:push("seed", seed, -math.floor((o.latency or 40) / 2))

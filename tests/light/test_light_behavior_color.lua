@@ -214,17 +214,17 @@ case(function()
   w.restore()
 end)
 
-T.section("Color On Mode preset: an On from off comes on in it, and the proxy's follow-up is not sent again")
+T.section("Color On Mode preset: an On from off fades to it from the color kept, and the follow-up is not sent again")
 case(function()
   local w = K.world(K.ES, {}, 0)
   K.onMode(w, K.ON_PRESET)
   w.proxy:appOn(100, { x = K.ON_PRESET.x, y = K.ON_PRESET.y, preset = 1, origin = 1 })
   w.run(10)
   local first = colored(w)
-  T.eq("the pre-on and its change both carry the preset's color (contract edit 4)", #first, 2)
-  T.check("that color", near(((first[1] or {}).color or {}).x, K.ON_PRESET.x), first[1])
+  T.eq("the pre-on starts in the color kept, and the change sets the preset's color", #first, 1)
+  T.check("that color, over the on's time", near(((first[1] or {}).color or {}).x, K.ON_PRESET.x), first[1])
   w.run(5000)
-  T.eq("the follow-up sends no color again", #colored(w), 2)
+  T.eq("the follow-up sends no color again", #colored(w), 1)
   T.check("told in it", near((w.proxy.color or {}).x, K.ON_PRESET.x), w.proxy.color)
   w.restore()
 end)
@@ -310,7 +310,7 @@ case(function()
   w.restore()
 end)
 
-T.section("the walk under Dim-To-Warm: each step carries the mix for its level")
+T.section("the walk under Dim-To-Warm: the color fades straight to the mix at the target, and lands there")
 case(function()
   local w = K.world(K.WALK, {}, 100)
   K.onMode(w, K.WARM, K.DIM)
@@ -319,19 +319,14 @@ case(function()
   w.m.sent = {}
   K.target(w, 20, 1000)
   w.run(3000)
-  local kelvins = {}
-  for _, c in ipairs(colored(w)) do
-    kelvins[#kelvins + 1] = c.color and c.color.kelvin
-  end
-  local distinct = {}
-  for _, k in ipairs(kelvins) do
-    distinct[k or -1] = true
-  end
-  local n = 0
-  for _ in pairs(distinct) do
-    n = n + 1
-  end
-  T.check("the steps move through the mix", n > 2, kelvins)
+  local steps = colored(w)
+  local last = steps[#steps]
+  local want = w.light.motion.color
+  T.check(
+    "the last step lands the color the walk was heading for, exactly",
+    last ~= nil and want ~= nil and math.abs(last.color.x - want.x) <= 1e-9 and math.abs(last.color.y - want.y) <= 1e-9,
+    { last = last and last.color, want = want }
+  )
   w.restore()
 end)
 

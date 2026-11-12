@@ -7,7 +7,6 @@ local T = require("testlib")
 require("c4_shim")
 
 local F = require("c4_fixtures")
-local persist = require("lib.persist")
 
 -- Caps.dynamic as the test sets it, and a deep Caps.same.
 local dynamicCaps = { dimmer = true, supports_color = false, brightness_rate_max = 65535 }
@@ -49,6 +48,7 @@ package.loaded["lib.light.caps"] = {
 
 local LightProxy = require("lib.light.proxy")
 local Range = require("lib.light.range")
+local Color = require("lib.light.color")
 
 local PROXY = 5001
 local LINKS = { top = 300, toggle = 301, bottom = 302 }
@@ -77,7 +77,21 @@ local function fakeSettings()
     previousOn = 60,
     previousColor = nil,
     rates = { clickUp = 500, clickDown = 500, holdUp = 3000, holdDown = 3000 },
+    commanded = {},
+    P_PRESET_LEVEL = "preset_level",
+    P_CLICK_RATE_UP = "click_rate_up",
+    P_CLICK_RATE_DOWN = "click_rate_down",
+    P_HOLD_RATE_UP = "hold_rate_up",
+    P_HOLD_RATE_DOWN = "hold_rate_down",
+    P_MAX_ON_LEVEL = "max_on_level",
+    P_MIN_ON_LEVEL = "min_on_level",
+    P_BUTTON_COLORS = "button_colors",
   }
+  function s:takeCommanded()
+    local commanded = self.commanded
+    self.commanded = {}
+    return commanded
+  end
   function s:onRange()
     return self.lo, self.hi
   end
@@ -221,45 +235,28 @@ do
   T.eq("a loss with no report since start reads off too", names(), { "LIGHT_BRIGHTNESS_CHANGED" })
 end
 
-T.section("capabilities: told only when the proxy does not hold them")
+T.section("capabilities: told at every connection's first report, and after it only when they change")
 do
-  persist:delete("light_rate_caps")
   local p = make()
-  vars = {
-    [6661] = "<DynamicCapabilities><dimmer>True</dimmer><supports_color>False</supports_color></DynamicCapabilities>",
-  }
-  T.eq(
-    "none stored, and the table matches 6661 and driver.xml's static values: nothing told",
-    p:capabilities(DEVICE),
-    false
+  p:online(DEVICE)
+  T.check(
+    "told at the first report, whatever the proxy holds",
+    table.concat(names(), " "):find("DYNAMIC_CAPABILITIES_CHANGED") ~= nil
   )
-  T.eq("and nothing stored", persist:get("light_rate_caps"), nil)
-  dynamicCaps.brightness_rate_max = 60000
-  p = make()
-  T.eq("a rate the static value does not give is told, once after the upgrade", p:capabilities(DEVICE), true)
-  T.eq("the rate keys 6661 does not show are kept", persist:get("light_rate_caps"), { brightness_rate_max = 60000 })
-  T.eq("the same again in this load tells nothing", p:capabilities(DEVICE), false)
-  take()
-
-  p = make()
-  T.eq("a new load whose proxy holds them all tells nothing", p:capabilities(DEVICE), false)
-  T.eq("not even once", names(), {})
-  dynamicCaps.brightness_rate_max = 65535
-
-  vars[6661] = "<DynamicCapabilities><dimmer>False</dimmer></DynamicCapabilities>"
-  p = make()
-  T.eq("a reflected key the proxy shows otherwise is told", p:capabilities(DEVICE), true)
-  take()
-
-  vars[6661] = "<DynamicCapabilities><dimmer>True</dimmer><supports_color>False</supports_color></DynamicCapabilities>"
-  persist:set("light_rate_caps", { brightness_rate_max = 60000 })
-  p = make()
-  T.eq("a rate key told otherwise is told", p:capabilities(DEVICE), true)
+  T.eq("the same again in this connection tells nothing", p:capabilities(DEVICE), false)
   dynamicCaps.supports_color = true
-  T.eq("a change in this load is told", p:capabilities(DEVICE), true)
+  T.eq("a change in this connection is told", p:capabilities(DEVICE), true)
   dynamicCaps.supports_color = false
   take()
-  vars = {}
+  p:capabilities(DEVICE)
+  take()
+  p:lost(true)
+  take()
+  p:online(DEVICE)
+  T.check(
+    "told again at a reconnect, unchanged",
+    table.concat(names(), " "):find("DYNAMIC_CAPABILITIES_CHANGED") ~= nil
+  )
 end
 
 T.section("the level: CHANGED at rest, CHANGING for a ramp, on the Min/Max On line")
@@ -358,6 +355,23 @@ do
   p:sync(rest(false, 0.7))
   got = take()
   T.eq("a ramp that ended keeps nothing extra", got[1].cmd, "LIGHT_BRIGHTNESS_CHANGED")
+
+  p:sync({ on = true, level = 0, levelTarget = 0.6, levelMs = 1000, colorMs = 0 })
+  take()
+  clock.run(500)
+  p:sync(rest(false, 0))
+  got = take()
+  T.eq("off half way through a ramp from off: the level to keep is where that ramp had got to", {
+    got[1].cmd,
+    got[1].params.LIGHT_BRIGHTNESS_CURRENT,
+    got[2].cmd,
+  }, { "LIGHT_BRIGHTNESS_CHANGING", 30, "LIGHT_BRIGHTNESS_CHANGED" })
+  p:sync({ on = true, level = 0, levelTarget = 0.6, levelMs = 6000, colorMs = 0 })
+  take()
+  clock.run(5)
+  p:sync(rest(false, 0))
+  got = take()
+  T.eq("off before it lit: Previous On's own", got[1].params.LIGHT_BRIGHTNESS_CURRENT, settings.previousOn)
 end
 
 T.section("the color: CHANGED and CHANGING, ahead of the level, with preset id and origin")
@@ -522,6 +536,28 @@ do
   p:sync(rest(true, 0.5))
   got = take()
   T.eq("a setting command after it is echoed", { #got, got[1].cmd, got[1].params }, { 1, "PRESET_LEVEL", "55" })
+
+  p, settings = make(LINKS)
+  p:readSetup()
+  settings.rates.holdUp = 4000
+  settings.commanded.hold_rate_up = true
+  settings.preset = 70
+  p:online(DEVICE)
+  p:readSetup()
+  take()
+  p:sync(rest(true, 0.5))
+  got = take()
+  local echoed = {}
+  for _, s in ipairs(got) do
+    if s.cmd == "HOLD_RATE_UP" or s.cmd == "PRESET_LEVEL" then
+      echoed[#echoed + 1] = s.cmd .. " " .. s.params
+    end
+  end
+  T.eq(
+    "a rate set by a command before the first report is echoed; the setup's own are not",
+    echoed,
+    { "HOLD_RATE_UP 4000" }
+  )
 end
 
 T.section("shown: at each connection's first sync, then whenever it changes")
@@ -530,11 +566,14 @@ do
   T.eq("nothing while offline", p:shown(), nil)
   p:online(DEVICE)
   take()
+  -- The Kelvin shown is the proxy's own conversion of the xy it holds, not the one a report came with.
+  local K = math.floor(Color.kelvin(0.3, 0.32) + 0.5)
   p:sync(rest(true, 0.5, { x = 0.3, y = 0.32, mode = "cct", kelvin = 6000 }))
-  T.eq("the first after online", p:shown(), { kelvin = 6000, minOn = 1, maxOn = 100 })
+  T.eq("the first after online", p:shown(), { kelvin = K, minOn = 1, maxOn = 100 })
+  T.check("which is not the report's own Kelvin", K ~= 6000, K)
   T.eq("nothing while it holds", p:shown(), nil)
   settings.hi = 80
-  T.eq("a new Max On", p:shown(), { kelvin = 6000, minOn = 1, maxOn = 80 })
+  T.eq("a new Max On", p:shown(), { kelvin = K, minOn = 1, maxOn = 80 })
   p:sync(rest(true, 0.5, RED))
   T.eq("full color has no kelvin", p:shown(), { minOn = 1, maxOn = 80 })
   p:offline()
@@ -757,4 +796,76 @@ do
 end
 
 clock.restore()
+T.section("a start and a reconnect tell the level and color the device first reports, even unchanged")
+do
+  vars = { [1001] = "50", [1110] = "50", [1200] = "0.64,0.33,0", [1210] = "0.64,0.33,0" }
+  local p = make()
+  p:read()
+  p:online(DEVICE)
+  take()
+  p:sync(rest(true, 0.5, RED))
+  T.eq("unchanged and not first reported: nothing", names(), {})
+  p:resay({ "on", "level", "color" })
+  p:sync(rest(true, 0.5, RED))
+  T.eq(
+    "first reported: CHANGED for each, color then level",
+    names(),
+    { "LIGHT_COLOR_CHANGED", "LIGHT_BRIGHTNESS_CHANGED" }
+  )
+  p:sync(rest(true, 0.5, RED))
+  T.eq("after that the tell is a diff again", names(), {})
+  p:resay({ "color" })
+  p:sync(rest(true, 0.5, RED))
+  T.eq("an aspect told since the connection came online is not told again", names(), {})
+  p:online(DEVICE)
+  take()
+  p:resay({ "color" })
+  p:sync(rest(true, 0.5, RED))
+  T.eq("on the next connection, an aspect alone is told alone", names(), { "LIGHT_COLOR_CHANGED" })
+  vars = {}
+end
+
+T.section("a Button Link's colors asked before any report: its LED shows the level the light holds")
+do
+  vars = { [1001] = "40", [1110] = "40" }
+  local p = make(LINKS)
+  p:read()
+  p:answer("REQUEST_BUTTON_COLORS", {}, rest(true, 0.4), LINKS.top)
+  local got = take()
+  T.eq("its colors, then its LED lit", { got[1].cmd, got[2].cmd, got[2].params.STATE }, {
+    "BUTTON_COLORS",
+    "MATCH_LED_STATE",
+    true,
+  })
+  vars = {}
+end
+
+T.section("a lapse: offline once at the lapse, and GET_LIGHT_LEVEL answers the held level and nothing else")
+do
+  local p = make(LINKS)
+  p:online(DEVICE)
+  p:sync(rest(true, 0.5))
+  take()
+  p:lost(true)
+  T.eq("offline at the lapse", names(), { "ONLINE_CHANGED" })
+  p:answer("GET_LIGHT_LEVEL", {}, rest(true, 0.5))
+  T.eq("LIGHT_LEVEL alone", names(), { "LIGHT_LEVEL" })
+end
+
+T.section("Connected exists after the driver's values are cleared while the light is already offline")
+do
+  local values = require("lib.values")
+  local p = make()
+  p:offline()
+  values:delete("Connected")
+  p:offline()
+  T.eq("a reset while offline writes it false", (values:getValue("Connected") or {}).value, false)
+  values:delete("Connected")
+  p:lost(true)
+  T.eq("and so does a loss while offline", (values:getValue("Connected") or {}).value, false)
+  values:delete("Connected")
+  p:lost(false)
+  T.eq("a real loss too", (values:getValue("Connected") or {}).value, false)
+end
+
 T.finish()

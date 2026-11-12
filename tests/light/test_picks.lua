@@ -9,6 +9,7 @@ local Picks = require("lib.light.picks")
 
 local RED = { x = 0.6, y = 0.32, mode = "xy" }
 local BLUE = { x = 0.15, y = 0.06, mode = "xy" }
+local GREEN = { x = 0.3, y = 0.6, mode = "xy" }
 local DEVICE = { dims = true, color = true, cct = { minK = 2000, maxK = 6500 } }
 
 local OFF = { on = false, level = 0.5, levelRamping = false, colorRamping = false }
@@ -214,6 +215,29 @@ do
   T.eq("programming's On names no preset, so its window follows no held color", q:forOn().followUp.held, false)
   q:noted(color(BLUE, { presetId = 1, presetOrigin = 1 }), lit(RED))
   T.check("and a color naming a preset after it is a pick", same(q.picked, BLUE), q)
+  clock.run(300)
+
+  -- The window takes one follow-up: a pick in it closes it, and so does the follow-up it took.
+  local r = Picks.new()
+  r:noted(color(RED), OFF)
+  r:noted(tap, OFF)
+  r:noted(color(GREEN), lit(RED))
+  T.check("a color picked inside the window is a pick", same(r.picked, GREEN), r)
+  T.eq("and it closes the window", r:forOn().followUp, nil)
+  local onPreset = color(BLUE, { presetId = 1, presetOrigin = 1 })
+  T.check("so the on mode's preset after it is a choice", not (choose(r, onPreset, lit(GREEN)) or {}).followUp)
+  r:noted(onPreset, lit(GREEN))
+  T.check("and a pick", same(r.picked, BLUE), r)
+  clock.run(300)
+
+  local s = Picks.new()
+  s:noted(color(RED), OFF)
+  s:noted(tap, OFF)
+  s:noted(color(BLUE, { presetId = 1, presetOrigin = 1 }), lit(RED))
+  T.check("the follow-up is taken while the window reads open", s:forOn().followUp ~= nil, s:forOn())
+  s:noted(color(BLUE, { presetId = 1, presetOrigin = 1 }), lit(RED))
+  T.check("a second one within 250 ms is a pick", same(s.picked, BLUE), s)
+  clock.run(300)
 end
 
 T.section("a loss or Reset Driver ends every pick")
