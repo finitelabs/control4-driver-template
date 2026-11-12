@@ -316,7 +316,7 @@ end
 
 --- Buttons' 250 ms press gate ended with the button still down.
 function Light:_gateEnded()
-  local intent = self.buttons:gateEnded(self.motion:now())
+  local intent = self.buttons:gateEnded(self.motion:now(), self.motion:view())
   self:_followUp(intent and self:_move(intent) or {})
 end
 
