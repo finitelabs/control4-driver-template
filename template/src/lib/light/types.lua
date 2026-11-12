@@ -257,7 +257,6 @@ Types.API = 1
 --     brightness_rate_default, color_rate_default, brightness_on_mode, button_colors, brightness_presets,
 --     color_presets, color_on_mode, previous_color, brightness_on_mode_preset, max_on_level, min_on_level
 --   Scenes: scenes
---   LightProxy: light_rate_caps
 
 -----------------------------------------------------------------------------------------------------
 -- The library's own shapes
@@ -375,5 +374,7 @@ Types.API = 1
 --- @field settle LightValues Values to adopt; a ramp still running on that aspect ends there.
 --- @field foreign LightAspect[] The aspects another hand moved.
 --- @field ask boolean Call adapter:refresh() once.
+--- @field first LightAspect[] The aspects this was the first report of since a start or a loss, a match included:
+---   each is told to the proxy, changed or not.
 
 return Types
