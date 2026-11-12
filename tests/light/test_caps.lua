@@ -41,6 +41,7 @@ do
   T.eq("defaults", p, {
     api = 1,
     proxy = 5001,
+    maxMs = 65535,
     dims = false,
     color = false,
     known = false,
