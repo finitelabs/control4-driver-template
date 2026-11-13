@@ -45,9 +45,10 @@ def load(path):
 
 
 def answers(path):
+    """The fixtures with the file's answers over them; a null answer leaves that fixture out."""
     merged = load(FIXTURES)
     merged.update(load(path))
-    return merged
+    return {key: value for key, value in merged.items() if value is not None}
 
 
 def render(data, dst):
@@ -156,25 +157,31 @@ def check_github_setup(data, directory):
     problems = []
     if not os.access(path, os.X_OK):
         problems.append("tools/github-setup is not executable")
-    if f"NAME={data['project_name']}" not in path.read_text(encoding="utf-8").splitlines():
+    lines = path.read_text(encoding="utf-8").splitlines()
+    if f"NAME={data['project_name']}" not in lines:
         problems.append(f"tools/github-setup does not set NAME={data['project_name']}")
+    visibility = data["repo_visibility"]
+    if f"VISIBILITY={visibility}" not in lines:
+        problems.append(f"tools/github-setup does not set VISIBILITY={visibility}")
     return problems
 
 
 def check_upload_retention(data, directory):
     text = (Path(directory) / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
     uploads = text.count("uses: actions/upload-artifact")
-    retention = [line for line in text.splitlines() if "retention-days:" in line]
-    counts = [
-        len(retention),
-        sum("github.ref_type == 'tag' && 14" in line for line in retention),
-        sum("github.event_name == 'pull_request' && 1" in line for line in retention),
-        sum("|| 3 }}" in line for line in retention),
-    ]
-    if uploads == 0 or any(n != uploads for n in counts):
+    visibility = data["repo_visibility"]
+    keep = (
+        "github.event_name == 'pull_request' && 3 || 14"
+        if visibility == "public"
+        else "github.ref_type == 'tag' && 14 || github.event_name == 'pull_request' && 1 || 3"
+    )
+    want = f"retention-days: ${{{{ {keep} }}}}"
+    retention = [line.strip() for line in text.splitlines() if "retention-days:" in line]
+    matching = retention.count(want)
+    if uploads == 0 or len(retention) != uploads or matching != uploads:
         return [
-            "every actions/upload-artifact step in build.yml needs retention-days naming the tag, pull request and "
-            f"otherwise cases ({uploads} uploads, retention lines {counts})"
+            f"every actions/upload-artifact step in build.yml needs {want} in a {visibility} repo "
+            f"({uploads} uploads, {matching} of {len(retention)} retention lines match)"
         ]
     skipped = text.count("if: always() && hashFiles('drivers/*/driver.xml') != ''")
     if skipped != uploads:

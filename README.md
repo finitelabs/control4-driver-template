@@ -108,7 +108,7 @@ After scaffolding, create the GitHub repository and apply the standard settings:
 ```bash
 cd my-new-driver
 ./tools/github-setup           # dry run: prints the changes it would make
-./tools/github-setup --apply   # make the changes (add --public for a public repo)
+./tools/github-setup --apply   # make the changes
 ```
 
 The repository is `<github_org>/<project_name>` from the copier answers, so
@@ -116,6 +116,9 @@ the script works against whatever organization or personal account the
 project was scaffolded for. It is idempotent and can be re-run on existing
 repositories to check for or fix drift. The standard is:
 
+- Visibility is `repo_visibility` from the copier answers. To make a
+  repository public, change the answer in a pull request, then run
+  `--apply`; that publishes the repository's whole history.
 - Description is `project_description` from the copier answers
 - Projects and wiki disabled
 - Squash merges only, auto-merge allowed, head branches deleted on merge
@@ -175,6 +178,7 @@ Copier will show diffs for any files that changed in the template and let you re
 | `project_name` | Project name (e.g., `control4-esphome`) | (required) |
 | `project_description` | Short description | `A Control4 driver` |
 | `github_org` | GitHub organization | (required) |
+| `repo_visibility` | The repository's visibility, `private` or `public`. `tools/github-setup` creates the repository with it and changes an existing one to it with `--apply`. Build artifacts keep 1 day on a PR, 3 on main and 14 on a tag in a private repository; 3 on a PR and 14 otherwise in a public one, whose Actions storage is free. No default, so an update that leaves it out stops instead of recording a public repository as private | (required) |
 | `dc_pid` | DriverCentral product id; 0 until the product exists. Every repo builds both `drivercentral` and `oss` | `0` |
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
 | `primary_color` | Accent color for generated docs | `#109EFF` |

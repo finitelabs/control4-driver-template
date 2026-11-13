@@ -51,6 +51,7 @@ copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name=control4-probe \
   --data github_org=finitelabs \
   --data readme_driver_slug=probe \
+  --data repo_visibility=private \
   . /tmp/render
 ```
 
@@ -61,9 +62,9 @@ Two things about that command are not optional:
   v0.9.14 while HEAD is three commits ahead — the render succeeds and tells you
   nothing about your change. `HEAD` is special-cased to mean the working tree, so
   it picks up uncommitted edits too.
-- **`--defaults` alone is not enough.** `project_name`, `github_org` and
-  `readme_driver_slug` have no defaults and Copier hard-fails on the first one it
-  reaches. The other six answer themselves.
+- **`--defaults` alone is not enough.** `project_name`, `github_org`,
+  `readme_driver_slug` and `repo_visibility` have no defaults and Copier
+  hard-fails on the first one it reaches. The others answer themselves.
 
 To reproduce a *specific* repo rather than a generic one, feed it that repo's own
 answers: take its `.copier-answers.yml`, drop the `_`-prefixed keys, and pass it
