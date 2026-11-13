@@ -365,6 +365,13 @@ function Ledger:_noWindow(aspect, value, report, now, out)
   if self:_same(aspect, value, now[aspect]) then
     return
   end
+  if
+    aspect == "color"
+    and now.color
+    and self:_asKelvin(value --[[@as LightColor]], now.color)
+  then
+    return
+  end
   local feedback = self.device.feedback
   if aspect == "on" and value == true and now.on == false and report.level == nil and feedback.refresh then
     -- Another hand's on with no level: ask, and tell the on with the level it brings (a light that doesn't dim
@@ -439,9 +446,18 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
     end
     return self:_learned(aspect, out)
   end
+  local newest = window.sent[#window.sent]
+  if
+    aspect == "color"
+    and value ~= nil
+    and newest
+    and self:_asKelvin(value --[[@as LightColor]], newest.value --[[@as LightColor]])
+  then
+    -- The color sent, as a device that reports its whites as a Kelvin reads it.
+    value = newest.value
+  end
   -- After the deadline's ask, the first push or final settles. Under "position" only the read's own answer does, or
   -- an echo: a push may still be the light on its way.
-  local newest = window.sent[#window.sent]
   if
     window.kind == "asked"
     and (
@@ -827,7 +843,31 @@ function Ledger:_echoes(aspect, value, sent)
   end
   --- @cast value LightColor
   --- @cast sent LightColor
-  return math.abs(value.x - sent.x) <= Color.TOLERANCE and math.abs(value.y - sent.y) <= Color.TOLERANCE
+  return (math.abs(value.x - sent.x) <= Color.TOLERANCE and math.abs(value.y - sent.y) <= Color.TOLERANCE)
+    or self:_asKelvin(value, sent)
+end
+
+--- Whether a color reported a little off a full color in the white band is that color as a device that reports
+--- its whites as a Kelvin gives it: the point on the locus at its Kelvin, held to the whites the device shows.
+--- @private
+--- @param value LightColor
+--- @param color LightColor
+--- @return boolean
+function Ledger:_asKelvin(value, color)
+  local tolerance = Color.TOLERANCE
+  if
+    color.mode == Color.CCT or (math.abs(value.x - color.x) <= tolerance and math.abs(value.y - color.y) <= tolerance)
+  then
+    return false
+  end
+  local k = Color.kelvin(color.x, color.y)
+  if not k or not Color.onLocus(color.x, color.y, Color.WHITE_MIN_K, Color.WHITE_MAX_K) then
+    return false
+  end
+  local cct = self.device.cct
+  local minK, maxK = cct and cct.minK or Color.WHITE_MIN_K, cct and cct.maxK or Color.WHITE_MAX_K
+  local x, y = Color.kelvinToXY(math.max(minK, math.min(maxK, k)))
+  return math.abs(value.x - x) <= tolerance and math.abs(value.y - y) <= tolerance
 end
 
 --- Whether two values of an aspect are one: an on exactly, a level at the device's steps, a color in the same

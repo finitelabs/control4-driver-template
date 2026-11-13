@@ -1170,6 +1170,30 @@ case(function()
   w.restore()
 end)
 
+T.section("a light without color temperature that reports a color near the whites as a Kelvin keeps the color")
+case(function()
+  -- The strip reports a color in the white band as its Kelvin, whose white is a little off the color sent.
+  local px, py = Color.kelvinToXY(3000)
+  local near_white = { x = px, y = py - 0.01 }
+  local feedbacks = {
+    { shows = "position", waitMs = 5000, refresh = false },
+    { shows = "target", waitMs = 300, refresh = true },
+  }
+  for _, feedback in ipairs(feedbacks) do
+    local o = K.copy(K.ES)
+    o.cct = nil
+    o.feedback = feedback
+    local w = K.world(o, { kelvinWhites = true, answers = true, readbackMs = 1500 }, 50)
+    K.color(w, near_white.x, near_white.y, 0)
+    w.run(15000)
+    local label = feedback.shows .. ": "
+    T.eq(label .. "told once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+    local c = w.proxy.color or {}
+    T.check(label .. "the color sent", near(c.x, near_white.x, 0.001) and near(c.y, near_white.y, 0.001), c)
+    w.restore()
+  end
+end)
+
 T.section("a Kelvin command, and a level on a lit white, are told once in the white's own form")
 case(function()
   for _, o in ipairs({ K.ES, K.ZB, K.WALK }) do
