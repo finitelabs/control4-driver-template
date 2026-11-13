@@ -316,8 +316,9 @@ end
 --- @return "history"|nil history The value was held as history.
 function Ledger:_weigh(aspect, value, report, now, out)
   -- While a "hold" device is off with a color told but not sent, a report that doesn't say on carries no
-  -- color news: the color the proxy shows stands for the next on.
-  if aspect == "color" and now.colorHeld == true and report.on ~= true then
+  -- color news, nor does a lit one while our off is out, the light on its way down in the color it kept: the
+  -- color the proxy shows stands for the next on.
+  if aspect == "color" and now.colorHeld == true and (report.on ~= true or self:_ourOffOut()) then
     return
   end
   local window = self.windows[aspect]

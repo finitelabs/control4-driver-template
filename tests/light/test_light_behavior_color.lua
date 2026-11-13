@@ -416,6 +416,34 @@ case(function()
   w.restore()
 end)
 
+T.section("a hold device fading itself to off: a lit report of the color it kept on its way down is no news")
+case(function()
+  local o = K.copy(K.OWN)
+  o.colorWhileOff = "hold"
+  o.feedback = { shows = "position", waitMs = 5000, refresh = true }
+  local w = K.world(o)
+  K.onMode(w, K.WARM, K.DIM)
+  K.target(w, 25)
+  w.run(5000)
+  local kept = K.device(w).color
+  w.proxy:mark()
+  w.proxy:send("OFF")
+  w.run(80)
+  w.light:report({ kind = "push", on = true, level = 0.25, color = { x = kept.x, y = kept.y, mode = "xy" } })
+  w.run(5000)
+  T.eq("the proxy is told one color", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  T.check("the Dim color", near((w.proxy.color or {}).x, K.DIM.x, 0.005), w.proxy.color)
+  w.proxy:mark()
+  w.light:report({ kind = "push", on = true, level = 0.5, color = { x = GREEN.x, y = GREEN.y, mode = "xy" } })
+  w.run(3000)
+  T.check(
+    "once off, another hand's on in its own color is news",
+    near((w.proxy.color or {}).x, GREEN.x, 0.005),
+    w.proxy.color
+  )
+  w.restore()
+end)
+
 T.section("a hold device with no pre-on: a color picked while off, held, is where a hold from off stops")
 case(function()
   local w = K.world(HOLD_NO_PRE_ON, {}, 100)
