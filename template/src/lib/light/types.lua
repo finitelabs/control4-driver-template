@@ -283,6 +283,8 @@ Types.API = 1
 --- @field unchosen boolean The color only follows an on mode.
 --- @field presetId integer|nil The preset the color is, told back with it.
 --- @field presetOrigin integer|nil That preset's origin.
+--- @field from LightColor|nil Where an on from off has the color start: its own color, or under Dim-To-Warm
+---   the Dim color, the mix at level 0.
 --- @field followUp boolean A color intent that is the proxy's follow-up of an on that already chose its color:
 ---   Motion keeps the on's color and moves nothing.
 
