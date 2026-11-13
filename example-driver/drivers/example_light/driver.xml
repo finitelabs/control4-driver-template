@@ -87,7 +87,7 @@
     <commands/>
     <actions/>
   </config>
-  <!-- The build writes the light's capabilities here, from the profile driver.lua gives Light.new. -->
+  <!-- The light's capabilities are the build's, written from the profile the driver gives Light.new. -->
   <capabilities>
   </capabilities>
   <proxies>
