@@ -479,6 +479,9 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
         -- A color the light reports in another form than it was sent is told in the light's form.
         return self:_settle(aspect, value, out)
       end
+    elseif form and feedback.shows == "target" then
+      -- So is the end of a color fade the light echoes in another form while it runs.
+      out.form = value
     end
     if not ramping then
       -- Another client's command ended the ramp part way, and the light says it heads to the command's end. An off
