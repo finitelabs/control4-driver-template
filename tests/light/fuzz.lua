@@ -82,10 +82,10 @@ local KNOWN = {
     [4395] = true,
   },
   quiet = {
-    -- A re-timing light's level report from before a SET_LEVEL 100 lands after the echo closed the window. Its 27 is
+    -- A re-timing light's level report from before a SET_LEVEL 100 lands after the echo closed the window. Its 20 is
     -- told as another client's, and the light's next report, 180 ms on, tells 100 again.
     [6868] = true,
-    -- A light that runs its own fades reports its position on the way: SET_LEVEL 74 from off tells 62, then 74.
+    -- A light that runs its own fades reports its position on the way: SET_LEVEL 74 from off tells 1, 62, then 74.
     [14466] = true,
     -- The same kind of light, on an off from 19, tells 14, 10 and 5, then off: its positions on its own fade down.
     [16794] = true,
