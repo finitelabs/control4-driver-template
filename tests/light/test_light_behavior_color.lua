@@ -594,28 +594,120 @@ case(function()
   T.eq("the proxy is told the white once, and not the full color the late echo repeats", toldModes(w), { K.CCT })
   w.restore()
 end)
-T.section("Color On Mode preset: a full color at the white a light shows as a Kelvin is that white, told once")
+--- Replay commands at their ms offsets from the first, then run `tail` ms.
+--- @param w MemoryWorld
+--- @param steps {at: integer, cmd: string, params: table|nil}[]
+--- @param tail integer
+local function replay(w, steps, tail)
+  local at = steps[1].at
+  for _, step in ipairs(steps) do
+    w.run(step.at - at)
+    at = step.at
+    w.proxy:send(step.cmd, step.params)
+  end
+  w.run(tail)
+end
+
+--- A SET_BRIGHTNESS_TARGET's params.
+local function target(level, rate)
+  return { LIGHT_BRIGHTNESS_TARGET = level, RATE = rate }
+end
+
+T.section("a light that shows a full color at a white as the Kelvin: an On preset at that white is told as the white")
 case(function()
-  -- The light reports a white it was sent as a full color as the Kelvin.
-  local w = K.world(K.ES, { kelvinWhites = true }, 50)
+  -- An RGB and white bulb: it reports a white it was sent as a full color as the Kelvin, and re-times its fades.
+  local o = K.copy(K.ES)
+  o.fade.retimes = true
+  local w = K.world(o, { kelvinWhites = true }, 50)
   local x, y = Color.kelvinToXY(3200)
   K.color(w, x, y, 0, K.CCT)
   w.run(3000)
   w.proxy:send("OFF")
   w.run(3000)
   K.onMode(w, { id = 5, origin = 1, x = x, y = y })
-  for _, on in ipairs({ { "ON" }, { "SET_LEVEL", { LEVEL = 100 } } }) do
-    w.proxy:mark()
-    w.m.sent = {}
-    w.proxy:send(on[1], on[2])
-    w.run(3000)
-    T.eq(on[1] .. " tells the white once, and never the full color", toldModes(w), { K.CCT })
-    T.eq("and sends it as the white", ((colored(w)[1] or {}).color or {}).mode, "cct")
-    w.proxy:mark()
-    w.proxy:send("OFF")
-    w.run(3000)
-    T.eq("the off after it tells no color", toldModes(w), {})
+  w.proxy:mark()
+  w.m.sent = {}
+  -- The bulb's live pass: fades, then an ON, an OFF 1.5 s on, a SET_LEVEL 100 and an OFF a second on.
+  replay(w, {
+    { at = 3007, cmd = "SET_BRIGHTNESS_TARGET", params = target(100, 300) },
+    { at = 4508, cmd = "SET_BRIGHTNESS_TARGET", params = target(0, 300) },
+    { at = 8007, cmd = "SET_BRIGHTNESS_TARGET", params = target(60, 300) },
+    { at = 10007, cmd = "SET_BRIGHTNESS_TARGET", params = target(20, 300) },
+    { at = 12007, cmd = "SET_BRIGHTNESS_TARGET", params = target(60, 300) },
+    { at = 14007, cmd = "SET_BRIGHTNESS_TARGET", params = target(0, 300) },
+    { at = 17007, cmd = "SET_BRIGHTNESS_TARGET", params = target(100, 300) },
+    { at = 18207, cmd = "SET_BRIGHTNESS_TARGET", params = target(0, 300) },
+    { at = 21007, cmd = "ON" },
+    { at = 22511, cmd = "OFF" },
+    { at = 25007, cmd = "SET_LEVEL", params = { LEVEL = 100 } },
+    { at = 26007, cmd = "OFF" },
+  }, 3000)
+  T.eq("each of its five ons tells the white once, as a white", toldModes(w), { K.CCT, K.CCT, K.CCT, K.CCT, K.CCT })
+  local full = 0
+  for _, c in ipairs(colored(w)) do
+    full = full + (c.color.mode == "xy" and 1 or 0)
   end
+  T.eq("and never sent as one", full, 0)
+  T.eq("the light ends in the white", (K.device(w).color or {}).mode, "cct")
   w.restore()
+end)
+
+T.section("a light without color temperature that reports a white as a Kelvin is told the white as a full color")
+case(function()
+  -- A strip with RGB and white LEDs, no color temperature: it shows a white on its white LEDs and reports it as
+  -- the Kelvin.
+  local o = K.copy(K.ES)
+  o.cct = nil
+  o.fade = { kind = "device", curve = "linear", preOn = true, retimes = true }
+  o.feedback = { shows = "target", waitMs = 1000, refresh = true }
+  local w = K.world(o, { kelvinWhites = true }, 100)
+  local x, y = Color.kelvinToXY(4000)
+  local px, py = Color.kelvinToXY(3200)
+  K.onMode(w, { id = 1, origin = 1, x = px, y = py })
+  w.run(100)
+  w.proxy:mark()
+  -- The strip's live pass: a Kelvin and an off at once, then four fades on to the On preset's white and off.
+  local steps = {
+    {
+      at = 2,
+      cmd = "SET_COLOR_TARGET",
+      params = {
+        LIGHT_COLOR_TARGET_X = x,
+        LIGHT_COLOR_TARGET_Y = y,
+        LIGHT_COLOR_TARGET_MODE = K.CCT,
+        LIGHT_COLOR_TARGET_COLOR_RATE = 0,
+      },
+    },
+    { at = 13, cmd = "SET_BRIGHTNESS_TARGET", params = target(0, 0) },
+  }
+  for i, on in ipairs({ 3033, 7017, 11017, 15017 }) do
+    steps[#steps + 1] = { at = on, cmd = "SET_BRIGHTNESS_TARGET", params = target(100, 300) }
+    steps[#steps + 1] = { at = on + (i == 1 and 1484 or 1200), cmd = "SET_BRIGHTNESS_TARGET", params = target(0, 300) }
+  end
+  replay(w, steps, 3000)
+  T.eq(
+    "the Kelvin and each of the four ons tell the white once, as a full color",
+    toldModes(w),
+    { K.FULL, K.FULL, K.FULL, K.FULL, K.FULL }
+  )
+  w.restore()
+end)
+
+T.section("a Kelvin command, and a level on a lit white, are told once in the white's own form")
+case(function()
+  for _, o in ipairs({ K.ES, K.ZB, K.WALK }) do
+    local w = K.world(o, { kelvinWhites = true }, 50)
+    local x, y = Color.kelvinToXY(3200)
+    K.color(w, x, y, 0, K.CCT)
+    w.run(3000)
+    T.eq("a Kelvin is told once, as a white", toldModes(w), { K.CCT })
+    w.proxy:mark()
+    for _, level in ipairs({ 30, 80 }) do
+      w.proxy:send("SET_LEVEL", { LEVEL = level })
+      w.run(3000)
+    end
+    T.eq("a level on it tells no color", toldModes(w), {})
+    w.restore()
+  end
 end)
 T.finish()
