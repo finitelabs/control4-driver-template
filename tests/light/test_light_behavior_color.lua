@@ -1154,4 +1154,29 @@ case(function()
     w.restore()
   end
 end)
+
+T.section("a light fading itself, reporting a white as a full color on its way: a mix that barely moves is no news")
+for _, hold in ipairs({ false, true }) do
+  case(function()
+    local name = hold and "an On from off on a hold device" or "a level on a lit light"
+    local o = K.copy(K.OWN)
+    o.cct = { minK = 2000, maxK = 6500 }
+    o.fade = { kind = "own", own = { onMs = 300, offMs = 300, changeMs = 300 } }
+    o.feedback = { shows = "position", waitMs = 5000, refresh = true }
+    o.colorWhileOff = hold and "hold" or nil
+    local w = K.world(o, { pushEveryMs = 250 })
+    K.onMode(w, K.WARM, K.DIM)
+    K.target(w, 97)
+    w.run(5000)
+    if hold then
+      w.proxy:send("OFF")
+      w.run(5000)
+    end
+    w.proxy:mark()
+    w.proxy:send("SET_LEVEL", { LEVEL = 100 })
+    w.run(5000)
+    T.eq(name .. ": the mix is told once at most, as a white", toldModes(w), hold and { K.CCT } or {})
+    w.restore()
+  end)
+end
 T.finish()

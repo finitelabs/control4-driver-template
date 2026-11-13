@@ -472,6 +472,11 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
   if newest and self:_echoes(aspect, value, newest.value) and not (form and self:_shown(aspect, window, value)) then
     window.held, window.heard, window.echoed = nil, true, true
     if aspect ~= "color" or not ramping then
+      -- A color in another form before the change lands is the light on its way, close to the end: the window
+      -- waits for the landing.
+      if form and feedback.shows == "position" and C4:GetTime() < newest.landing then
+        return
+      end
       if feedback.shows == "position" then
         -- The light is at the change's end: where the command sent it, not the report's rounding of it. A color
         -- its ramp still runs to is a device that reads the color's target at once: the ramp's end tells it.
