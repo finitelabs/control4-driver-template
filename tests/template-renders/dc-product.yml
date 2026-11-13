@@ -1,6 +1,5 @@
-# A repo with its DriverCentral product: the id reaches lib.drivercentral, the README is the DriverCentral one, and make icons exports Shadow Square.
+# A repo with its DriverCentral product: the id reaches lib.drivercentral, and make icons exports Shadow Square.
 dc_pid: 999
-readme_build: drivercentral
 icon_style: square
 # The example driver carries a companion in its package: the build job adds drivers/example_companion, a copy of
 # the example, and the build-embedded check finds it inside example.c4z under c4z/.

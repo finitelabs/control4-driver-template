@@ -80,11 +80,6 @@ readme_driver_slug:
   type: str
   help: "Driver slug used for README docs (e.g., 'esphome', 'mqtt_broker', 'home_connect')"
 
-readme_build:
-  type: str
-  help: "Build distribution used to generate README (e.g., 'oss', 'drivercentral')"
-  default: "oss"
-
 primary_color:
   type: str
   help: "Primary hex color for documentation headings (e.g., '#17BCF2')"
@@ -110,7 +105,7 @@ cloud_diagnostics:
 
 extra_build_secrets:
   type: str
-  help: "Space-separated build secrets .env.default declares besides the template's own (SUPPORT_CODE_SECRET, and the four INFLUXDB_* with cloud_diagnostics). The Build workflow passes each to make build by name, and no other secret."
+  help: "Space-separated build secrets .env.default declares besides the template's own (SUPPORT_CODE_SECRET, SUPPORT_PHONE and SUPPORT_EMAIL, and the four INFLUXDB_* with cloud_diagnostics). The Build workflow passes each to make build by name, and no other secret."
   default: ""
   validator: >-
     {% for name in extra_build_secrets.split() %}{% if not name | regex_search('^[A-Z_][A-Z0-9_]*$') %}{{ name }} is not a build secret name: use capital letters, digits and '_'. {% endif %}{% endfor %}
@@ -120,7 +115,7 @@ build_secrets:
   type: str
   when: false
   default: >-
-    {{ (['SUPPORT_CODE_SECRET']
+    {{ (['SUPPORT_CODE_SECRET', 'SUPPORT_PHONE', 'SUPPORT_EMAIL']
     + (['INFLUXDB_URL', 'INFLUXDB_TOKEN', 'INFLUXDB_METRICS_DB', 'INFLUXDB_LOGS_DB'] if cloud_diagnostics else [])
     + extra_build_secrets.split()) | unique | join(' ') }}
 
