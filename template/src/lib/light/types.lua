@@ -108,8 +108,8 @@ Types.API = 1
 --- @field dims boolean
 --- @field color boolean
 --- @field cct LightCctRange|nil
---- @field colorWhileOff LightColorWhileOff|nil Default "send". "hold": the device drops a color sent while off, so
----   such a color is told, not sent, and the next on carries it.
+--- @field colorWhileOff LightColorWhileOff|nil Default "send". "hold": the device drops a color sent while off or
+---   with an off, so such a color is told, not sent, and the next on carries it.
 --- @field levelSteps integer|nil The device's brightness steps from off to full. Default 255.
 --- @field fade LightFade|nil Default: a "device" fade with every default, or an "own" fade of 0/0/0 under a
 ---   profile without fades, where any other fade is dropped with an error.

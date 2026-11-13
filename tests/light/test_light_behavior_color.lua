@@ -379,6 +379,63 @@ case(function()
   w.restore()
 end)
 
+-- A bulb that fades itself with no pre-on and drops a color sent with an off or while off.
+local HOLD_NO_PRE_ON = K.copy(K.ES)
+HOLD_NO_PRE_ON.fade = { kind = "device", curve = "linear", preOn = false }
+HOLD_NO_PRE_ON.colorWhileOff = "hold"
+
+T.section("a hold device under Dim-To-Warm: an off carries no color, the Dim color is told once, and the next On brings it")
+case(function()
+  local w = K.world(HOLD_NO_PRE_ON)
+  K.onMode(w, K.WARM, K.DIM)
+  K.target(w, 25)
+  w.run(5000)
+  local kept = K.device(w).color
+  w.proxy:mark()
+  w.m.sent = {}
+  w.proxy:send("OFF")
+  w.run(5000)
+  local off = w.m.sent[1] or {}
+  T.check("the off sends no color", off.on == false and not off.setsColor, off)
+  T.eq("the device drops none", w.device.droppedColors, 0)
+  T.check("and keeps the mix", near(K.device(w).color.x, kept.x, 0.005), K.device(w).color)
+  w.light:report({ kind = "push", on = false, color = { x = kept.x, y = kept.y, mode = "xy" } })
+  w.run(3000)
+  T.eq("the proxy is told one color, its report while off none", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  T.check("the Dim color", near((w.proxy.color or {}).x, K.DIM.x, 0.005), w.proxy.color)
+  w.m.sent = {}
+  holdUpFromOff(w)
+  local on = colored(w)[1] or {}
+  T.check("the On carries a color", on.on and on.setsColor, on)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  local x, y = mix(level)
+  local c = w.proxy.color or {}
+  T.check("told in the mix for that level", near(c.x, x, 0.005) and near(c.y, y, 0.005), c)
+  T.check("and the device is in it", near(K.device(w).color.x, x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
+T.section("a hold device with no pre-on: a color picked while off, held, is where a hold from off stops")
+case(function()
+  local w = K.world(HOLD_NO_PRE_ON, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.color(w, RED.x, RED.y)
+  w.run(1000)
+  w.m.sent = {}
+  holdUpFromOff(w)
+  local stop = w.m:sentOf("stop")[1] or {}
+  T.check("the stop sends the color", stop.setsColor and near((stop.color or {}).x, RED.x, 0.01), stop)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  T.check("told in it", near((w.proxy.color or {}).x, RED.x, 0.003), w.proxy.color)
+  T.check("and the device is in it", near(K.device(w).color.x, RED.x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
 T.section("Dim-To-Warm: each level carries the mix between the Dim and On colors, as a color temperature")
 case(function()
   local w = K.world(K.ES, {}, 100)
