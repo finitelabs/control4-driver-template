@@ -390,7 +390,9 @@ local function sample(run)
   local now = w.clock.now()
   local state = w.device:state(now)
   local lo, hi = rangeAt(run, now)
-  run.reached[state.on and Range.toLevel(state.level, lo, hi) or 0] = true
+  -- A light that doesn't dim shows full whenever it is on, whatever level it keeps inside.
+  local shown = run.d.o.dims and Range.toLevel(state.level, lo, hi) or 100
+  run.reached[state.on and shown or 0] = true
 end
 
 --- Record the range in force after something that may change it.
