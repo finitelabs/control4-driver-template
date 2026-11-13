@@ -215,11 +215,11 @@ case(function()
   w.restore()
 end)
 
-T.section("Color On Mode preset: an On from off lights in it, and the follow-up is not sent again")
+T.section("Color On Mode preset: Navigator's On from off lights in it, with no follow-up")
 case(function()
   local w = K.world(K.ES, {}, 0)
   K.onMode(w, K.ON_PRESET)
-  w.proxy:appOn(100, { x = K.ON_PRESET.x, y = K.ON_PRESET.y, preset = 1, origin = 1 })
+  w.proxy:appOn(100)
   w.run(10)
   local first = colored(w)
   T.eq("the pre-on and the change both carry a color", #first, 2)
@@ -229,8 +229,29 @@ case(function()
     first
   )
   w.run(5000)
-  T.eq("the follow-up sends no color again", #colored(w), 2)
+  T.eq("and no color after it", #colored(w), 2)
   T.check("told in it", near((w.proxy.color or {}).x, K.ON_PRESET.x), w.proxy.color)
+  w.restore()
+end)
+
+T.section("Dim-To-Warm: Navigator's On comes on in the mix for its level, though its follow-up names the On color")
+case(function()
+  local w = K.world(K.ES, {}, 0)
+  K.onMode(w, K.WARM, K.DIM)
+  w.proxy:mark()
+  w.proxy:appOn(60)
+  w.run(5000)
+  local x, y =
+    C4:ColorCCTtoXY(C4:ColorXYtoCCT(K.DIM.x + (K.WARM.x - K.DIM.x) * 0.6, K.DIM.y + (K.WARM.y - K.DIM.y) * 0.6))
+  local told = w.proxy:last("LIGHT_COLOR_CHANGED") or {}
+  T.check(
+    "told the mix at 60",
+    near(tonumber(told.LIGHT_COLOR_CURRENT_X), x, 0.003) and near(tonumber(told.LIGHT_COLOR_CURRENT_Y), y, 0.003),
+    told
+  )
+  T.eq("as a color temperature", tonumber(told.LIGHT_COLOR_CURRENT_COLOR_MODE), 1)
+  T.check("and the device is in it", near(K.device(w).color.x, x, 0.01), K.device(w).color)
+  T.eq("at 60", w.proxy.level, 60)
   w.restore()
 end)
 
