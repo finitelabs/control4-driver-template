@@ -656,12 +656,26 @@ function Motion:_toColor(out, intent, choice, ms)
   local fade = self:_fade()
   local from = { level = self:_levelAt(t), color = self:_colorAt(t) }
   local lr = self.levelRamp
-  if lr then
-    lr.merged, lr.set = nil, true
-  end
   local rate = intent.rateMs or ms.colorRate
   local length = Fade.length(fade, true, true, rate)
   local cr = self.colorRamp
+  -- An on that lit the light in its color carries it on the level, with no color ramp. The proxy's copy of it
+  -- changes nothing and nothing goes out, unless it gets there sooner on a light that fades the color from the one
+  -- it kept. The color stays the on's, so a stop still places it.
+  if
+    lit
+    and cr == nil
+    and lr
+    and lr.merged
+    and sameColor(lr.merged, target)
+    and sameColor(from.color, target)
+    and (not lr.placesColor or t + length >= lr.startMs + lr.ms)
+  then
+    return
+  end
+  if lr then
+    lr.merged, lr.set = nil, true
+  end
   if lit and cr and sameColor(cr.to, target) and t + length >= cr.startMs + cr.ms then
     -- The color is on its way there already, and no sooner by this: it keeps going, now a color of its own, and
     -- nothing more goes out. The proxy's own copy of an on's color comes this way.
