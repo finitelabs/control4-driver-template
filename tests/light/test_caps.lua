@@ -477,4 +477,42 @@ do
   T.eq("a profile with fades: ramp_level true", Caps.dynamic(d, fading).ramp_level, true)
 end
 
+T.section("the build's writer stops at a driver.xml without the line just above its capabilities")
+do
+  local caps = assert(package.searchpath("lib.light.caps", package.path))
+  local write = dofile((caps:gsub("src/lib/light/caps%.lua$", "tools/light-caps.lua")))
+  local LINE = "<!-- The light's capabilities are the build's, written from the profile the driver gives Light.new. -->"
+  local path = os.tmpname()
+  --- @param body string What driver.xml holds inside its devicedata element.
+  --- @return boolean ok, string|nil err, string xml
+  local function build(body)
+    local f = assert(io.open(path, "wb"))
+    f:write("<devicedata>\n" .. body .. "</devicedata>\n")
+    f:close()
+    local ok, err = pcall(write, { profile = FULL }, path)
+    f = assert(io.open(path, "rb"))
+    local xml = f:read("*a")
+    f:close()
+    return ok, err, xml
+  end
+  local ok, _, xml = build("  " .. LINE .. "\n  <capabilities/>\n")
+  T.check("with it, the capabilities are written", ok and xml:find("<dimmer>True</dimmer>", 1, true) ~= nil, xml)
+  T.check("and the line stays", xml:find(LINE, 1, true) ~= nil, xml)
+  local without, err = build("  <capabilities/>\n")
+  T.check("without it, the build stops and names the line", not without and tostring(err):find(LINE, 1, true), err)
+  T.check(
+    "in other words, it stops",
+    not build("  <!-- The build writes the light's capabilities here. -->\n  <capabilities/>\n")
+  )
+  T.check(
+    "with an element between them, it stops",
+    not build("  " .. LINE .. "\n  <name>x</name>\n  <capabilities/>\n")
+  )
+  T.check(
+    "with another comment above the line, the capabilities are written",
+    build("  <!-- An older note. -->\n  " .. LINE .. "\n  <capabilities>\n  </capabilities>\n")
+  )
+  os.remove(path)
+end
+
 T.finish()
