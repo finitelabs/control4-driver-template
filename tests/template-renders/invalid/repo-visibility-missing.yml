@@ -1,3 +1,2 @@
 # expect: Question "repo_visibility" is required
-# Left out, as a copier update that does not pass it: it has no default, so a public repo is never recorded private.
 repo_visibility: null
