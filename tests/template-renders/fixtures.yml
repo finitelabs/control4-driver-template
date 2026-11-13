@@ -3,3 +3,4 @@ project_name: ci-render
 project_description: Template CI render
 github_org: finitelabs
 readme_driver_slug: example
+repo_visibility: private

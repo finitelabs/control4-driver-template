@@ -51,6 +51,7 @@ copier copy --trust --defaults --vcs-ref HEAD \
   --data project_name=control4-probe \
   --data github_org=finitelabs \
   --data readme_driver_slug=probe \
+  --data repo_visibility=private \
   . /tmp/render
 ```
 

@@ -178,7 +178,7 @@ Copier will show diffs for any files that changed in the template and let you re
 | `project_name` | Project name (e.g., `control4-esphome`) | (required) |
 | `project_description` | Short description | `A Control4 driver` |
 | `github_org` | GitHub organization | (required) |
-| `repo_visibility` | The repository's visibility, `private` or `public`. `tools/github-setup` creates the repository with it and changes an existing one to it with `--apply`. Build artifacts keep 1 day on a PR, 3 on main and 14 on a tag in a private repository; 3 on a PR and 14 otherwise in a public one, whose Actions storage is free | `private` |
+| `repo_visibility` | The repository's visibility, `private` or `public`. `tools/github-setup` creates the repository with it and changes an existing one to it with `--apply`. Build artifacts keep 1 day on a PR, 3 on main and 14 on a tag in a private repository; 3 on a PR and 14 otherwise in a public one, whose Actions storage is free. No default, so an update that leaves it out stops instead of recording a public repository as private | (required) |
 | `dc_pid` | DriverCentral product id; 0 until the product exists. Every repo builds both `drivercentral` and `oss` | `0` |
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
 | `readme_build` | Build distribution for README | `oss` |

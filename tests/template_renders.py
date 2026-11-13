@@ -45,9 +45,10 @@ def load(path):
 
 
 def answers(path):
+    """The fixtures with the file's answers over them; a null answer leaves that fixture out."""
     merged = load(FIXTURES)
     merged.update(load(path))
-    return merged
+    return {key: value for key, value in merged.items() if value is not None}
 
 
 def render(data, dst):
@@ -159,7 +160,7 @@ def check_github_setup(data, directory):
     lines = path.read_text(encoding="utf-8").splitlines()
     if f"NAME={data['project_name']}" not in lines:
         problems.append(f"tools/github-setup does not set NAME={data['project_name']}")
-    visibility = data.get("repo_visibility", "private")
+    visibility = data["repo_visibility"]
     if f"VISIBILITY={visibility}" not in lines:
         problems.append(f"tools/github-setup does not set VISIBILITY={visibility}")
     return problems
@@ -168,7 +169,7 @@ def check_github_setup(data, directory):
 def check_upload_retention(data, directory):
     text = (Path(directory) / ".github" / "workflows" / "build.yml").read_text(encoding="utf-8")
     uploads = text.count("uses: actions/upload-artifact")
-    visibility = data.get("repo_visibility", "private")
+    visibility = data["repo_visibility"]
     keep = (
         "github.event_name == 'pull_request' && 3 || 14"
         if visibility == "public"

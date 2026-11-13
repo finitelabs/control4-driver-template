@@ -72,11 +72,11 @@ github_org:
 
 repo_visibility:
   type: str
-  help: "The GitHub repository's visibility. tools/github-setup creates the repository with it and changes an existing one to it with --apply, and a public repository's builds keep their artifacts longer, as its Actions storage is free. Making a repository public publishes its whole history."
+  help: "The GitHub repository's visibility. tools/github-setup creates the repository with it and changes an existing one to it with --apply, and a public repository's builds keep their artifacts longer, as its Actions storage is free. Making a repository public publishes its whole history; making it private drops its stars and watchers and detaches its forks."
+  # No default: an update that leaves it out stops, rather than recording a public repo as private.
   choices:
     Private: private
     Public: public
-  default: private
 
 dc_pid:
   type: int
