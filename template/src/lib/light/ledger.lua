@@ -497,6 +497,15 @@ function Ledger:_inWindow(aspect, window, value, report, now, out)
   end
   -- The on rides the level: it is moving while the level's ramp runs.
   local ramping = (aspect ~= "color" and now.levelRamping) or (aspect == "color" and now.colorRamping)
+  if aspect == "on" and value ~= window.before then
+    window.left = true
+  end
+  -- An on sent back to where the light stood before the off ahead of it is heard may be the light from before
+  -- both: history, until the off's echo or the deadline.
+  if aspect == "on" and #window.sent > 1 and value == window.before and newest.value == value and not window.left then
+    self:_hold(window, value)
+    return "history"
+  end
   -- An echo of the newest command is the light's own. One in another form than sent that is, in that form, what
   -- the light showed before may be from before the command: it is history.
   local form = newest ~= nil and not self:_same(aspect, value, newest.value)

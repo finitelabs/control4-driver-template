@@ -564,6 +564,30 @@ CASES["history"] = {
     },
     want = { H() },
   },
+  {
+    name = "an on sent back before the off ahead of it is heard: the light's on from before both is history",
+    steps = {
+      { send = { on = false } },
+      { send = { on = true, fromOff = true } },
+      { hear = { kind = "push", on = true } },
+      { hear = { kind = "push", on = false } },
+      { hear = { kind = "push", on = true } },
+      { run = 2000 },
+    },
+    -- The off's late echo is history too, and the on's echo after it closes the window: nothing is news.
+    want = { H(), H(), H(), H(nil, "level") },
+  },
+  {
+    name = "an on sent back before the off ahead of it is heard, with no report after its own: adopted at the deadline",
+    steps = {
+      { send = { on = false } },
+      { send = { on = true, fromOff = true } },
+      { hear = { kind = "push", on = true } },
+      { run = 2000 },
+    },
+    -- The on adopted is the one the proxy shows: no news.
+    want = { H(), H(nil, "on"), H(nil, "level") },
+  },
 }
 
 CASES["a value no command sent"] = {

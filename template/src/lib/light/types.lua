@@ -375,6 +375,7 @@ Types.API = 1
 --- @field extended boolean The deadline was extended once.
 --- @field deadline integer
 --- @field landed boolean|nil What is held is a position no command sent, reported once the newest change had landed.
+--- @field left boolean|nil An on report has shown the light away from where it stood when the window opened.
 
 --- What start read from the proxy, which Motion starts from and the first report is weighed against.
 --- @class LightSeed
