@@ -8,6 +8,7 @@ local T = require("testlib")
 
 require("c4_shim")
 
+local Color = require("lib.light.color")
 local K = require("behavior_kit")
 
 local function case(fn)
@@ -591,6 +592,30 @@ case(function()
   w.m:deliver({ kind = "push", on = true, level = 1, color = white })
   w.run(5000)
   T.eq("the proxy is told the white once, and not the full color the late echo repeats", toldModes(w), { K.CCT })
+  w.restore()
+end)
+T.section("Color On Mode preset: a full color at the white a light shows as a Kelvin is that white, told once")
+case(function()
+  -- The light reports a white it was sent as a full color as the Kelvin.
+  local w = K.world(K.ES, { kelvinWhites = true }, 50)
+  local x, y = Color.kelvinToXY(3200)
+  K.color(w, x, y, 0, K.CCT)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.onMode(w, { id = 5, origin = 1, x = x, y = y })
+  for _, on in ipairs({ { "ON" }, { "SET_LEVEL", { LEVEL = 100 } } }) do
+    w.proxy:mark()
+    w.m.sent = {}
+    w.proxy:send(on[1], on[2])
+    w.run(3000)
+    T.eq(on[1] .. " tells the white once, and never the full color", toldModes(w), { K.CCT })
+    T.eq("and sends it as the white", ((colored(w)[1] or {}).color or {}).mode, "cct")
+    w.proxy:mark()
+    w.proxy:send("OFF")
+    w.run(3000)
+    T.eq("the off after it tells no color", toldModes(w), {})
+  end
   w.restore()
 end)
 T.finish()

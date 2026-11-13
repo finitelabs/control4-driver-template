@@ -145,6 +145,30 @@ do
   )
 end
 
+T.section("an on mode's full color at the white the light shows as a Kelvin comes on in that white")
+do
+  local asFull = { x = WARM.x, y = WARM.y, mode = "xy" }
+  local offInWarm = { on = false, level = 0.5, color = WARM, levelRamping = false, colorRamping = false }
+  local cases = {
+    { "a preset", { colorOnMode = "preset", onColor = asFull, onPresetId = 4, onPresetOrigin = 2 }, WARM },
+    { "Previous", { colorOnMode = "previous", previousColor = asFull }, WARM },
+    { "a preset at another color", { colorOnMode = "preset", onColor = RED }, RED },
+  }
+  for _, c in ipairs(cases) do
+    local choice = OnColor.choose(intent("on"), inputs({ now = offInWarm, settings = c[2] }))
+    T.check(c[1] .. ": comes on in " .. c[3].mode, near(choice.color, c[3]), choice.color)
+  end
+  local picked = OnColor.choose(
+    intent("on"),
+    inputs({
+      now = offInWarm,
+      settings = { colorOnMode = "preset", onColor = RED },
+      picks = { picked = { color = asFull } },
+    })
+  )
+  T.check("a pick at that white comes on as picked", near(picked.color, asFull), picked.color)
+end
+
 T.section("a pick comes ahead of every on mode")
 do
   local pick = { color = BLUE, presetId = 7, presetOrigin = 2 }
