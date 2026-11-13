@@ -4,8 +4,7 @@
 
 local Caps = require("lib.light.caps")
 
---- The line every light driver's driver.xml carries just above its capabilities element, so a reader of the
---- source knows the build writes them.
+--- So a reader of a light driver's source driver.xml knows the build writes its capabilities.
 local COMMENT =
   "<!-- The light's capabilities are the build's, written from the profile the driver gives Light.new. -->"
 
