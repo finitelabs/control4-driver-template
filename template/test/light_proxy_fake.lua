@@ -142,7 +142,7 @@ Proxy.__index = Proxy
 --- A command to the light, as Director delivers it: a command-keyed RFP first, then the binding's.
 --- @param binding integer
 --- @param cmd string
---- @param params table<string, any>
+--- @param params table<string, any>|nil
 local function dispatch(binding, cmd, params)
   local handler = RFP[cmd]
   if type(handler) ~= "function" then
