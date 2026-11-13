@@ -108,6 +108,26 @@ case(function()
   w.restore()
 end)
 
+T.section("a hold device lit by another hand while a color is held is told the color it kept, with no report of it")
+case(function()
+  -- Its pushes carry only what changed, so its on says nothing of the color it lit in, and it can't be read.
+  local o = K.copy(K.HOLD)
+  o.feedback = { shows = "position", waitMs = 300, refresh = false }
+  local w = K.world(o, { split = true }, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.color(w, RED.x, RED.y)
+  w.run(1000)
+  T.check("the pick is told", near((w.proxy.color or {}).x, RED.x), w.proxy.color)
+  w.m:other({ on = true, level = 0.5 })
+  w.run(5000)
+  T.check("the device lit in the color it kept", near(K.device(w).color.x, GREEN.x, 0.005), K.device(w).color)
+  T.check("and the proxy shows it", near((w.proxy.color or {}).x, GREEN.x, 0.005), w.proxy.color)
+  w.restore()
+end)
+
 T.section("a white on a light with color and CCT goes as a color temperature, clamped to the device's range")
 case(function()
   local w = K.world(K.ES, {}, 100)
@@ -628,6 +648,29 @@ for _, shows in ipairs({ "target", "position" }) do
     w.restore()
   end)
 end
+
+T.section("a hold device fading itself on to a held color: its positions from the color it kept are no news")
+case(function()
+  local o = K.copy(K.OWN)
+  o.dims = false
+  o.colorWhileOff = "hold"
+  o.fade = { kind = "own", own = { onMs = 1000, offMs = 0, changeMs = 0 } }
+  o.feedback = { shows = "position", waitMs = 400, refresh = true }
+  local w = K.world(o, { latency = 150, pushEveryMs = 250 }, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.color(w, RED.x, RED.y)
+  w.run(1000)
+  w.proxy:mark()
+  w.proxy:send("ON")
+  w.run(5000)
+  T.eq("the color is told once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  T.check("the one held", near((w.proxy.color or {}).x, RED.x, 0.005), w.proxy.color)
+  T.check("and the device is in it", near(K.device(w).color.x, RED.x, 0.005), K.device(w).color)
+  w.restore()
+end)
 
 T.section("a hold device with no pre-on: a color picked while off, held, is where a hold from off stops")
 case(function()
