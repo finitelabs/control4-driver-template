@@ -267,6 +267,14 @@ function Motion:settle(values)
   self:_stopWalkIfDone()
 end
 
+--- A running color ramp ends in the form the light echoed its end in.
+--- @param color LightColor
+function Motion:reform(color)
+  if self.colorRamp then
+    self.color = color
+  end
+end
+
 --- A ramp's timer ran out: the aspect is at its rest value. It sends nothing.
 --- @param aspect LightAspect
 --- @return LightCommand[]

@@ -20,6 +20,7 @@ for _, case in ipairs({
   { "device clamps to maxMs", DEVICE, true, true, 90000, 65535 },
   { "device rounds down a fraction", DEVICE, true, true, 12.7, 12 },
   { "device takes no negative time", DEVICE, true, false, -5, 0 },
+  { "device off to off moves nothing", DEVICE, false, false, 1500, 0 },
   { "own off to on runs onMs", OWN, false, true, 5000, 300 },
   { "own on to off runs offMs", OWN, true, false, 5000, 400 },
   { "own on to another level runs changeMs", OWN, true, true, 5000, 200 },
@@ -27,6 +28,7 @@ for _, case in ipairs({
   { "own ignores a rate of 0", OWN, false, true, 0, 300 },
   { "walk takes the time asked", WALK, false, true, 1000, 1000 },
   { "walk clamps to its maxMs", WALK, false, true, 70000, 60000 },
+  { "walk off to off moves nothing", WALK, false, false, 1000, 0 },
 }) do
   T.eq(case[1], Fade.length(case[2], case[3], case[4], case[5]), case[6])
 end

@@ -300,6 +300,21 @@ case(function()
   w.restore()
 end)
 
+T.section("an off over a rate, for a light already off, goes at once and tells nothing")
+case(function()
+  local w = K.world(K.ES, {}, 50)
+  K.target(w, 0, 0)
+  w.run(3000)
+  w.proxy:mark()
+  local before = #w.m.sent
+  K.target(w, 0, 300)
+  local off = w.m.sent[before + 1] or {}
+  T.eq("one off, with no fade", { #w.m.sent - before, off.on, off.transitionMs }, { 1, false, 0 })
+  w.run(3000)
+  T.eq("and nothing is told", w.proxy:said(), {})
+  w.restore()
+end)
+
 T.section("a rated on from off on a device that keeps its level opens with a 0-time pre-on at the bottom step")
 case(function()
   local w = K.world(K.ES, {}, 0)

@@ -379,6 +379,9 @@ function Light:_heard(heard)
     self.motion:haltAll()
   end
   self.motion:settle(heard.settle)
+  if heard.form then
+    self.motion:reform(heard.form)
+  end
   if #heard.foreign > 0 then
     self.scenes:foreign(rampsEnded(before, heard.foreign))
     self.picks:foreign(heard.foreign)
