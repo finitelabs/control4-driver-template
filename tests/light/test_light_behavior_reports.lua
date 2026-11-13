@@ -554,6 +554,34 @@ case(function()
   w.restore()
 end)
 
+T.section("a re-timing device reporting one attribute at a time: the level it keeps, alone beside our off, is no news")
+case(function()
+  local base = K.copy(K.ES)
+  base.fade = { kind = "device", curve = "linear", preOn = true, retimes = true }
+  base.feedback = { shows = "target", waitMs = 2500, refresh = false }
+  local w = quiet(base, 87)
+  K.color(w, K.GREEN.x, K.GREEN.y, 3000)
+  w.run(10)
+  K.target(w, 100, 2000)
+  report(w, { level = 1 })
+  w.run(245)
+  w.proxy:mark()
+  K.target(w, 0, 890)
+  report(w, { on = false })
+  w.run(10)
+  -- Its fade to 100 had only begun, so it keeps the level it had before.
+  report(w, { level = 0.87 })
+  w.run(5000)
+  T.eq("the off is told, and no level after it", w.proxy:changed(), { 0 })
+  local c = w.proxy.color or {}
+  T.check(
+    "the color fade the off carried on ends where the light heads",
+    near(c.x, K.GREEN.x) and near(c.y, K.GREEN.y),
+    c
+  )
+  w.restore()
+end)
+
 T.section("a re-timing device: another client's level ends a color fade part way, and the light's echo of it tells it")
 case(function()
   local base = K.copy(K.ES)

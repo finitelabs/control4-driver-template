@@ -141,8 +141,14 @@ function Ledger:heard(report, now)
       -- A lit light below where its fade to off started is that fade on its way, held with its on, or alone
       -- from a device that reports one attribute at a time.
       history[#history + 1] = aspect
-    elseif aspect == "level" and value ~= nil and report.on == false and self:_ourOffOut() then
-      -- Beside an off while one of ours is out, the level is only the one the light keeps for its next on.
+    elseif
+      aspect == "level"
+      and value ~= nil
+      and (report.on == false or (report.on == nil and self.libraryOn == false))
+      and self:_ourOffOut()
+    then
+      -- Beside an off while one of ours is out, or alone from a device that reports one attribute at a time,
+      -- the level is only the one the light keeps for its next on.
       value = nil
     elseif value ~= nil and self:_weigh(aspect, value, report, now, out) == "history" then
       history[#history + 1] = aspect
