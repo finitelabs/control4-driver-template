@@ -383,7 +383,7 @@ def _mdformat(text: str, wrap: int) -> str:
 # A markdown link to another page beside the docs, with or without an anchor: no scheme or path.
 _PAGE_LINK_RE = re.compile(r"(?<!!)\[([^\]]*)\]\([\w.-]+\.html(?:#[\w.-]*)?\)")
 
-# The support contacts a DriverCentral build fills in from build secrets, each with its link's scheme.
+# Each support build secret and its link's scheme: with no value a link builds as [](tel:), and only the scheme says which.
 SUPPORT_CONTACTS = (("SUPPORT_PHONE", "tel"), ("SUPPORT_EMAIL", "mailto"))
 
 
