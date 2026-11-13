@@ -445,7 +445,12 @@ function Light:_followUp(cmds)
   -- takes the light as the wire left it.
   self.motion:assumeLit(self.ledger:lit())
   if self.online then
-    self.proxy:sync(self.motion:view(t), self.ledger.awaiting, t)
+    local awaiting = self.ledger.awaiting
+    local unlanded = self.motion:unlanded(t)
+    if unlanded then
+      awaiting = { level = awaiting.level or unlanded.level, color = awaiting.color or unlanded.color }
+    end
+    self.proxy:sync(self.motion:view(t), awaiting, t)
     local shown = self.proxy:shown()
     if shown then
       local ok, err = pcall(self.adapter.show, self.adapter, shown)

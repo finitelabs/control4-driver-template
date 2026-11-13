@@ -154,6 +154,25 @@ function Motion:view(t)
   return view
 end
 
+--- The aspects a walk has run past the end of without sending where they end: the proxy is told them with the
+--- step that does, as the light only gets there then.
+--- @param t integer
+--- @return {level: boolean, color: boolean}|nil
+function Motion:unlanded(t)
+  local lr, cr, walked = self.levelRamp, self.colorRamp, self.walked
+  if self:_fade().kind ~= "walk" or (lr == nil and cr == nil) then
+    return nil
+  end
+  local level = lr ~= nil
+    and t >= lr.startMs + lr.ms
+    and (walked == nil or (lr.to <= 0) ~= (walked.level <= 0) or not self:_sameLevel(lr.to, walked.level))
+  local color = cr ~= nil and t >= cr.startMs + cr.ms and (walked == nil or not sameColor(cr.to, walked.color, 0))
+  if not level and not color then
+    return nil
+  end
+  return { level = level, color = color }
+end
+
 --- When the newest change of an aspect ends.
 --- @param aspect LightAspect
 --- @return integer ms C4:GetTime() ms.
