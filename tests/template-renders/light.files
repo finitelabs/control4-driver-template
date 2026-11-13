@@ -59,7 +59,11 @@ src/lib/values.lua
 test/c4_fixtures.lua
 test/c4_shim.lua
 test/dc_cloud.lua
+test/light_conformance.lua
+test/light_contract_cases.lua
+test/light_drivers.lua
 test/light_proxy_fake.lua
+test/light_rig.lua
 test/light_setup/setup-607.xml
 test/light_setup/setup-626.xml
 test/light_setup/setup-643.xml
@@ -86,6 +90,7 @@ test/test_http_limits.lua
 test/test_http_redact.lua
 test/test_jit_off.lua
 test/test_lib_dependencies.lua
+test/test_light_conformance.lua
 test/test_logging_levels.lua
 test/test_nonfinite_numbers.lua
 test/test_persist_encrypted_trace.lua

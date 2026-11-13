@@ -48,6 +48,11 @@ _exclude:
   - "{% if 'light' not in vendor_modules.split() %}tools/light-caps.lua{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}test/light_setup{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}test/light_proxy_fake.lua{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}test/light_rig.lua{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}test/light_contract_cases.lua{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}test/light_drivers.lua{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}test/light_conformance.lua{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}test/test_light_conformance.lua{% endif %}"
   - "{% if not cloud_diagnostics %}src/lib/diagnostics.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_reporting.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_scrub.lua{% endif %}"
@@ -95,7 +100,7 @@ icon_style:
 
 vendor_modules:
   type: str
-  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui light). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: the house style.css and page.js for a page to embed, the variable browser (variables.js and .css, lib.ui.devices), with expressions the expression editor (expressions.js and .css, lib.ui.expression-tab), the widgets (collapse, menu, combobox, color and pickgrid, each a .js and .css pair), and the driver side (lib.ui.page, lib.ui.page-params, lib.ui.tab-properties). light ships the Light V2 library (src/lib/light.lua and src/lib/light/); a Light V2 driver is then an adapter over it, as src/lib/light/types.lua states."
+  help: "Space-separated optional vendor modules (available: bitn crypto bthome noiseprotocol protobuf oauth expressions ui light). Note: the crypto/noiseprotocol/protobuf/bthome bundles are core builds that require bitn on the path; include bitn alongside them (crypto also for noiseprotocol). oauth ships Control4's OAuth authorization-code grant (drivers-common-public module/auth_code_grant.lua) and its short-link helper (global/make_short_link.lua). ui ships the kit for a custom Composer tab in src/lib/ui: the house style.css and page.js for a page to embed, the variable browser (variables.js and .css, lib.ui.devices), with expressions the expression editor (expressions.js and .css, lib.ui.expression-tab), the widgets (collapse, menu, combobox, color and pickgrid, each a .js and .css pair), and the driver side (lib.ui.page, lib.ui.page-params, lib.ui.tab-properties). light ships the Light V2 library (src/lib/light.lua and src/lib/light/; src/lib/light/types.lua is the contract) and its conformance kit (test/light_proxy_fake.lua, test/light_rig.lua, test/light_drivers.lua, test/light_conformance.lua, test/test_light_conformance.lua, test/light_contract_cases.lua and test/light_setup/), which runs over the repo's own test/light_rigs.lua; a Light V2 driver is then an adapter over it, and the build writes its light capabilities into driver.xml (tools/light-caps.lua)."
   default: ""
 
 cloud_diagnostics:
