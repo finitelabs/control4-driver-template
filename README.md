@@ -181,12 +181,11 @@ Copier will show diffs for any files that changed in the template and let you re
 | `repo_visibility` | The repository's visibility, `private` or `public`. `tools/github-setup` creates the repository with it and changes an existing one to it with `--apply`. Build artifacts keep 1 day on a PR, 3 on main and 14 on a tag in a private repository; 3 on a PR and 14 otherwise in a public one, whose Actions storage is free. No default, so an update that leaves it out stops instead of recording a public repository as private | (required) |
 | `dc_pid` | DriverCentral product id; 0 until the product exists. Every repo builds both `drivercentral` and `oss` | `0` |
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
-| `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
 | `icon_style` | Control4 icon artboard `make icons` exports: `shaped` (Shadow Shaped) or `square` (Shadow Square) | `shaped` |
 | `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf oauth), `expressions` for the `src/lib` expression engine, `ui` for the custom Composer tab kit, and `light` for the Light V2 library | (empty) |
 | `cloud_diagnostics` | Ship `lib.diagnostics` (Cloud Monitoring), which reports a DriverCentral build's memory use and errors to InfluxDB; needs four build secrets | `false` |
-| `extra_build_secrets` | Space-separated build secrets `.env.default` declares besides the template's own (`SUPPORT_CODE_SECRET`, and the four `INFLUXDB_*` with `cloud_diagnostics`); the Build workflow passes each by name | (empty) |
+| `extra_build_secrets` | Space-separated build secrets `.env.default` declares besides the template's own (`SUPPORT_CODE_SECRET`, `SUPPORT_PHONE` and `SUPPORT_EMAIL`, and the four `INFLUXDB_*` with `cloud_diagnostics`); the Build workflow passes each by name | (empty) |
 | `extra_required_checks` | Space-separated status checks a PR must pass besides `build`, each a job name from the repo's own workflows; `tools/github-setup` puts them in the branch ruleset | (empty) |
 | `stale_issues` | Ping inactive issues, then close them, unless an exempt author opened them | `false` |
 | `stale_exempt_authors` | Space-separated GitHub logins whose issues are left alone; a GitHub App is `name[bot]` (asked when `stale_issues` is true) | (empty) |

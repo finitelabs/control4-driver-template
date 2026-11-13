@@ -242,7 +242,7 @@ def check_build_secrets(data, directory):
 
 def check_named_secrets(data, directory):
     """build.yml passes each build secret by name, exactly the ones .env.default declares, and never toJSON(secrets)."""
-    want = ["SUPPORT_CODE_SECRET"] + (
+    want = ["SUPPORT_CODE_SECRET", "SUPPORT_PHONE", "SUPPORT_EMAIL"] + (
         ["INFLUXDB_URL", "INFLUXDB_TOKEN", "INFLUXDB_METRICS_DB", "INFLUXDB_LOGS_DB"]
         if data.get("cloud_diagnostics")
         else []

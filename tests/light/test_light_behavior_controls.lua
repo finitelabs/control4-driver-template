@@ -194,6 +194,110 @@ case(function()
   w.restore()
 end)
 
+--- A keypad's tap on a link: DO_PUSH, then DO_CLICK 150 ms later.
+--- @param w MemoryWorld
+--- @param link integer
+local function linkTap(w, link)
+  w.proxy:link(link, "DO_PUSH")
+  w.run(150)
+  w.proxy:link(link, "DO_CLICK")
+end
+
+--- A keypad's hold on a link: DO_PUSH, then DO_RELEASE when it lets go.
+--- @param w MemoryWorld
+--- @param link integer
+--- @param ms integer
+local function linkHold(w, link, ms)
+  w.proxy:link(link, "DO_PUSH")
+  w.run(ms)
+  w.proxy:link(link, "DO_RELEASE")
+end
+
+--- Dim-To-Warm's mix at a level, as a color temperature.
+--- @param level number
+--- @return number x
+--- @return number y
+local function mix(level)
+  local b = level / 100
+  return C4:ColorCCTtoXY(C4:ColorXYtoCCT(K.DIM.x + (K.WARM.x - K.DIM.x) * b, K.DIM.y + (K.WARM.y - K.DIM.y) * b))
+end
+
+--- @param w MemoryWorld
+--- @param x number
+--- @param y number
+--- @param tolerance number
+--- @return boolean
+local function toldNear(w, x, y, tolerance)
+  local c = w.proxy.color or {}
+  return near(c.x, x, tolerance) and near(c.y, y, tolerance)
+end
+
+T.section("link taps under the on modes: Default On in a preset's color, and Dim-To-Warm's mix (dev 2026-11-13, 967)")
+case(function()
+  local w = K.world(K.ES, {}, 0)
+  w.proxy:presetLevel(60)
+  w.run(10)
+  K.onMode(w, K.ON_PRESET)
+  linkTap(w, M.LINKS.top)
+  w.run(5000)
+  T.eq("the On link from off: Default On's level", w.proxy.level, 60)
+  T.check("in the preset's color", toldNear(w, K.ON_PRESET.x, K.ON_PRESET.y, 0.003), w.proxy.color)
+  linkTap(w, M.LINKS.toggle)
+  w.run(5000)
+  T.eq("the Toggle link while lit: off", w.proxy.level, 0)
+  K.onMode(w, K.WARM, K.DIM)
+  linkTap(w, M.LINKS.toggle)
+  w.run(5000)
+  T.eq("the Toggle link from off under Dim-To-Warm: Default On's level", w.proxy.level, 60)
+  local x, y = mix(60)
+  T.check("in the mix for it", toldNear(w, x, y, 0.003), w.proxy.color)
+  linkTap(w, M.LINKS.bottom)
+  w.run(5000)
+  T.eq("the Off link: off", w.proxy.level, 0)
+  w.restore()
+end)
+
+T.section("a link tap under Previous: the level and the color the light was last on in (dev 2026-11-13, 967)")
+case(function()
+  local w = K.world(K.ES, {}, 35)
+  K.color(w, K.GREEN.x, K.GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.onMode(w, { id = 10, origin = 1, x = K.GREEN.x, y = K.GREEN.y })
+  w.proxy:send("UPDATE_BRIGHTNESS_ON_MODE", { BRIGHTNESS_PRESET_ID = 10, BRIGHTNESS_PRESET_LEVEL = 35 })
+  linkTap(w, M.LINKS.top)
+  w.run(5000)
+  T.eq("the level it was last on at", w.proxy.level, 35)
+  T.check("in the color it was last on in", toldNear(w, K.GREEN.x, K.GREEN.y, 0.01), w.proxy.color)
+  w.restore()
+end)
+
+T.section("a link hold on a lit light under Dim-To-Warm stops in the mix for its level (dev 2026-11-13, 967)")
+case(function()
+  local w = K.world(K.ES, {}, 0)
+  w.proxy:send("SET_HOLD_RATE_UP", { RATE = 5000 })
+  w.proxy:send("SET_HOLD_RATE_DOWN", { RATE = 5000 })
+  K.onMode(w, K.WARM, K.DIM)
+  w.proxy:presetLevel(60)
+  w.run(10)
+  linkTap(w, M.LINKS.top)
+  w.run(5000)
+  linkHold(w, M.LINKS.bottom, 800)
+  w.run(3000)
+  local down = w.proxy.level
+  T.check("the Off link's hold stops part way down", down > 0 and down < 60, down)
+  local x, y = mix(down)
+  T.check("in the mix for that level", toldNear(w, x, y, 0.005), w.proxy.color)
+  linkHold(w, M.LINKS.top, 1500)
+  w.run(3000)
+  local up = w.proxy.level
+  T.check("the On link's hold stops part way up", up > down + 15 and up < 100, up)
+  x, y = mix(up)
+  T.check("in the mix for that level", toldNear(w, x, y, 0.005), w.proxy.color)
+  w.restore()
+end)
+
 T.section("the link LEDs: told once per change, every link showing the light's own state")
 case(function()
   local w = K.world(K.ES, {}, 0)

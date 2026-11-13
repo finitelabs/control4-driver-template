@@ -215,11 +215,11 @@ case(function()
   w.restore()
 end)
 
-T.section("Color On Mode preset: an On from off lights in it, and the follow-up is not sent again")
+T.section("Color On Mode preset: Navigator's On from off lights in it, with no follow-up")
 case(function()
   local w = K.world(K.ES, {}, 0)
   K.onMode(w, K.ON_PRESET)
-  w.proxy:appOn(100, { x = K.ON_PRESET.x, y = K.ON_PRESET.y, preset = 1, origin = 1 })
+  w.proxy:appOn(100)
   w.run(10)
   local first = colored(w)
   T.eq("the pre-on and the change both carry a color", #first, 2)
@@ -229,8 +229,29 @@ case(function()
     first
   )
   w.run(5000)
-  T.eq("the follow-up sends no color again", #colored(w), 2)
+  T.eq("and no color after it", #colored(w), 2)
   T.check("told in it", near((w.proxy.color or {}).x, K.ON_PRESET.x), w.proxy.color)
+  w.restore()
+end)
+
+T.section("Dim-To-Warm: Navigator's On comes on in the mix for its level, though its follow-up names the On color")
+case(function()
+  local w = K.world(K.ES, {}, 0)
+  K.onMode(w, K.WARM, K.DIM)
+  w.proxy:mark()
+  w.proxy:appOn(60)
+  w.run(5000)
+  local x, y =
+    C4:ColorCCTtoXY(C4:ColorXYtoCCT(K.DIM.x + (K.WARM.x - K.DIM.x) * 0.6, K.DIM.y + (K.WARM.y - K.DIM.y) * 0.6))
+  local told = w.proxy:last("LIGHT_COLOR_CHANGED") or {}
+  T.check(
+    "told the mix at 60",
+    near(tonumber(told.LIGHT_COLOR_CURRENT_X), x, 0.003) and near(tonumber(told.LIGHT_COLOR_CURRENT_Y), y, 0.003),
+    told
+  )
+  T.eq("as a color temperature", tonumber(told.LIGHT_COLOR_CURRENT_COLOR_MODE), 1)
+  T.check("and the device is in it", near(K.device(w).color.x, x, 0.01), K.device(w).color)
+  T.eq("at 60", w.proxy.level, 60)
   w.restore()
 end)
 
@@ -357,6 +378,84 @@ case(function()
   w.restore()
 end)
 
+--- A rated level from off under `preset`, and 20 ms on the proxy's copy of its color at the same rate, as
+--- programming's level sends under a Color On Mode.
+--- @param w MemoryWorld
+--- @param preset KitPreset
+--- @return integer before Commands sent before the copy.
+--- @return integer after Commands sent once the copy is handled.
+local function onThenCopy(w, preset)
+  K.onMode(w, preset)
+  w.m.sent = {}
+  K.target(w, 100, 4000)
+  w.run(20)
+  local before = #w.m.sent
+  K.color(w, preset.x, preset.y, 4000, preset.mode, preset)
+  return before, #w.m.sent
+end
+
+local NO_PRE_ON = K.copy(K.ES)
+NO_PRE_ON.fade = { kind = "device", curve = "linear", preOn = false }
+
+T.section("the proxy's copy of a rated On's color, with the light lit in it, puts nothing more out")
+local OTHER, SAME = { "off in another color", GREEN }, { "off in the preset's color", RED }
+-- A light that runs its own fades and was off in another color still takes the copy: its own change gets the color
+-- there sooner than the On's.
+for _, light in ipairs({
+  { "a light with a pre-on", K.ES, { OTHER, SAME } },
+  { "a light that fades itself with no pre-on", NO_PRE_ON, { OTHER, SAME } },
+  { "a walked light", K.WALK, { OTHER, SAME } },
+  { "a light that runs its own fades", K.OWN, { SAME } },
+}) do
+  for _, kept in ipairs(light[3]) do
+    local name = light[1] .. ", " .. kept[1]
+    case(function()
+      local w = K.world(light[2], {}, 100)
+      K.color(w, kept[2].x, kept[2].y)
+      w.run(3000)
+      w.proxy:send("OFF")
+      w.run(3000)
+      local before, after = onThenCopy(w, K.ON_PRESET)
+      T.eq(name .. ": nothing goes out for the copy", after, before)
+      w.run(5000)
+      T.check(name .. ": told in the preset", near((w.proxy.color or {}).x, K.ON_PRESET.x, 0.003), w.proxy.color)
+      T.check(name .. ": and the device is in it", near(K.device(w).color.x, K.ON_PRESET.x, 0.01), K.device(w).color)
+      w.restore()
+    end)
+  end
+end
+
+T.section("the proxy's copy of a rated On's white off the curve puts nothing more out")
+case(function()
+  local w = K.world(K.ES, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  local before, after = onThenCopy(w, K.WARM)
+  T.eq("nothing goes out for the copy", after, before)
+  w.restore()
+end)
+
+T.section("a light that fades itself with no pre-on: after the copy, a stop part way still sends the preset's color")
+case(function()
+  local w = K.world(NO_PRE_ON, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  onThenCopy(w, K.ON_PRESET)
+  w.run(1500)
+  w.proxy:send("SET_BRIGHTNESS_STOP")
+  w.run(3000)
+  local stop = w.m:sentOf("stop")[1] or {}
+  T.check("the stop sends the preset's color", stop.setsColor and near((stop.color or {}).x, K.ON_PRESET.x, 0.01), stop)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  T.check("and the device is in the preset", near(K.device(w).color.x, K.ON_PRESET.x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
 T.section("Dim-To-Warm: a hold from off starts at the Dim color, whatever color the light kept, and stops in the mix")
 case(function()
   local w = K.world(K.ES, {}, 100)
@@ -376,6 +475,120 @@ case(function()
   local c = w.proxy.color or {}
   T.check("told in the mix for that level", near(c.x, x, 0.005) and near(c.y, y, 0.005), c)
   T.check("and the device is in it", near(K.device(w).color.x, x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
+-- A bulb that fades itself with no pre-on and drops a color sent with an off or while off.
+local HOLD_NO_PRE_ON = K.copy(K.ES)
+HOLD_NO_PRE_ON.fade = { kind = "device", curve = "linear", preOn = false }
+HOLD_NO_PRE_ON.colorWhileOff = "hold"
+
+T.section("a hold device under Dim-To-Warm: an off sends no color and tells the Dim color once")
+case(function()
+  local w = K.world(HOLD_NO_PRE_ON)
+  K.onMode(w, K.WARM, K.DIM)
+  K.target(w, 25)
+  w.run(5000)
+  local kept = K.device(w).color
+  w.proxy:mark()
+  w.m.sent = {}
+  w.proxy:send("OFF")
+  w.run(5000)
+  local off = w.m.sent[1] or {}
+  T.check("the off sends no color", off.on == false and not off.setsColor, off)
+  T.eq("the device drops none", w.device.droppedColors, 0)
+  T.check("and keeps the mix", near(K.device(w).color.x, kept.x, 0.005), K.device(w).color)
+  w.light:report({ kind = "push", on = false, color = { x = kept.x, y = kept.y, mode = "xy" } })
+  w.run(3000)
+  T.eq("the proxy is told one color, its report while off none", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  T.check("the Dim color", near((w.proxy.color or {}).x, K.DIM.x, 0.005), w.proxy.color)
+  w.m.sent = {}
+  holdUpFromOff(w)
+  local on = colored(w)[1] or {}
+  T.check("the On carries a color", on.on and on.setsColor, on)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  local x, y = mix(level)
+  local c = w.proxy.color or {}
+  T.check("told in the mix for that level", near(c.x, x, 0.005) and near(c.y, y, 0.005), c)
+  T.check("and the device is in it", near(K.device(w).color.x, x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
+T.section("a hold device fading itself to off: a lit report of the color it kept on its way down is no news")
+case(function()
+  local o = K.copy(K.OWN)
+  o.colorWhileOff = "hold"
+  o.feedback = { shows = "position", waitMs = 5000, refresh = true }
+  local w = K.world(o)
+  K.onMode(w, K.WARM, K.DIM)
+  K.target(w, 25)
+  w.run(5000)
+  local kept = K.device(w).color
+  w.proxy:mark()
+  w.proxy:send("OFF")
+  w.run(80)
+  w.light:report({ kind = "push", on = true, level = 0.25, color = { x = kept.x, y = kept.y, mode = "xy" } })
+  w.run(5000)
+  T.eq("the proxy is told one color", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  T.check("the Dim color", near((w.proxy.color or {}).x, K.DIM.x, 0.005), w.proxy.color)
+  w.proxy:mark()
+  w.light:report({ kind = "push", on = true, level = 0.5, color = { x = GREEN.x, y = GREEN.y, mode = "xy" } })
+  w.run(3000)
+  T.check(
+    "once off, another hand's on in its own color is news",
+    near((w.proxy.color or {}).x, GREEN.x, 0.005),
+    w.proxy.color
+  )
+  w.restore()
+end)
+
+T.section("a hold device lit again before its off answers: the color it kept, in that late answer, is history")
+for _, shows in ipairs({ "target", "position" }) do
+  case(function()
+    local o = K.copy(K.OWN)
+    o.colorWhileOff = "hold"
+    o.feedback = { shows = shows, waitMs = 300, refresh = true }
+    local w = K.world(o)
+    K.onMode(w, K.WARM, K.DIM)
+    K.target(w, 100)
+    w.run(5000)
+    local kept = K.device(w).color
+    w.proxy:send("OFF")
+    w.run(5000)
+    w.proxy:send("OFF")
+    w.run(18)
+    w.proxy:mark()
+    w.m.sent = {}
+    w.proxy:send("SET_LEVEL", { LEVEL = 41 })
+    local on = (colored(w)[1] or {}).color or {}
+    w.run(62)
+    w.light:report({ kind = "push", on = false, color = { x = kept.x, y = kept.y, mode = "xy" } })
+    w.run(5000)
+    T.eq(shows .. ": the proxy is told one color", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+    T.eq(shows .. ": and one level", w.proxy:count("LIGHT_BRIGHTNESS_CHANGED"), 1)
+    T.check(shows .. ": the On's", near((w.proxy.color or {}).x, on.x or 0, 0.005), w.proxy.color)
+    w.restore()
+  end)
+end
+
+T.section("a hold device with no pre-on: a color picked while off, held, is where a hold from off stops")
+case(function()
+  local w = K.world(HOLD_NO_PRE_ON, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.color(w, RED.x, RED.y)
+  w.run(1000)
+  w.m.sent = {}
+  holdUpFromOff(w)
+  local stop = w.m:sentOf("stop")[1] or {}
+  T.check("the stop sends the color", stop.setsColor and near((stop.color or {}).x, RED.x, 0.01), stop)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  T.check("told in it", near((w.proxy.color or {}).x, RED.x, 0.003), w.proxy.color)
+  T.check("and the device is in it", near(K.device(w).color.x, RED.x, 0.01), K.device(w).color)
   w.restore()
 end)
 

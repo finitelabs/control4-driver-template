@@ -149,10 +149,20 @@ Log Level.
 
 # <span style="color:#17BCF2">Support</span>
 
+<!-- #ifdef DRIVERCENTRAL -->
+
+If you have any questions or issues, you can contact us at
+[%%SUPPORT_EMAIL%%](mailto:__SUPPORT_EMAIL__) or call/text us at
+[%%SUPPORT_PHONE%%](tel:__SUPPORT_PHONE__).
+
+<!-- #else -->
+
 If you have any questions or issues, you can file an issue on GitHub:
 
 https://github.com/finitelabs/control4-driver-template/issues/new
 
 > Include the driver version and the controller's OS version in the issue.
+
+<!-- #endif -->
 
 <!-- #embed-changelog -->

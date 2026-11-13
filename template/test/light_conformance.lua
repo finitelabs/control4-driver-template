@@ -486,7 +486,7 @@ function C.run(T, rig)
       p:send("OFF")
       h.clock.run(ms)
       p:mark()
-      p:appOn(dims and 80 or 100, { x = onColor.x, y = onColor.y, mode = onColor.mode, preset = 1, origin = 1 })
+      p:appOn(dims and 80 or 100)
       h.clock.run(ms)
       local told = p:told("LIGHT_COLOR_CHANGED")
       T.eq(name .. ": the proxy is told one color", #told, 1)
@@ -620,6 +620,16 @@ function C.run(T, rig)
           local h = fresh(rig)
           local p = h.proxy
           local top, bottom = whiteFor(device, 4000), whiteFor(device, 2700)
+          -- A device that shows both whites as asked shows the mix between them. One that shows every white on a
+          -- white channel of its own can't, and the proxy alone says where the light stopped.
+          local asked = true
+          p:send("ON")
+          h.clock.run(ms)
+          for _, white in ipairs({ bottom, top }) do
+            p:send("SET_COLOR_TARGET", colorParams(white, 0))
+            h.clock.run(ms)
+            asked = asked and sameXY(xyOf(h.device.state().color), white)
+          end
           holdFromOff(h, whiteFor(device, 6000), function()
             colorOnMode(p, top, bottom)
           end, links.top)
@@ -630,7 +640,11 @@ function C.run(T, rig)
             T.show({ shown = p.color, want = want, level = p.level })
           )
           local color = xyOf(h.device.state().color)
-          T.check(name .. ": and the device is in it", sameXY(color, want), T.show({ device = color, want = want }))
+          T.check(
+            name .. ": and the device is in it, on a device that shows both whites as asked",
+            not asked or sameXY(color, want),
+            T.show({ device = color, want = want })
+          )
           colorOnMode(p, nil)
           finish(h)
         end)
