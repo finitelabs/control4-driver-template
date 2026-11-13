@@ -641,9 +641,9 @@ phone number as `[%%SUPPORT_PHONE%%](tel:__SUPPORT_PHONE__)` and the email
 address as `[%%SUPPORT_EMAIL%%](mailto:__SUPPORT_EMAIL__)`, each inside
 `#ifdef DRIVERCENTRAL`. The link takes the `__NAME__` form, since mdformat
 escapes a `%` in a link. Set `SUPPORT_PHONE` with dashes, `+1-NNN-NNN-NNNN`, so
-it also makes the `tel:` link. The README comes from the OSS docs, which never
-show them, and `resources/drivercentral/description.md` takes the same
-placeholders, which `make docs-drivercentral` fills in.
+it also makes the `tel:` link. Only the docs and their PDFs give the contacts.
+The README comes from the OSS docs, which never show them, and the listing
+description, `resources/drivercentral/description.md`, gives neither.
 
 A DriverCentral build is packaged encrypted with or without a secret.
 `make package` then opens every package of an encrypted build and fails unless

@@ -40,8 +40,6 @@ from pygments.formatters import HtmlFormatter
 from pygments.lexers import get_lexer_by_name
 from pygments.util import ClassNotFound
 
-from preprocess import build_secret, parse_env_file
-
 TOOLS_DIR = Path(__file__).resolve().parent
 GITHUB_CSS = (TOOLS_DIR / "github-markdown.css").read_text(encoding="utf-8")
 # Scoped to `.highlight pre` so github-markdown.css's rounded box outranks the
@@ -427,11 +425,6 @@ _STRIP_PLACEHOLDER_RE = re.compile(
 
 def description(input_path: Path, output_path: Path) -> None:
     md = input_path.read_text(encoding="utf-8")
-    # The listing is pasted into DriverCentral, so it gets the support contacts filled in.
-    local = parse_env_file(TOOLS_DIR.parent / ".env")
-    for name in ("SUPPORT_PHONE", "SUPPORT_EMAIL"):
-        value = build_secret(name, local)
-        md = md.replace(f"%%{name}%%", value).replace(f"__{name}__", value)
     # Until the strip is uploaded, a paste shows no image rather than a broken one.
     html = _STRIP_PLACEHOLDER_RE.sub("", _drivercentral_html(md))
     output_path.write_text(html, encoding="utf-8")
