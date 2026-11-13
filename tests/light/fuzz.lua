@@ -71,13 +71,25 @@ local INVARIANTS = {
   { name = "errors", says = "no error escapes: no raise, no timer callback raise, no logged error" },
 }
 
--- Runs known to break an invariant for a while and to end with the proxy and the device agreeing, each recorded
--- with what the proxy is told against the device and why it passes. Any other failing run fails the suite. "rest"
+-- Runs known to break an invariant for a while and to end with the proxy and the device agreeing, each with what
+-- the proxy is told against the device and why the run ends agreeing. Any other failing run fails the suite. "rest"
 -- never takes a seed here.
 --- @type table<string, table<integer, boolean>>
 local KNOWN = {
-  told = { [4395] = true },
-  quiet = { [6868] = true, [14466] = true, [16794] = true },
+  told = {
+    -- A light that reports one aspect at a time and can't be asked to refresh is off at 30, and another client turns
+    -- it on at 20. Its on lands before its level, so lit at 30 is told, then 20 when the level comes.
+    [4395] = true,
+  },
+  quiet = {
+    -- A re-timing light's level report from before a SET_LEVEL 100 lands after the echo closed the window. Its 27 is
+    -- told as another client's, and the light's next report, 180 ms on, tells 100 again.
+    [6868] = true,
+    -- A light that runs its own fades reports its position on the way: SET_LEVEL 74 from off tells 62, then 74.
+    [14466] = true,
+    -- The same kind of light, on an off from 19, tells 14, 10 and 5, then off: its positions on its own fade down.
+    [16794] = true,
+  },
 }
 
 --------------------------------------------------------------------------------
