@@ -96,6 +96,11 @@ local KNOWN_EVERY = {
 -- The hold pass's own: its seeds draw other lights.
 --- @type table<string, table<integer, boolean>>
 local KNOWN_HOLD = {
+  told = {
+    -- The mixed pass's 4395, the same light drawn again: off at 30, another client lights it at 20, and lit at 30 is
+    -- told before its level lands.
+    [4395] = true,
+  },
   quiet = {
     -- A light that runs its own color fades answers a read in the same moment as a push from its fade to an on from
     -- off. The answer closes the window, so the push's color is told as another client's, and the next push tells
