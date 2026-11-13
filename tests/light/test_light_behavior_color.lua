@@ -384,7 +384,7 @@ local HOLD_NO_PRE_ON = K.copy(K.ES)
 HOLD_NO_PRE_ON.fade = { kind = "device", curve = "linear", preOn = false }
 HOLD_NO_PRE_ON.colorWhileOff = "hold"
 
-T.section("a hold device under Dim-To-Warm: an off carries no color, the Dim color is told once, and the next On brings it")
+T.section("a hold device under Dim-To-Warm: an off sends no color and tells the Dim color once")
 case(function()
   local w = K.world(HOLD_NO_PRE_ON)
   K.onMode(w, K.WARM, K.DIM)
