@@ -197,6 +197,151 @@ do
   p:restore()
 end
 
+--- The commands the light heard since `from`, by name.
+--- @param from integer
+--- @param cmd string
+--- @return table<string, any>[]
+local function since(from, cmd)
+  local out = {}
+  for i = from + 1, #heard do
+    if heard[i].cmd == cmd then
+      out[#out + 1] = heard[i].params
+    end
+  end
+  return out
+end
+
+T.section("Previous On at an off: its level only when it changed, its color every time (dev 2026-11-12, 4 lights)")
+do
+  local p = P.install(clock)
+  heard = {}
+  tell("LIGHT_COLOR_CHANGED", {
+    LIGHT_COLOR_CURRENT_X = 0.4357,
+    LIGHT_COLOR_CURRENT_Y = 0.2814,
+    LIGHT_COLOR_CURRENT_COLOR_MODE = 0,
+  })
+  tell("LIGHT_BRIGHTNESS_CHANGED", { LIGHT_BRIGHTNESS_CURRENT = 60 })
+  tell("LIGHT_BRIGHTNESS_CHANGED", { LIGHT_BRIGHTNESS_CURRENT = 0 })
+  clock.run(20)
+  local color = since(0, "UPDATE_COLOR_PRESET")[1] or {}
+  T.eq("the first off pushes the level", #since(0, "UPDATE_BRIGHTNESS_PRESET"), 1)
+  T.eq(
+    "and UPDATE_COLOR_PRESET MODIFIED 10 Previous On in the color 1200 holds",
+    { color.COMMAND, color.ID, color.NAME, color.COLOR_X, color.COLOR_Y, color.COLOR_MODE },
+    { "MODIFIED", 10, "Previous On", 0.4357, 0.2814, 0 }
+  )
+  local mark = #heard
+  tell("LIGHT_BRIGHTNESS_CHANGED", { LIGHT_BRIGHTNESS_CURRENT = 60 })
+  tell("LIGHT_BRIGHTNESS_CHANGED", { LIGHT_BRIGHTNESS_CURRENT = 0 })
+  clock.run(20)
+  T.eq("an off at the same level pushes no level", #since(mark, "UPDATE_BRIGHTNESS_PRESET"), 0)
+  T.eq("but the color again", #since(mark, "UPDATE_COLOR_PRESET"), 1)
+  mark = #heard
+  tell("LIGHT_BRIGHTNESS_CHANGED", { LIGHT_BRIGHTNESS_CURRENT = 30 })
+  tell("LIGHT_BRIGHTNESS_CHANGED", { LIGHT_BRIGHTNESS_CURRENT = 0 })
+  clock.run(20)
+  T.eq("an off at a new level pushes it", (since(mark, "UPDATE_BRIGHTNESS_PRESET")[1] or {}).LEVEL, 30)
+  p:restore()
+end
+
+T.section("a light with no color told gets no Previous On color at its off")
+do
+  local p = P.install(clock)
+  heard = {}
+  tell("LIGHT_BRIGHTNESS_CHANGED", { LIGHT_BRIGHTNESS_CURRENT = 60 })
+  tell("LIGHT_BRIGHTNESS_CHANGED", { LIGHT_BRIGHTNESS_CURRENT = 0 })
+  clock.run(20)
+  T.eq("no UPDATE_COLOR_PRESET", #since(0, "UPDATE_COLOR_PRESET"), 0)
+  p:restore()
+end
+
+T.section("the app's On: the brightness on mode's preset, and a follow-up only under Dim-To-Warm (dev 2026-11-12)")
+do
+  local p = P.install(clock)
+  heard = {}
+  p:appOn(60)
+  clock.run(50)
+  local on = since(0, "SET_BRIGHTNESS_TARGET")[1] or {}
+  T.eq(
+    "SET_BRIGHTNESS_TARGET at the level over 750 ms, naming Default On",
+    { on.LIGHT_BRIGHTNESS_TARGET, on.LIGHT_BRIGHTNESS_TARGET_PRESET_ID, on.RATE },
+    { 60, 1, 750 }
+  )
+  T.eq("with no on mode, no follow-up", #since(0, "SET_COLOR_TARGET"), 0)
+
+  local sunset = {
+    COLOR_PRESET_ID = 8,
+    COLOR_PRESET_ORIGIN = 2,
+    COLOR_PRESET_COLOR_X = 0.608506,
+    COLOR_PRESET_COLOR_Y = 0.357644,
+    COLOR_PRESET_COLOR_MODE = 0,
+    COLOR_FADE_PRESET_ID = 0,
+    COLOR_FADE_PRESET_ORIGIN = 0,
+  }
+  p:send("UPDATE_COLOR_ON_MODE", sunset)
+  local mark = #heard
+  p:appOn(60)
+  clock.run(50)
+  T.eq("a preset as the On color sends no follow-up", #since(mark, "SET_COLOR_TARGET"), 0)
+
+  p:send("UPDATE_BRIGHTNESS_ON_MODE", { BRIGHTNESS_PRESET_ID = 10, BRIGHTNESS_PRESET_LEVEL = 35 })
+  mark = #heard
+  p:appOn(35)
+  T.eq(
+    "under Previous it names preset 10",
+    (since(mark, "SET_BRIGHTNESS_TARGET")[1] or {}).LIGHT_BRIGHTNESS_TARGET_PRESET_ID,
+    10
+  )
+  clock.run(50)
+
+  p:send("UPDATE_BRIGHTNESS_ON_MODE", { BRIGHTNESS_PRESET_ID = 1, BRIGHTNESS_PRESET_LEVEL = 60 })
+  p:send("UPDATE_COLOR_ON_MODE", {
+    COLOR_PRESET_ID = 1,
+    COLOR_PRESET_ORIGIN = 2,
+    COLOR_PRESET_COLOR_X = 0.317097,
+    COLOR_PRESET_COLOR_Y = 0.327069,
+    COLOR_PRESET_COLOR_MODE = 1,
+    COLOR_FADE_PRESET_ID = 6,
+    COLOR_FADE_PRESET_ORIGIN = 2,
+    COLOR_FADE_PRESET_COLOR_X = 0.526676,
+    COLOR_FADE_PRESET_COLOR_Y = 0.413297,
+    COLOR_FADE_PRESET_COLOR_MODE = 1,
+  })
+  mark = #heard
+  p:appOn(60)
+  clock.run(17)
+  T.eq("under Dim-To-Warm, nothing more for 17 ms", #since(mark, "SET_COLOR_TARGET"), 0)
+  clock.run(1)
+  local follow = since(mark, "SET_COLOR_TARGET")[1] or {}
+  T.eq("then the On preset at its full color", {
+    follow.LIGHT_COLOR_TARGET_X,
+    follow.LIGHT_COLOR_TARGET_Y,
+    follow.LIGHT_COLOR_TARGET_MODE,
+    follow.LIGHT_COLOR_TARGET_PRESET_ID,
+    follow.LIGHT_COLOR_TARGET_PRESET_ORIGIN,
+    follow.LIGHT_COLOR_TARGET_RATE,
+  }, { 0.317097, 0.327069, 1, 1, 2, 750 })
+  T.eq("its rate as LIGHT_COLOR_TARGET_RATE alone", follow.LIGHT_COLOR_TARGET_COLOR_RATE, nil)
+  clock.run(50)
+  p:restore()
+end
+
+T.section("a Default On level set on the proxy: SET_PRESET_LEVEL twice, then preset 1 (dev 2026-11-12)")
+do
+  local p = P.install(clock)
+  heard = {}
+  p:presetLevel(45)
+  clock.run(10)
+  local cmds = {}
+  for _, h in ipairs(heard) do
+    cmds[#cmds + 1] = h.cmd .. " " .. tostring(h.params.LEVEL)
+  end
+  T.eq("in that order", cmds, { "SET_PRESET_LEVEL 45", "SET_PRESET_LEVEL 45", "UPDATE_BRIGHTNESS_PRESET 45" })
+  local push = heard[3] and heard[3].params or {}
+  T.eq("MODIFIED 1 On", { push.COMMAND, push.ID, push.NAME }, { "MODIFIED", 1, "On" })
+  p:restore()
+end
+
 T.section("a command reaches the light as Director delivers it: a command-keyed RFP first, then the binding's")
 do
   local p = P.install(clock)
@@ -210,6 +355,29 @@ do
   T.eq("the command-keyed handler took EXTRA_SET", keyed, 1)
   T.eq("the binding's took ON", heard[#heard] and heard[#heard].cmd, "ON")
   RFP.EXTRA_SET = nil
+  p:restore()
+end
+
+T.section("a Button Link command reaches the light with no params, and the proxy says nothing (dev 2026-11-13, 967)")
+do
+  local p = P.install(clock)
+  heard = {}
+  local got = {}
+  RFP[P.LINKS.toggle] = function(_, cmd, params)
+    got[#got + 1] = { cmd = cmd, params = params, none = params == nil }
+  end
+  p:link(P.LINKS.toggle, "DO_PUSH")
+  p:link(P.LINKS.toggle, "DO_CLICK")
+  p:link(P.LINKS.toggle, "DO_RELEASE")
+  local cmds, none = {}, {}
+  for i, g in ipairs(got) do
+    cmds[i], none[i] = g.cmd, g.none
+  end
+  T.eq("all three on the link, in order", cmds, { "DO_PUSH", "DO_CLICK", "DO_RELEASE" })
+  T.eq("each with no params", none, { true, true, true })
+  clock.run(1000)
+  T.eq("and nothing from the proxy", #heard, 0)
+  RFP[P.LINKS.toggle] = nil
   p:restore()
 end
 
