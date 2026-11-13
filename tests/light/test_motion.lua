@@ -1169,6 +1169,38 @@ do
   )
 end
 
+T.section("an on from off whose choice names where its color starts: the pre-on puts it there, the ramp runs on")
+do
+  local m = make(device({ fade = PRE_ON }), { level = 0, color = BLUE })
+  local c = choose(100, RED)
+  c.from = WARM
+  run(m, on(1000), c)
+  local cmds = take(m)
+  T.check(
+    "the pre-on sets the start, not the color kept",
+    cmds[1] and cmds[1].kind == "preOn" and near(cmds[1].color.x, WARM.x) and cmds[1].setsColor,
+    cmds[1]
+  )
+  T.check(
+    "the change sets the on's color over the on's time",
+    cmds[2] and near(cmds[2].color.x, RED.x) and cmds[2].setsColor and cmds[2].transitionMs == 1000,
+    cmds[2]
+  )
+  clock.run(500)
+  local at = m:view().color or {}
+  T.check("half way, the view is half way from the start", near(at.x, (WARM.x + RED.x) / 2, 0.01), at)
+  local same = make(device({ fade = PRE_ON }), { level = 0, color = BLUE })
+  local c2 = choose(100, RED)
+  c2.from = RED
+  run(same, on(1000), c2)
+  local both = take(same)
+  T.eq(
+    "a start that is the on's color: no fade, both set it",
+    { both[1].kind, both[1].setsColor, both[2].setsColor, same:view().colorTarget == nil },
+    { "preOn", true, true, true }
+  )
+end
+
 T.section("a walk sends a color only once it has moved, lands it exactly, and re-sends no level")
 do
   local m = make(device({ fade = WALK }), { level = 0.5, color = RED })
