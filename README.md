@@ -177,7 +177,6 @@ Copier will show diffs for any files that changed in the template and let you re
 | `github_org` | GitHub organization | (required) |
 | `dc_pid` | DriverCentral product id; 0 until the product exists. Every repo builds both `drivercentral` and `oss` | `0` |
 | `readme_driver_slug` | Driver slug for README generation (`root` for a suite README) | (required) |
-| `readme_build` | Build distribution for README | `oss` |
 | `primary_color` | Accent color for generated docs | `#109EFF` |
 | `icon_style` | Control4 icon artboard `make icons` exports: `shaped` (Shadow Shaped) or `square` (Shadow Square) | `shaped` |
 | `vendor_modules` | Space-separated *optional* `vendor` modules (bitn crypto bthome noiseprotocol protobuf oauth), `expressions` for the `src/lib` expression engine, `ui` for the custom Composer tab kit, and `light` for the Light V2 library | (empty) |

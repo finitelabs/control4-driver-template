@@ -80,11 +80,6 @@ readme_driver_slug:
   type: str
   help: "Driver slug used for README docs (e.g., 'esphome', 'mqtt_broker', 'home_connect')"
 
-readme_build:
-  type: str
-  help: "Build distribution used to generate README (e.g., 'oss', 'drivercentral')"
-  default: "oss"
-
 primary_color:
   type: str
   help: "Primary hex color for documentation headings (e.g., '#17BCF2')"
