@@ -215,6 +215,10 @@ Types.API = 1
 --   and the build stops without it. Raises on a profile.api other than Types.API, a
 --   profile field of the wrong type, or an adapter without send, refresh and show.
 --
+-- values:restoreValues()
+--   From OnDriverInit, as for any driver with variables: the library writes the Connected variable, and only
+--   one restored there keeps its id and the programming on it across a Director restart.
+--
 -- light:start()
 --   From OnDriverLateInit. Reads the proxy (GET_SETUP, 6661, 1001/1110, 1200/1210), tells offline until the
 --   device's first report, and asks refresh() once. Reports given before it are taken then, in order.
