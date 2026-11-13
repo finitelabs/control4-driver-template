@@ -251,6 +251,9 @@ function Ledger:due(aspect, now)
   elseif aspect == "level" and window.kind ~= "learning" and self.libraryOn == false then
     -- An off made the level before it moot: its deadline neither adopts nor asks.
     self:_close(aspect)
+  elseif aspect == "color" and window.kind ~= "learning" and now.colorHeld == true then
+    -- So does an off that holds a color for the next on, for the color before it.
+    self:_close(aspect)
   elseif window.held ~= nil and window.landed then
     -- A position no command sent, reported once the change had landed, is where the light landed.
     self:_settle(aspect, window.held, out)

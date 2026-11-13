@@ -592,6 +592,29 @@ case(function()
   w.restore()
 end)
 
+T.section("a hold device off under Dim-To-Warm part way through a scene's color fade: its positions tell nothing")
+case(function()
+  -- It reports where it is and is read at a deadline, and its color fade runs on after the off.
+  local o = K.copy(K.ES)
+  o.colorWhileOff = "hold"
+  o.cct = nil
+  o.feedback = { shows = "position", waitMs = 300, refresh = true }
+  local w = K.world(o, { answers = true, latency = 20, pushEveryMs = 250 }, 0)
+  local dim = { id = 2, origin = 1, x = 0.15, y = 0.06 }
+  K.onMode(w, { id = 1, origin = 1, x = 0.61, y = 0.31 }, dim)
+  w.proxy:send("SET_LEVEL", { LEVEL = 60 })
+  w.run(5000)
+  K.scene(w, 1, { { level = 100, color = { x = 0.65, y = 0.17 }, rate = 2000 } })
+  w.proxy:send("ACTIVATE_SCENE", { SCENE_ID = 1 })
+  w.run(1100)
+  w.proxy:mark()
+  w.proxy:send("SET_LEVEL", { LEVEL = 0 })
+  w.run(5000)
+  T.eq("the proxy is told one color", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  T.check("the Dim color", near((w.proxy.color or {}).x, dim.x, 0.005), w.proxy.color)
+  w.restore()
+end)
+
 T.section("a hold device fading itself to off: a lit report of the color it kept on its way down is no news")
 case(function()
   local o = K.copy(K.OWN)
