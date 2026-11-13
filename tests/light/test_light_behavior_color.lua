@@ -378,6 +378,63 @@ case(function()
   w.restore()
 end)
 
+local BLUE = { x = 0.15, y = 0.06 }
+
+--- A light left green and turned off, 1 s into a scene step that lights it to 60 in blue over 3 s.
+--- @param o table
+--- @return MemoryWorld
+local function sceneFromOff(o)
+  local w = K.world(o, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.scene(w, 9, { { level = 60, color = BLUE, rate = 3000 } })
+  w.proxy:mark()
+  w.m.sent = {}
+  w.proxy:send("ACTIVATE_SCENE", { SCENE_ID = 9 })
+  w.run(1000)
+  return w
+end
+
+T.section("a scene step in a color lights a light from off in that color, not one on the way from the color kept")
+for _, base in ipairs({ { "a walked light", K.WALK }, { "a light with a pre-on", K.ES } }) do
+  case(function()
+    local w = sceneFromOff(base[2])
+    local first = w.m.sent[1] or {}
+    T.check(
+      base[1] .. ": its first command carries the step's color",
+      first.on and first.setsColor and near((first.color or {}).x, BLUE.x, 0.01),
+      first
+    )
+    T.check(base[1] .. ": the device is in it part way up", near(K.device(w).color.x, BLUE.x, 0.01), K.device(w).color)
+    T.eq(base[1] .. ": no color CHANGING", w.proxy:count("LIGHT_COLOR_CHANGING"), 0)
+    w.run(10000)
+    T.check(base[1] .. ": told in it", near((w.proxy.color or {}).x, BLUE.x, 0.003), w.proxy.color)
+    w.restore()
+  end)
+end
+
+local NO_PRE_ON = K.copy(K.ES)
+NO_PRE_ON.fade = { kind = "device", curve = "linear", preOn = false }
+
+T.section("a light that fades itself from dark: a scene step from off fades from the color kept, as the device does")
+for _, base in ipairs({ { "with no pre-on", NO_PRE_ON }, { "running its own fades", K.OWN } }) do
+  case(function()
+    local w = sceneFromOff(base[2])
+    local changing = w.proxy:last("LIGHT_COLOR_CHANGING") or {}
+    T.check(
+      base[1] .. ": CHANGING from the color kept",
+      near(tonumber(changing.LIGHT_COLOR_CURRENT_X), GREEN.x, 0.01),
+      changing
+    )
+    w.run(10000)
+    T.check(base[1] .. ": told in the step's color", near((w.proxy.color or {}).x, BLUE.x, 0.003), w.proxy.color)
+    T.check(base[1] .. ": and the device is in it", near(K.device(w).color.x, BLUE.x, 0.01), K.device(w).color)
+    w.restore()
+  end)
+end
+
 --- A rated level from off under `preset`, and 20 ms on the proxy's copy of its color at the same rate, as
 --- programming's level sends under a Color On Mode.
 --- @param w MemoryWorld
