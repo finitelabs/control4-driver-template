@@ -397,7 +397,7 @@ def readme(input_path: Path, output_path: Path) -> None:
     # Strip <style> blocks (screen-only chrome), then normalize.
     text = re.sub(r"<style\b[^>]*>.*?</style>", "", text, flags=re.S | re.I)
     text = _PAGE_LINK_RE.sub(r"\1", text)
-    # A README is committed, so it keeps the support placeholders, set or not.
+    # A committed README built from the DriverCentral docs gets its support placeholders back.
     values = _support_contacts()
     for name, scheme in SUPPORT_CONTACTS:
         value = values[name]
