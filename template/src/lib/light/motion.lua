@@ -516,9 +516,20 @@ function Motion:_toLevel(out, intent, choice, ms)
       self:_endColorRamp()
       -- The color goes from the one the light has to the new one over the level's time. From dark, an on mode's
       -- color starts where the on mode has a dark light, so a hold stopped part way is in the on mode's color for
-      -- its level; a scene step's starts from the color kept. A light with no color known is taken to be in D65.
-      local onStart = fromShown <= 0 and own == nil and choice and choice.from and self:_take(choice.from) or nil
+      -- its level. A scene step's starts from the color kept, as does every color on a light that runs its own
+      -- fades, which no stop reaches. A light with no color known is taken to be in D65.
+      local onStart = fade.kind ~= "own"
+          and fromShown <= 0
+          and own == nil
+          and choice
+          and choice.from
+          and self:_take(choice.from)
+        or nil
       local start = length > 0 and (onStart or fromColor or self:_take(Color.D65)) or nil
+      -- With no pre-on, the device starts its fade from the color kept, so a stop puts it in the on mode's.
+      if onStart and self.levelRamp and fade.kind == "device" and not fade.preOn then
+        self.levelRamp.placesColor = not sameColor(onStart, fromColor)
+      end
       if start ~= nil and not sameColor(start, merged) then
         colorRamped = true
         self.colorRamp = {
@@ -776,7 +787,7 @@ function Motion:_stopLevel(out, ms)
     level = self.level,
     color = color,
     setsLevel = true,
-    setsColor = colorMoves,
+    setsColor = colorMoves or (lr.placesColor == true and not keepColor),
     transitionMs = colorMs,
     from = { level = shown, color = color },
     colorUnchosen = unchosen == true,
@@ -840,7 +851,8 @@ function Motion:_stopBoth(out, ms)
     level = level,
     color = color,
     setsLevel = true,
-    setsColor = (device.color or device.cct ~= nil) and (cr ~= nil or not sameColor(color, before)),
+    setsColor = (device.color or device.cct ~= nil)
+      and (cr ~= nil or not sameColor(color, before) or (lr ~= nil and lr.placesColor == true)),
     transitionMs = 0,
     from = { level = shown, color = color },
     colorUnchosen = unchosen == true,

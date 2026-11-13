@@ -312,6 +312,51 @@ case(function()
   w.restore()
 end)
 
+T.section("a light that fades itself with no pre-on: a hold from off let go part way is in the preset's color")
+case(function()
+  local o = K.copy(K.ES)
+  o.fade = { kind = "device", curve = "linear", preOn = false }
+  local w = K.world(o, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.onMode(w, K.ON_PRESET)
+  w.m.sent = {}
+  holdUpFromOff(w)
+  T.eq("no pre-on", #w.m:sentOf("preOn"), 0)
+  local stop = w.m:sentOf("stop")[1] or {}
+  T.check("the stop sends the preset's color", stop.setsColor and near((stop.color or {}).x, K.ON_PRESET.x, 0.01), stop)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  local c = w.proxy.color or {}
+  T.check("told in the preset's color", near(c.x, K.ON_PRESET.x, 0.003) and near(c.y, K.ON_PRESET.y, 0.003), c)
+  T.check("and the device is in it", near(K.device(w).color.x, K.ON_PRESET.x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
+T.section("a light that runs its own fades: an On from off under a preset fades from the color kept, told once")
+case(function()
+  local w = K.world(K.OWN, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.onMode(w, K.ON_PRESET)
+  w.proxy:mark()
+  w.proxy:send("ON")
+  w.run(5000)
+  local changing = w.proxy:last("LIGHT_COLOR_CHANGING") or {}
+  T.check(
+    "CHANGING from the color kept, where the device starts",
+    near(tonumber(changing.LIGHT_COLOR_CURRENT_X), GREEN.x, 0.01),
+    changing
+  )
+  T.eq("one CHANGED", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  T.check("in the preset's color", near((w.proxy.color or {}).x, K.ON_PRESET.x, 0.003), w.proxy.color)
+  w.restore()
+end)
+
 T.section("Dim-To-Warm: a hold from off starts at the Dim color, whatever color the light kept, and stops in the mix")
 case(function()
   local w = K.world(K.ES, {}, 100)

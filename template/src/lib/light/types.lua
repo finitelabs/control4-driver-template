@@ -306,6 +306,8 @@ Types.API = 1
 --- @field merged LightColor|nil The color the ramp carries (Dim-To-Warm or an on color).
 --- @field unchosen boolean A stop of this ramp sends colorUnchosen.
 --- @field stepSent number|nil "walk" only: the last step sent.
+--- @field placesColor boolean|nil The device fades the color from the one it kept while the library has it in the on
+---   mode's color all along, so a stop sends the color.
 
 --- Motion's model of the color changing over time.
 --- @class LightColorRamp
