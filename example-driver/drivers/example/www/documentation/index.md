@@ -152,8 +152,8 @@ Log Level.
 <!-- #ifdef DRIVERCENTRAL -->
 
 If you have any questions or issues, you can contact us at
-[%%SUPPORT_EMAIL%%](mailto:__SUPPORT_EMAIL__) or
-call/text us at [%%SUPPORT_PHONE%%](tel:__SUPPORT_PHONE__).
+[%%SUPPORT_EMAIL%%](mailto:__SUPPORT_EMAIL__) or call/text us at
+[%%SUPPORT_PHONE%%](tel:__SUPPORT_PHONE__).
 
 <!-- #else -->
 
