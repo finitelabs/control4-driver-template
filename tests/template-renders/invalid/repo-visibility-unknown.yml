@@ -1,0 +1,2 @@
+# expect: Invalid choice for 'repo_visibility'
+repo_visibility: internal

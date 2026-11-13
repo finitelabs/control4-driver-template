@@ -1,5 +1,7 @@
-# stale.yml with an exempt list, as JSON, and its own days.
+# stale.yml with an exempt list, as JSON, and its own days; in a public repo, where outsiders open the issues, so
+# build.yml keeps the public retention and tools/github-setup makes the repo public.
 stale_issues: true
 stale_exempt_authors: octocat ci-app[bot]
 stale_days: 45
 stale_close_days: 10
+repo_visibility: public
