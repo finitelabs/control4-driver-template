@@ -26,23 +26,6 @@ Caps.WAIT_MS = 1000
 --- @type integer
 Caps.STEP_MS = 100
 
---- The dynamic capabilities the proxy's Navigator Dynamic Capabilities variable (6661) shows. It rewrites
---- the variable only when one of these changes, so the rest can lag what the proxy holds.
---- @type table<string, boolean>
-Caps.REFLECTED = {
-  dimmer = true,
-  supports_target = true,
-  supports_color = true,
-  supports_color_correlated_temperature = true,
-  has_extras = true,
-  cold_start = true,
-  color_rate_behavior = true,
-  color_rate_min = true,
-  color_rate_max = true,
-  color_correlated_temperature_min = true,
-  color_correlated_temperature_max = true,
-}
-
 --- One static capability, as the build writes it.
 --- @class LightCapRow
 --- @field key string
@@ -528,7 +511,8 @@ function Caps.static(profile)
     -- on_off, ramp_level and supports_default_on are deprecated in OS 3.3.2, but Composer's test panel still
     -- shows the On and Off buttons, the Ramp button and the Default On preset editor by them.
     row("on_off", "True"),
-    row("ramp_level", bool(dims)),
+    -- A light that does not fade offers no Ramp: it does nothing with a ramp's rate.
+    row("ramp_level", bool(dims and fades)),
     row("supports_default_on", bool(profile.defaultOn)),
     row("supports_brightness_stop", bool(dims and fades)),
     row("click_rates", bool(dims and fades)),
@@ -592,7 +576,8 @@ function Caps.dynamic(device, profile)
     dimmer = dims,
     set_level = dims,
     supports_target = dims,
-    ramp_level = dims,
+    -- As driver.xml declares it: a profile without fades offers no Ramp.
+    ramp_level = dims and profile.fades == true,
     supports_brightness_stop = dims and stops,
     has_fixed_ramp_rate = fixed ~= nil,
     fixed_ramp_rate = fixed or 0,
@@ -614,20 +599,6 @@ function Caps.dynamic(device, profile)
     caps.color_correlated_temperature_max = device.cct.maxK
   end
   return caps
-end
-
---- The keys of a dynamic set the proxy's 6661 does not show, which the light keeps a record of to know
---- whether the proxy holds them.
---- @param caps LightDynamicCaps
---- @return LightDynamicCaps
-function Caps.unreflected(caps)
-  local out = {}
-  for k, v in pairs(caps) do
-    if not Caps.REFLECTED[k] then
-      out[k] = v
-    end
-  end
-  return out
 end
 
 return Caps

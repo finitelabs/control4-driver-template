@@ -47,6 +47,7 @@ _exclude:
   - "{% if 'light' not in vendor_modules.split() %}src/lib/light{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}tools/light-caps.lua{% endif %}"
   - "{% if 'light' not in vendor_modules.split() %}test/light_setup{% endif %}"
+  - "{% if 'light' not in vendor_modules.split() %}test/light_proxy_fake.lua{% endif %}"
   - "{% if not cloud_diagnostics %}src/lib/diagnostics.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_reporting.lua{% endif %}"
   - "{% if not cloud_diagnostics %}test/test_diagnostics_scrub.lua{% endif %}"
