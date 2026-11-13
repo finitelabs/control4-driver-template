@@ -444,6 +444,35 @@ case(function()
   w.restore()
 end)
 
+T.section("a hold device lit again before its off answers: the color it kept, in that late answer, is history")
+for _, shows in ipairs({ "target", "position" }) do
+  case(function()
+    local o = K.copy(K.OWN)
+    o.colorWhileOff = "hold"
+    o.feedback = { shows = shows, waitMs = 300, refresh = true }
+    local w = K.world(o)
+    K.onMode(w, K.WARM, K.DIM)
+    K.target(w, 100)
+    w.run(5000)
+    local kept = K.device(w).color
+    w.proxy:send("OFF")
+    w.run(5000)
+    w.proxy:send("OFF")
+    w.run(18)
+    w.proxy:mark()
+    w.m.sent = {}
+    w.proxy:send("SET_LEVEL", { LEVEL = 41 })
+    local on = (colored(w)[1] or {}).color or {}
+    w.run(62)
+    w.light:report({ kind = "push", on = false, color = { x = kept.x, y = kept.y, mode = "xy" } })
+    w.run(5000)
+    T.eq(shows .. ": the proxy is told one color", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+    T.eq(shows .. ": and one level", w.proxy:count("LIGHT_BRIGHTNESS_CHANGED"), 1)
+    T.check(shows .. ": the On's", near((w.proxy.color or {}).x, on.x or 0, 0.005), w.proxy.color)
+    w.restore()
+  end)
+end
+
 T.section("a hold device with no pre-on: a color picked while off, held, is where a hold from off stops")
 case(function()
   local w = K.world(HOLD_NO_PRE_ON, {}, 100)
