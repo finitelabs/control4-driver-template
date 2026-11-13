@@ -650,27 +650,37 @@ for _, shows in ipairs({ "target", "position" }) do
 end
 
 T.section("a hold device fading itself on to a held color: its positions from the color it kept are no news")
-case(function()
-  local o = K.copy(K.OWN)
-  o.dims = false
-  o.colorWhileOff = "hold"
-  o.fade = { kind = "own", own = { onMs = 1000, offMs = 0, changeMs = 0 } }
-  o.feedback = { shows = "position", waitMs = 400, refresh = true }
-  local w = K.world(o, { latency = 150, pushEveryMs = 250 }, 100)
-  K.color(w, GREEN.x, GREEN.y)
-  w.run(3000)
-  w.proxy:send("OFF")
-  w.run(3000)
-  K.color(w, RED.x, RED.y)
-  w.run(1000)
-  w.proxy:mark()
-  w.proxy:send("ON")
-  w.run(5000)
-  T.eq("the color is told once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
-  T.check("the one held", near((w.proxy.color or {}).x, RED.x, 0.005), w.proxy.color)
-  T.check("and the device is in it", near(K.device(w).color.x, RED.x, 0.005), K.device(w).color)
-  w.restore()
-end)
+for _, by in ipairs({ "ours", "another hand's" }) do
+  case(function()
+    -- It kept the color it was last lit in, or one another hand gave it while off, which a light that can't be
+    -- read reports in a frame of its own. Then the color held is the one it was lit in.
+    local other = by ~= "ours"
+    local held = other and GREEN or RED
+    local o = K.copy(K.OWN)
+    o.dims = false
+    o.colorWhileOff = "hold"
+    o.fade = { kind = "own", own = { onMs = 1000, offMs = 0, changeMs = 0 } }
+    o.feedback = { shows = "position", waitMs = other and 300 or 400, refresh = not other }
+    local w = K.world(o, { latency = other and 20 or 150, pushEveryMs = 250, split = other }, 100)
+    K.color(w, GREEN.x, GREEN.y)
+    w.run(3000)
+    w.proxy:send("OFF")
+    w.run(3000)
+    K.color(w, held.x, held.y)
+    w.run(1000)
+    if other then
+      w.m:other({ color = { x = 0.15, y = 0.06, mode = "xy" } })
+      w.run(1000)
+    end
+    w.proxy:mark()
+    w.proxy:send("ON")
+    w.run(5000)
+    T.eq(by .. ": the color is told once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+    T.check(by .. ": the one held", near((w.proxy.color or {}).x, held.x, 0.005), w.proxy.color)
+    T.check(by .. ": and the device is in it", near(K.device(w).color.x, held.x, 0.005), K.device(w).color)
+    w.restore()
+  end)
+end
 
 T.section("a hold device with no pre-on: a color picked while off, held, is where a hold from off stops")
 case(function()

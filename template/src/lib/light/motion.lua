@@ -1178,6 +1178,14 @@ function Motion:_push(out, cmd)
   out[#out + 1] = cmd
 end
 
+--- The color a "hold" device reports while a color is held: the one its next on lights from.
+--- @param color LightColor
+function Motion:keep(color)
+  if self:_held() then
+    self.keptColor = color
+  end
+end
+
 --- Hold a color for the next on. The first one held keeps the color the device has.
 --- @private
 --- @param kept LightColor|nil

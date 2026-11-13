@@ -83,7 +83,13 @@ local function H(o, due)
   o = o or {}
   return {
     due = due,
-    heard = { settle = o.settle or {}, foreign = o.foreign or {}, ask = o.ask == true, first = o.first or {} },
+    heard = {
+      settle = o.settle or {},
+      foreign = o.foreign or {},
+      ask = o.ask == true,
+      first = o.first or {},
+      kept = o.kept,
+    },
   }
 end
 
@@ -155,7 +161,7 @@ local CASES = {}
 
 CASES["a held color"] = {
   {
-    name = "while a color is held, an off report carries no color news, its first included",
+    name = "while a color is held, an off report carries no color news, its first included, only the color kept",
     dev = { colorWhileOff = "hold" },
     now = { on = false, colorHeld = true },
     fresh = true,
@@ -164,14 +170,17 @@ CASES["a held color"] = {
       { hear = { kind = "push", on = true, color = RED } },
     },
     -- The color's first report is the lit one, and it matches the color the proxy shows.
-    want = { H({ first = { "on", "level" } }), H({ settle = { on = true }, foreign = { "on" }, first = { "color" } }) },
+    want = {
+      H({ first = { "on", "level" }, kept = BLUE }),
+      H({ settle = { on = true }, foreign = { "on" }, first = { "color" } }),
+    },
   },
   {
-    name = "a report with no on, while a color is held, carries no color news",
+    name = "a report with no on, while a color is held, carries no color news, only the color kept",
     dev = { colorWhileOff = "hold" },
     now = { on = false, colorHeld = true },
     steps = { { hear = { kind = "push", color = BLUE } } },
-    want = { H() },
+    want = { H({ kept = BLUE }) },
   },
   {
     name = "a hold device off with no color held takes the color an off report brings (a vendor app's pick)",

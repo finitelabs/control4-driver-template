@@ -399,6 +399,9 @@ function Light:_heard(heard)
     self.motion:haltAll()
   end
   self.motion:settle(heard.settle)
+  if heard.kept then
+    self.motion:keep(heard.kept)
+  end
   if heard.form then
     self.motion:reform(heard.form)
   end

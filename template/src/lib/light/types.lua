@@ -387,6 +387,7 @@ Types.API = 1
 --- @field foreign LightAspect[] The aspects another hand moved.
 --- @field ask boolean Call adapter:refresh() once.
 --- @field form LightColor|nil The running color ramp's end in the form the light echoed it.
+--- @field kept LightColor|nil The color a "hold" device reports while a color is held: where its next on lights from.
 --- @field first LightAspect[] The aspects this was the first report of since a start or a loss, a match included:
 ---   each is told to the proxy, changed or not.
 

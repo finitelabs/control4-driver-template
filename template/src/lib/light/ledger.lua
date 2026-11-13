@@ -317,8 +317,9 @@ end
 function Ledger:_weigh(aspect, value, report, now, out)
   -- While a "hold" device is off with a color told but not sent, a report that doesn't say on carries no
   -- color news, nor does a lit one while our off is out, the light on its way down in the color it kept: the
-  -- color the proxy shows stands for the next on.
+  -- color the proxy shows stands for the next on. The color reported is the one that on lights from.
   if aspect == "color" and now.colorHeld == true and (report.on ~= true or self:_ourOffOut()) then
+    out.kept = value
     return
   end
   local window = self.windows[aspect]
