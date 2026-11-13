@@ -249,6 +249,30 @@ case(function()
   w.restore()
 end)
 
+T.section("another hand's off during our on from off: the level it keeps, reported beside the off, is no news")
+case(function()
+  -- A hold device that reports where it is, its color fade still running and reported under the off.
+  local base = K.copy(K.ES)
+  base.levelSteps = 100
+  base.fade = { kind = "device", curve = "linear", retimes = true }
+  base.feedback = { shows = "position", waitMs = 2500, refresh = true }
+  base.colorWhileOff = "hold"
+  local w = K.world(base, { latency = 20, pushEveryMs = 250 }, 50)
+  K.color(w, 0.33, 0.6, 5000)
+  w.run(700)
+  w.proxy:send("OFF")
+  w.run(2500)
+  w.proxy:mark()
+  K.target(w, 8, 750)
+  w.run(300)
+  w.m:other({ on = false, level = 0.16 })
+  w.run(10000)
+  local changed = w.proxy:changed()
+  T.eq("it ends off", changed[#changed], 0)
+  T.check("and is never told the level kept", not table.concat(changed, ","):find("16", 1, true), changed)
+  w.restore()
+end)
+
 T.section("target feedback: a push matching nothing in a window is another hand's: adopted, the ramp ends")
 case(function()
   local w = quiet(K.ES, 20)

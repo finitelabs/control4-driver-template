@@ -248,8 +248,13 @@ function Ledger:due(aspect, now)
     -- A walk under way sends its next step within a step, and this window waits for it: what it holds came
     -- before the walk.
     self:_arm(aspect, window, C4:GetTime() + feedback.waitMs)
-  elseif aspect == "level" and window.kind ~= "learning" and self.libraryOn == false then
-    -- An off made the level before it moot: its deadline neither adopts nor asks.
+  elseif
+    aspect == "level"
+    and window.kind ~= "learning"
+    and (self.libraryOn == false or (window.held ~= nil and self.windows.on ~= nil and self.windows.on.held == false))
+  then
+    -- An off made the level before it moot: its deadline neither adopts nor asks. So does an off the on's own
+    -- deadline settles, for a level held beside it: only the one the light keeps.
     self:_close(aspect)
   elseif aspect == "color" and window.kind ~= "learning" and now.colorHeld == true then
     -- So does an off that holds a color for the next on, for the color before it.
