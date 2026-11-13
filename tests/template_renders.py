@@ -29,8 +29,8 @@ import yaml
 ROOT = Path(__file__).resolve().parent.parent
 EXAMPLE_DRIVERS = ROOT / "example-driver" / "drivers"
 # example_light is an adapter over lib.light, so only a render with the light token gets it, and its rig.
-EXAMPLE_LIGHT_DRIVERS = ROOT / "example-driver" / "light" / "drivers"
-EXAMPLE_LIGHT_RIGS = ROOT / "example-driver" / "light" / "test" / "light_rigs.lua"
+EXAMPLE_LIGHT = "example_light"
+EXAMPLE_LIGHT_RIGS = ROOT / "example-driver" / "test" / "light_rigs.lua"
 RENDERS = ROOT / "tests" / "template-renders"
 INVALID = RENDERS / "invalid"
 FIXTURES = RENDERS / "fixtures.yml"
@@ -75,9 +75,9 @@ def render_into(name, directory):
 def add_example(name, directory):
     """A render has no driver to build; example-driver/, outside template/ so never rendered, is one."""
     drivers = Path(directory) / "drivers"
-    shutil.copytree(EXAMPLE_DRIVERS, drivers)
-    if "light" in str(answers(RENDERS / f"{name}.yml").get("vendor_modules", "")).split():
-        shutil.copytree(EXAMPLE_LIGHT_DRIVERS, drivers, dirs_exist_ok=True)
+    light = "light" in str(answers(RENDERS / f"{name}.yml").get("vendor_modules", "")).split()
+    shutil.copytree(EXAMPLE_DRIVERS, drivers, ignore=None if light else shutil.ignore_patterns(EXAMPLE_LIGHT))
+    if light:
         shutil.copy(EXAMPLE_LIGHT_RIGS, Path(directory) / "test" / "light_rigs.lua")
     variants = RENDERS / f"{name}.example-variants.json"
     if variants.exists():
