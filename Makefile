@@ -41,7 +41,7 @@ invalid-combinations: ## Check every combination in tests/template-renders/inval
 # ─── Render leg ───────────────────────────────────────────────────────────────
 # CI's render leg is `make render-checks`; each of its steps is a target of its own.
 
-.PHONY: render render-snapshot render-lib-loads render-crypto render-ui-js render-checks
+.PHONY: render render-snapshot render-lib-loads render-crypto render-ui-js render-light render-checks
 render: ## Render NAME into RENDER, replacing an earlier render there
 	$(PYTHON) tests/template_renders.py render $(NAME) "$(RENDER)"
 
@@ -66,7 +66,12 @@ render-ui-js: ## Check the render's lib/ui scripts under Node, each one the rend
 		done; \
 	else echo "This render has no lib/ui."; fi
 
-RENDER_LEG := render render-snapshot render-lib-loads render-crypto render-ui-js in-render-test
+render-light: ## Run the light library's own tests, which no driver repo gets, against the render's lib.light
+	@if [ -d "$(RENDER)/src/lib/light" ]; then \
+		for t in tests/light/test_*.lua; do "$(RENDER)/test/run_test.sh" "$(CURDIR)/$$t" || exit 1; done; \
+	else echo "This render has no lib.light."; fi
+
+RENDER_LEG := render render-snapshot render-lib-loads render-crypto render-ui-js in-render-test render-light
 render-checks: $(RENDER_LEG) ## Run CI's render leg for NAME
 
 # ─── Build leg ────────────────────────────────────────────────────────────────
