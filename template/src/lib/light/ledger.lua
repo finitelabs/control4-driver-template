@@ -861,8 +861,9 @@ function Ledger:_echoes(aspect, value, sent)
     or self:_asKelvin(value, sent)
 end
 
---- Whether a color reported a little off a full color in the white band is that color as a device that reports
---- its whites as a Kelvin gives it: the point on the locus at its Kelvin, held to the whites the device shows.
+--- Whether a color reported a little off a full color in the white band is that color as a device without color
+--- temperature that reports its whites as a Kelvin gives it: the point on the locus at its Kelvin. On a light with
+--- color temperature, a white there is a white.
 --- @private
 --- @param value LightColor
 --- @param color LightColor
@@ -870,7 +871,9 @@ end
 function Ledger:_asKelvin(value, color)
   local tolerance = Color.TOLERANCE
   if
-    color.mode == Color.CCT or (math.abs(value.x - color.x) <= tolerance and math.abs(value.y - color.y) <= tolerance)
+    self.device.cct
+    or color.mode == Color.CCT
+    or (math.abs(value.x - color.x) <= tolerance and math.abs(value.y - color.y) <= tolerance)
   then
     return false
   end
@@ -878,9 +881,7 @@ function Ledger:_asKelvin(value, color)
   if not k or not Color.onLocus(color.x, color.y, Color.WHITE_MIN_K, Color.WHITE_MAX_K) then
     return false
   end
-  local cct = self.device.cct
-  local minK, maxK = cct and cct.minK or Color.WHITE_MIN_K, cct and cct.maxK or Color.WHITE_MAX_K
-  local x, y = Color.kelvinToXY(math.max(minK, math.min(maxK, k)))
+  local x, y = Color.kelvinToXY(math.max(Color.WHITE_MIN_K, math.min(Color.WHITE_MAX_K, k)))
   return math.abs(value.x - x) <= tolerance and math.abs(value.y - y) <= tolerance
 end
 

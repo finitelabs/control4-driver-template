@@ -1194,6 +1194,24 @@ case(function()
   end
 end)
 
+T.section("a light with color temperature shown a color near the whites tells another hand's white at its Kelvin")
+case(function()
+  local px, py = Color.kelvinToXY(3000)
+  local near_white = { x = px, y = py - 0.01 }
+  local k = Color.kelvin(near_white.x, near_white.y)
+  local wx, wy = Color.kelvinToXY(k)
+  local w = K.world(K.ES, {}, 50)
+  K.color(w, near_white.x, near_white.y, 0)
+  w.run(5000)
+  w.proxy:mark()
+  w.m:other({ color = { x = wx, y = wy, mode = "cct", kelvin = k } })
+  w.run(2000)
+  T.eq("told once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  local c = w.proxy.color or {}
+  T.check("in the white's own form", tonumber(c.mode) == K.CCT and near(c.x, wx, 0.003) and near(c.y, wy, 0.003), c)
+  w.restore()
+end)
+
 T.section("a Kelvin command, and a level on a lit white, are told once in the white's own form")
 case(function()
   for _, o in ipairs({ K.ES, K.ZB, K.WALK }) do
