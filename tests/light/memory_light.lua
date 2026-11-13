@@ -105,7 +105,7 @@ end
 --- @field tr MemoryTransition|nil
 --- @field ctr MemoryTransition|nil
 --- @field took LightCommand[] Every command it took.
---- @field droppedColors integer Colors it dropped because it was off ("hold").
+--- @field droppedColors integer Colors it dropped because it was off, or going off ("hold").
 --- @field onChange fun(landed: boolean)
 local Device = {}
 Device.__index = Device
@@ -303,7 +303,7 @@ function Device:take(cmd, now, rest)
     return
   end
   if cmd.setsColor and color and (o.color or o.cct) then
-    if o.colorWhileOff == "hold" and not cmd.on and not self.on then
+    if o.colorWhileOff == "hold" and not cmd.on then
       self.droppedColors = self.droppedColors + 1
     else
       self:_fadeColor(color, ms, now)

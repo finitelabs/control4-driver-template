@@ -635,11 +635,12 @@ local function moves(run)
       function()
         local l = r.int(1, 100)
         act(run, "the app's On at " .. l, function()
-          local c = (o.color or o.cct) and r.chance(0.6) and color(r, o) or nil
-          if c then
-            c.preset, c.origin = r.pick({ 1, 10 }), 1
+          -- Draws that pick nothing, so each seed keeps the run its known-list entry names.
+          if (o.color or o.cct) and r.chance(0.6) then
+            color(r, o)
+            r.pick({ 1, 10 })
           end
-          w.proxy:appOn(l, c)
+          w.proxy:appOn(l)
         end, 750)
       end,
     },
