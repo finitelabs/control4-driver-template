@@ -215,17 +215,21 @@ case(function()
   w.restore()
 end)
 
-T.section("Color On Mode preset: an On from off fades to it from the color kept, and the follow-up is not sent again")
+T.section("Color On Mode preset: an On from off lights in it, and the follow-up is not sent again")
 case(function()
   local w = K.world(K.ES, {}, 0)
   K.onMode(w, K.ON_PRESET)
   w.proxy:appOn(100, { x = K.ON_PRESET.x, y = K.ON_PRESET.y, preset = 1, origin = 1 })
   w.run(10)
   local first = colored(w)
-  T.eq("the pre-on starts in the color kept, and the change sets the preset's color", #first, 1)
-  T.check("that color, over the on's time", near(((first[1] or {}).color or {}).x, K.ON_PRESET.x), first[1])
+  T.eq("the pre-on and the change both carry a color", #first, 2)
+  T.check(
+    "the preset's, from the first light",
+    near(((first[1] or {}).color or {}).x, K.ON_PRESET.x) and near(((first[2] or {}).color or {}).x, K.ON_PRESET.x),
+    first
+  )
   w.run(5000)
-  T.eq("the follow-up sends no color again", #colored(w), 1)
+  T.eq("the follow-up sends no color again", #colored(w), 2)
   T.check("told in it", near((w.proxy.color or {}).x, K.ON_PRESET.x), w.proxy.color)
   w.restore()
 end)
@@ -245,6 +249,133 @@ case(function()
   T.check("the On names the previous color", near((first.color or {}).x, GREEN.x, 0.01), first.color)
   w.run(3000)
   T.check("and the device comes on in it", near(K.device(w).color.x, GREEN.x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
+local TOP, PRESS, RELEASE_HOLD = 0, 1, 0
+
+--- A hold on the Top button from off, let go part way up its ramp.
+--- @param w MemoryWorld
+local function holdUpFromOff(w)
+  w.proxy:send("SET_HOLD_RATE_UP", { RATE = 5000 })
+  K.button(w, TOP, PRESS)
+  w.run(1500)
+  K.button(w, TOP, RELEASE_HOLD)
+  w.run(3000)
+end
+
+--- Dim-To-Warm's mix at a C4 level, as a color temperature.
+--- @param level number
+--- @return number x
+--- @return number y
+local function mix(level)
+  local b = level / 100
+  return C4:ColorCCTtoXY(C4:ColorXYtoCCT(K.DIM.x + (K.WARM.x - K.DIM.x) * b, K.DIM.y + (K.WARM.y - K.DIM.y) * b))
+end
+
+T.section("Color On Mode preset: a hold from off let go part way is in the preset's color, not one on the way to it")
+case(function()
+  local w = K.world(K.ES, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.onMode(w, K.ON_PRESET)
+  holdUpFromOff(w)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  local c = w.proxy.color or {}
+  T.check("told in the preset's color", near(c.x, K.ON_PRESET.x, 0.003) and near(c.y, K.ON_PRESET.y, 0.003), c)
+  T.check("and the device is in it", near(K.device(w).color.x, K.ON_PRESET.x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
+T.section("a walked light: a hold from off lights in the preset's color with its first step")
+case(function()
+  local w = K.world(K.WALK, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.onMode(w, K.ON_PRESET)
+  w.m.sent = {}
+  holdUpFromOff(w)
+  local first = w.m.sent[1] or {}
+  T.check(
+    "the first step carries the preset's color",
+    first.on and first.setsColor and near((first.color or {}).x, K.ON_PRESET.x, 0.01),
+    first
+  )
+  local c = w.proxy.color or {}
+  T.check("told in it at the stop", near(c.x, K.ON_PRESET.x, 0.003) and near(c.y, K.ON_PRESET.y, 0.003), c)
+  T.check("and the device is in it", near(K.device(w).color.x, K.ON_PRESET.x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
+T.section("a light that fades itself with no pre-on: a hold from off let go part way is in the preset's color")
+case(function()
+  local o = K.copy(K.ES)
+  o.fade = { kind = "device", curve = "linear", preOn = false }
+  local w = K.world(o, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.onMode(w, K.ON_PRESET)
+  w.m.sent = {}
+  holdUpFromOff(w)
+  T.eq("no pre-on", #w.m:sentOf("preOn"), 0)
+  local stop = w.m:sentOf("stop")[1] or {}
+  T.check("the stop sends the preset's color", stop.setsColor and near((stop.color or {}).x, K.ON_PRESET.x, 0.01), stop)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  local c = w.proxy.color or {}
+  T.check("told in the preset's color", near(c.x, K.ON_PRESET.x, 0.003) and near(c.y, K.ON_PRESET.y, 0.003), c)
+  T.check("and the device is in it", near(K.device(w).color.x, K.ON_PRESET.x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
+T.section("a light that runs its own fades: an On from off under a preset fades from the color kept, told once")
+case(function()
+  local w = K.world(K.OWN, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.onMode(w, K.ON_PRESET)
+  w.proxy:mark()
+  w.proxy:send("ON")
+  w.run(5000)
+  local changing = w.proxy:last("LIGHT_COLOR_CHANGING") or {}
+  T.check(
+    "CHANGING from the color kept, where the device starts",
+    near(tonumber(changing.LIGHT_COLOR_CURRENT_X), GREEN.x, 0.01),
+    changing
+  )
+  T.eq("one CHANGED", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  T.check("in the preset's color", near((w.proxy.color or {}).x, K.ON_PRESET.x, 0.003), w.proxy.color)
+  w.restore()
+end)
+
+T.section("Dim-To-Warm: a hold from off starts at the Dim color, whatever color the light kept, and stops in the mix")
+case(function()
+  local w = K.world(K.ES, {}, 100)
+  K.onMode(w, K.WARM, K.DIM)
+  -- A color picked in an on cycle holds through its off, so the light keeps it rather than the Dim color.
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  w.m.sent = {}
+  holdUpFromOff(w)
+  local pre = w.m:sentOf("preOn")[1] or {}
+  T.check("the pre-on lights it in the Dim color", pre.setsColor and near((pre.color or {}).x, K.DIM.x, 0.01), pre)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  local x, y = mix(level)
+  local c = w.proxy.color or {}
+  T.check("told in the mix for that level", near(c.x, x, 0.005) and near(c.y, y, 0.005), c)
+  T.check("and the device is in it", near(K.device(w).color.x, x, 0.01), K.device(w).color)
   w.restore()
 end)
 

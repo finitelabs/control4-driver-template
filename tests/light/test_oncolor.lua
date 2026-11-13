@@ -120,6 +120,27 @@ do
   end
 end
 
+T.section("where an on from off has its color start: its own color, or under Dim-To-Warm the Dim color")
+do
+  local dimToWarm = { colorOnMode = "fade", onColor = COOL, dimColor = WARM }
+  local dim = Color.forDevice(Color.dimToWarm(WARM, COOL, 0), COLOR_CCT)
+  local function from(settingsOver, now, picks)
+    return OnColor.choose(
+      intent("level", { level = 30 }),
+      inputs({ settings = settingsOver, now = now, picks = picks })
+    ).from
+  end
+  T.check("a preset: the preset's color", near(from({ colorOnMode = "preset", onColor = RED }), RED))
+  T.check("Previous: the color it went off in", near(from({ colorOnMode = "previous", previousColor = BLUE }), BLUE))
+  T.check("Dim-To-Warm: the Dim color, the mix at level 0", near(from(dimToWarm), dim))
+  T.check(
+    "a pick: the pick",
+    near(from({ colorOnMode = "preset", onColor = RED }, nil, { picked = { color = BLUE } }), BLUE)
+  )
+  T.eq("no on mode: none", from({}), nil)
+  T.eq("a level while on: none, the color goes from where the light has it", from(dimToWarm, ON), nil)
+end
+
 T.section("the color is in the form the device takes it")
 do
   local preset = { colorOnMode = "preset", onColor = RED }
