@@ -537,4 +537,23 @@ case(function()
   T.eq("the device is off", K.device(w).on, false)
   w.restore()
 end)
+
+T.section("a re-timing device: another client's level ends a color fade part way, and the light's echo of it tells it")
+case(function()
+  local base = K.copy(K.ES)
+  base.fade.retimes = true
+  base.retimes = true
+  local w = quiet(base, 50)
+  K.color(w, K.RED.x, K.RED.y)
+  w.run(3000)
+  K.color(w, K.GREEN.x, K.GREEN.y, 750)
+  w.run(10)
+  report(w, { on = true, level = 0.3 })
+  w.run(10)
+  report(w, { color = { x = K.GREEN.x, y = K.GREEN.y, mode = "xy" } })
+  w.run(5000)
+  local c = w.proxy.color or {}
+  T.check("the proxy ends in the color the light heads to", near(c.x, K.GREEN.x) and near(c.y, K.GREEN.y), c)
+  w.restore()
+end)
 T.finish()
