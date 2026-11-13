@@ -702,20 +702,6 @@ local function scrub(text, max)
   return cap(text, max)
 end
 
---- A number formatted for line protocol, with "." for its decimal point. The controller's C library writes a float
---- with the decimal point of its locale, a comma in many, and a comma would split the point's fields.
---- @param format string A float format, such as "%.2f".
---- @param value number
---- @return string
-local function influxNumber(format, value)
-  local text = string.format(format, value)
-  local mark = string.format("%.1f", 0.5):match("^0(.+)5$")
-  if mark and mark ~= "." then
-    text = text:gsub(mark:gsub("%p", "%%%0"), ".")
-  end
-  return text
-end
-
 --- Escapes a string value for InfluxDB line protocol.
 --- @param s string
 --- @return string
@@ -854,10 +840,11 @@ function Diagnostics:_writeMetrics(memoryKB, liveKB, totalTables, sorted, sorted
   -- diagnostics measurement
   local fields = {}
   if memoryKB then
-    table.insert(fields, "memory_kb=" .. influxNumber("%.2f", memoryKB))
+    -- A locale with a decimal comma would split the field, so the number is written with a point.
+    table.insert(fields, "memory_kb=" .. tostring_return_period(memoryKB))
   end
   if liveKB then
-    table.insert(fields, "live_kb=" .. influxNumber("%.2f", liveKB))
+    table.insert(fields, "live_kb=" .. tostring_return_period(liveKB))
   end
   table.insert(fields, string.format("global_count=%di", TableLength(_G)))
   table.insert(fields, string.format("total_tables=%di", totalTables))
@@ -933,7 +920,7 @@ local function fieldValue(value)
     if value ~= value or value == math.huge or value == -math.huge then
       return nil
     end
-    return influxNumber("%.15g", value)
+    return tostring_return_period(value)
   elseif type(value) == "string" then
     return escapeInfluxString(cap(value, DRIVER_VALUE_MAX_BYTES))
   end
