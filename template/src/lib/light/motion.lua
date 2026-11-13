@@ -526,9 +526,11 @@ function Motion:_toLevel(out, intent, choice, ms)
           and self:_take(choice.from)
         or nil
       local start = length > 0 and (onStart or fromColor or self:_take(Color.D65)) or nil
-      -- With no pre-on, the device starts its fade from the color kept, so a stop puts it in the on mode's.
+      -- With no pre-on, the device starts its fade from the color it kept, so a stop puts it in the on mode's. A
+      -- "hold" device kept the color it had before the one held.
       if onStart and self.levelRamp and fade.kind == "device" and not fade.preOn then
-        self.levelRamp.placesColor = not sameColor(onStart, fromColor)
+        local held = self.held and device.colorWhileOff == "hold"
+        self.levelRamp.placesColor = held or not sameColor(onStart, fromColor)
       end
       if start ~= nil and not sameColor(start, merged) then
         colorRamped = true
@@ -1141,6 +1143,11 @@ function Motion:_push(out, cmd)
   if hold and not cmd.on and not cmd.setsLevel then
     self.held = true
     return
+  end
+  -- A "hold" device drops a color sent with an off too, so the off goes without it and the color is held.
+  if hold and not cmd.on and cmd.setsColor then
+    cmd.setsColor = false
+    self.held = true
   end
   if cmd.on or cmd.setsColor then
     self.held = false
