@@ -383,28 +383,12 @@ def _mdformat(text: str, wrap: int) -> str:
 # A markdown link to another page beside the docs, with or without an anchor: no scheme or path.
 _PAGE_LINK_RE = re.compile(r"(?<!!)\[([^\]]*)\]\([\w.-]+\.html(?:#[\w.-]*)?\)")
 
-# Each support build secret and its link's scheme: with no value a link builds as [](tel:), and only the scheme says which.
-SUPPORT_CONTACTS = (("SUPPORT_PHONE", "tel"), ("SUPPORT_EMAIL", "mailto"))
-
-
-def _support_contacts() -> dict[str, str]:
-    local = parse_env_file(TOOLS_DIR.parent / ".env")
-    return {name: build_secret(name, local) for name, _ in SUPPORT_CONTACTS}
-
 
 def readme(input_path: Path, output_path: Path) -> None:
     text = input_path.read_text(encoding="utf-8")
     # Strip <style> blocks (screen-only chrome), then normalize.
     text = re.sub(r"<style\b[^>]*>.*?</style>", "", text, flags=re.S | re.I)
     text = _PAGE_LINK_RE.sub(r"\1", text)
-    # A committed README built from the DriverCentral docs gets its support placeholders back.
-    values = _support_contacts()
-    for name, scheme in SUPPORT_CONTACTS:
-        value = values[name]
-        link = f"[%%{name}%%]({scheme}:__{name}__)"
-        text = text.replace(f"[{value}]({scheme}:{value})", link)
-        if value:
-            text = text.replace(value, f"%%{name}%%")
     output_path.write_text(_mdformat(text, 80), encoding="utf-8")
 
 
@@ -444,7 +428,9 @@ _STRIP_PLACEHOLDER_RE = re.compile(
 def description(input_path: Path, output_path: Path) -> None:
     md = input_path.read_text(encoding="utf-8")
     # The listing is pasted into DriverCentral, so it gets the support contacts filled in.
-    for name, value in _support_contacts().items():
+    local = parse_env_file(TOOLS_DIR.parent / ".env")
+    for name in ("SUPPORT_PHONE", "SUPPORT_EMAIL"):
+        value = build_secret(name, local)
         md = md.replace(f"%%{name}%%", value).replace(f"__{name}__", value)
     # Until the strip is uploaded, a paste shows no image rather than a broken one.
     html = _STRIP_PLACEHOLDER_RE.sub("", _drivercentral_html(md))
