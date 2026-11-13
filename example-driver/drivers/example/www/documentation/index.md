@@ -152,7 +152,7 @@ Log Level.
 <!-- #ifdef DRIVERCENTRAL -->
 
 If you have any questions or issues, you can contact us at
-[driver-support@finitelabs.com](mailto:driver-support@finitelabs.com) or
+[%%SUPPORT_EMAIL%%](mailto:__SUPPORT_EMAIL__) or
 call/text us at [%%SUPPORT_PHONE%%](tel:__SUPPORT_PHONE__).
 
 <!-- #else -->

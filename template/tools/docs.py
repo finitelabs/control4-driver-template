@@ -383,8 +383,13 @@ def _mdformat(text: str, wrap: int) -> str:
 # A markdown link to another page beside the docs, with or without an anchor: no scheme or path.
 _PAGE_LINK_RE = re.compile(r"(?<!!)\[([^\]]*)\]\([\w.-]+\.html(?:#[\w.-]*)?\)")
 
-# A Support section's phone link, which a DriverCentral build fills in from SUPPORT_PHONE.
-SUPPORT_PHONE_LINK = "[%%SUPPORT_PHONE%%](tel:__SUPPORT_PHONE__)"
+# The support contacts a DriverCentral build fills in from build secrets, each with its link's scheme.
+SUPPORT_CONTACTS = (("SUPPORT_PHONE", "tel"), ("SUPPORT_EMAIL", "mailto"))
+
+
+def _support_contacts() -> dict[str, str]:
+    local = parse_env_file(TOOLS_DIR.parent / ".env")
+    return {name: build_secret(name, local) for name, _ in SUPPORT_CONTACTS}
 
 
 def readme(input_path: Path, output_path: Path) -> None:
@@ -392,11 +397,14 @@ def readme(input_path: Path, output_path: Path) -> None:
     # Strip <style> blocks (screen-only chrome), then normalize.
     text = re.sub(r"<style\b[^>]*>.*?</style>", "", text, flags=re.S | re.I)
     text = _PAGE_LINK_RE.sub(r"\1", text)
-    # A README is committed, so it keeps the support phone placeholder, set or not.
-    phone = build_secret("SUPPORT_PHONE", parse_env_file(TOOLS_DIR.parent / ".env"))
-    text = text.replace(f"[{phone}](tel:{phone})", SUPPORT_PHONE_LINK)
-    if phone:
-        text = text.replace(phone, "%%SUPPORT_PHONE%%")
+    # A README is committed, so it keeps the support placeholders, set or not.
+    values = _support_contacts()
+    for name, scheme in SUPPORT_CONTACTS:
+        value = values[name]
+        link = f"[%%{name}%%]({scheme}:__{name}__)"
+        text = text.replace(f"[{value}]({scheme}:{value})", link)
+        if value:
+            text = text.replace(value, f"%%{name}%%")
     output_path.write_text(_mdformat(text, 80), encoding="utf-8")
 
 
@@ -435,6 +443,9 @@ _STRIP_PLACEHOLDER_RE = re.compile(
 
 def description(input_path: Path, output_path: Path) -> None:
     md = input_path.read_text(encoding="utf-8")
+    # The listing is pasted into DriverCentral, so it gets the support contacts filled in.
+    for name, value in _support_contacts().items():
+        md = md.replace(f"%%{name}%%", value).replace(f"__{name}__", value)
     # Until the strip is uploaded, a paste shows no image rather than a broken one.
     html = _STRIP_PLACEHOLDER_RE.sub("", _drivercentral_html(md))
     output_path.write_text(html, encoding="utf-8")
