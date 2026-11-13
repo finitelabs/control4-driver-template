@@ -358,5 +358,28 @@ do
   p:restore()
 end
 
+T.section("a Button Link command reaches the light with no params, and the proxy says nothing (dev 2026-11-13, 967)")
+do
+  local p = P.install(clock)
+  heard = {}
+  local got = {}
+  RFP[P.LINKS.toggle] = function(_, cmd, params)
+    got[#got + 1] = { cmd = cmd, params = params, none = params == nil }
+  end
+  p:link(P.LINKS.toggle, "DO_PUSH")
+  p:link(P.LINKS.toggle, "DO_CLICK")
+  p:link(P.LINKS.toggle, "DO_RELEASE")
+  local cmds, none = {}, {}
+  for i, g in ipairs(got) do
+    cmds[i], none[i] = g.cmd, g.none
+  end
+  T.eq("all three on the link, in order", cmds, { "DO_PUSH", "DO_CLICK", "DO_RELEASE" })
+  T.eq("each with no params", none, { true, true, true })
+  clock.run(1000)
+  T.eq("and nothing from the proxy", #heard, 0)
+  RFP[P.LINKS.toggle] = nil
+  p:restore()
+end
+
 clock.restore()
 T.finish()

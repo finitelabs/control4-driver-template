@@ -7,6 +7,7 @@
 --- - The app's On names the brightness on mode's preset, and only under Dim-To-Warm is it followed by the On
 ---   preset at its full color. A Default On level set on the proxy reaches the driver as SET_PRESET_LEVEL
 ---   twice, then UPDATE_BRIGHTNESS_PRESET for preset 1.
+--- - A keypad's Button Link commands reach the light with no params, and the proxy sends nothing for them.
 --- - Its variables hold what it was told: 1001 the level and 1110 its target (none for a light that does not
 ---   dim), 1200 the color and 1210 its target (as "x,y,mode", six figures each), and 6661 the capabilities.
 --- - 6661 lists every capability it holds, but is rewritten only when a notify changes one of the keys that
@@ -507,11 +508,12 @@ function Proxy:send(cmd, params)
   return dispatch(P.PROXY, cmd, params)
 end
 
---- Send a Button Link command (DO_PUSH, DO_CLICK, DO_RELEASE) on one of the links.
+--- Send a Button Link command (DO_PUSH, DO_CLICK, DO_RELEASE) on one of the links, with no params: Director
+--- delivers a keypad's link commands with none.
 --- @param binding integer
 --- @param cmd string
 function Proxy:link(binding, cmd)
-  return dispatch(binding, cmd, {})
+  return dispatch(binding, cmd, nil)
 end
 
 --- The Control4 app's On: SET_BRIGHTNESS_TARGET at the on level over 750 ms, naming the brightness on mode's
