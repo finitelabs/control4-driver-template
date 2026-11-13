@@ -70,6 +70,7 @@ render-light: ## Run the light library's own tests, which no driver repo gets, a
 	@if [ -d "$(RENDER)/src/lib/light" ]; then \
 		for t in tests/light/test_*.lua; do "$(RENDER)/test/run_test.sh" "$(CURDIR)/$$t" || exit 1; done; \
 		LIGHT_FUZZ_RUNS=$${LIGHT_FUZZ_RUNS:-2000} "$(RENDER)/test/run_test.sh" "$(CURDIR)/tests/light/fuzz.lua" || exit 1; \
+		LIGHT_FUZZ_HOLD=1 LIGHT_FUZZ_RUNS=$${LIGHT_FUZZ_RUNS:-2000} "$(RENDER)/test/run_test.sh" "$(CURDIR)/tests/light/fuzz.lua" || exit 1; \
 	else echo "This render has no lib.light."; fi
 
 RENDER_LEG := render render-snapshot render-lib-loads render-crypto render-ui-js in-render-test render-light

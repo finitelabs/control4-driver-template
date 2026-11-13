@@ -6,7 +6,8 @@
 --   "$R/test/run_test.sh" "$PWD/tests/light/fuzz.lua"
 -- LIGHT_FUZZ_RUNS sets the count (20,000 by default), LIGHT_FUZZ_SEED the first seed (1). A failure prints
 -- its seed and a replay line; LIGHT_FUZZ_TRACE=1 prints each step of the runs, and LIGHT_FUZZ_TIMELINE=1
--- each run's commands, reports, notifies and deadlines in time order.
+-- each run's commands, reports, notifies and deadlines in time order. LIGHT_FUZZ_HOLD=1 runs the hold pass:
+-- only lights with color or color temperature, each holding its color while off, with known seeds of its own.
 
 local HERE = debug.getinfo(1, "S").source:match("@(.*[/\\])") or "./"
 package.path = HERE .. "?.lua;" .. package.path
@@ -35,6 +36,7 @@ local RUNS = tonumber(os.getenv("LIGHT_FUZZ_RUNS")) or 20000
 local SEED = tonumber(os.getenv("LIGHT_FUZZ_SEED")) or 1
 local TRACE = os.getenv("LIGHT_FUZZ_TRACE") == "1"
 local SHOW = tonumber(os.getenv("LIGHT_FUZZ_SHOW")) or 3
+local HOLD = os.getenv("LIGHT_FUZZ_HOLD") == "1"
 
 local SETUPS = { "setup-607.xml", "setup-626.xml", "setup-643.xml", "setup-727.xml", "setup-732.xml" }
 local GAPS = { 0, 0, 5, 18, 60, 110, 300, 700, 1200, 2500, 6000 }
@@ -75,7 +77,7 @@ local INVARIANTS = {
 -- the proxy is told against the device and why the run ends agreeing. Any other failing run fails the suite. "rest"
 -- never takes a seed here.
 --- @type table<string, table<integer, boolean>>
-local KNOWN = {
+local KNOWN_EVERY = {
   told = {
     -- A light that reports one aspect at a time and can't be asked to refresh is off at 30, and another client turns
     -- it on at 20. Its on lands before its level, so lit at 30 is told, then 20 when the level comes.
@@ -91,6 +93,23 @@ local KNOWN = {
     [16794] = true,
   },
 }
+-- The hold pass's own: its seeds draw other lights.
+--- @type table<string, table<integer, boolean>>
+local KNOWN_HOLD = {
+  quiet = {
+    -- A light that runs its own color fades answers a read in the same moment as a push from its fade to an on from
+    -- off. The answer closes the window, so the push's color is told as another client's, and the next push tells
+    -- the end again.
+    [9968] = true,
+    -- A stale push of the light off lands after a SET_LEVEL 70's echo closed the window, and is told as another
+    -- client's off. The last SET_LEVEL 0 hears the light still lit at 70, then its off: 70, then off.
+    [13683] = true,
+    -- A light that runs its own fades lights at the level it keeps, then fades: SET_LEVEL 100 from off tells the on
+    -- at 20 in the color it keeps, then 100 in the on's color.
+    [15989] = true,
+  },
+}
+local KNOWN = HOLD and KNOWN_HOLD or KNOWN_EVERY
 
 --------------------------------------------------------------------------------
 -- A seeded draw of its own, so nothing else that calls math.random moves a run
@@ -156,7 +175,8 @@ end
 --- @param r FuzzRandom
 --- @return FuzzDraw
 local function draw(r)
-  local kind = r.pick({ "relay", "dimmer", "white", "color", "full", "color relay" })
+  local kind = HOLD and r.pick({ "white", "color", "full", "color relay" })
+    or r.pick({ "relay", "dimmer", "white", "color", "full", "color relay" })
   local o = {}
   o.dims = kind ~= "relay" and kind ~= "color relay"
   o.color = kind == "color" or kind == "full" or kind == "color relay"
@@ -165,7 +185,7 @@ local function draw(r)
   end
   o.levelSteps = r.pick({ 100, 254, 255 })
   if o.color or o.cct then
-    o.colorWhileOff = r.pick({ "send", "hold" })
+    o.colorWhileOff = HOLD and "hold" or r.pick({ "send", "hold" })
   end
   local fadeKind = r.pick({ "device", "device", "own", "walk" })
   if fadeKind == "device" then
@@ -1389,7 +1409,8 @@ local function timeline(run)
   end
   for _, rep in ipairs(run.reports) do
     local q = rep.report
-    add(rep.at, string.format("report %s on=%s level=%s", q.kind, tostring(q.on), tostring(q.level)))
+    local color = q.color and string.format("%.4f,%.4f", q.color.x, q.color.y) or "nil"
+    add(rep.at, string.format("report %s on=%s level=%s color=%s", q.kind, tostring(q.on), tostring(q.level), color))
   end
   for _, du in ipairs(run.dues) do
     add(du.at, "deadline " .. du.aspect .. (du.late and " while its ramp runs" or ""))
