@@ -357,6 +357,84 @@ case(function()
   w.restore()
 end)
 
+--- A rated level from off under `preset`, and 20 ms on the proxy's copy of its color at the same rate, as
+--- programming's level sends under a Color On Mode.
+--- @param w MemoryWorld
+--- @param preset KitPreset
+--- @return integer before Commands sent before the copy.
+--- @return integer after Commands sent once the copy is handled.
+local function onThenCopy(w, preset)
+  K.onMode(w, preset)
+  w.m.sent = {}
+  K.target(w, 100, 4000)
+  w.run(20)
+  local before = #w.m.sent
+  K.color(w, preset.x, preset.y, 4000, preset.mode, preset)
+  return before, #w.m.sent
+end
+
+local NO_PRE_ON = K.copy(K.ES)
+NO_PRE_ON.fade = { kind = "device", curve = "linear", preOn = false }
+
+T.section("the proxy's copy of a rated On's color, with the light lit in it, puts nothing more out")
+local OTHER, SAME = { "off in another color", GREEN }, { "off in the preset's color", RED }
+-- A light that runs its own fades and was off in another color still takes the copy: its own change gets the color
+-- there sooner than the On's.
+for _, light in ipairs({
+  { "a light with a pre-on", K.ES, { OTHER, SAME } },
+  { "a light that fades itself with no pre-on", NO_PRE_ON, { OTHER, SAME } },
+  { "a walked light", K.WALK, { OTHER, SAME } },
+  { "a light that runs its own fades", K.OWN, { SAME } },
+}) do
+  for _, kept in ipairs(light[3]) do
+    local name = light[1] .. ", " .. kept[1]
+    case(function()
+      local w = K.world(light[2], {}, 100)
+      K.color(w, kept[2].x, kept[2].y)
+      w.run(3000)
+      w.proxy:send("OFF")
+      w.run(3000)
+      local before, after = onThenCopy(w, K.ON_PRESET)
+      T.eq(name .. ": nothing goes out for the copy", after, before)
+      w.run(5000)
+      T.check(name .. ": told in the preset", near((w.proxy.color or {}).x, K.ON_PRESET.x, 0.003), w.proxy.color)
+      T.check(name .. ": and the device is in it", near(K.device(w).color.x, K.ON_PRESET.x, 0.01), K.device(w).color)
+      w.restore()
+    end)
+  end
+end
+
+T.section("the proxy's copy of a rated On's white off the curve puts nothing more out")
+case(function()
+  local w = K.world(K.ES, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  local before, after = onThenCopy(w, K.WARM)
+  T.eq("nothing goes out for the copy", after, before)
+  w.restore()
+end)
+
+T.section("a light that fades itself with no pre-on: after the copy, a stop part way still sends the preset's color")
+case(function()
+  local w = K.world(NO_PRE_ON, {}, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  onThenCopy(w, K.ON_PRESET)
+  w.run(1500)
+  w.proxy:send("SET_BRIGHTNESS_STOP")
+  w.run(3000)
+  local stop = w.m:sentOf("stop")[1] or {}
+  T.check("the stop sends the preset's color", stop.setsColor and near((stop.color or {}).x, K.ON_PRESET.x, 0.01), stop)
+  local level = w.proxy.level
+  T.check("it stops part way up", level > 0 and level < 100, level)
+  T.check("and the device is in the preset", near(K.device(w).color.x, K.ON_PRESET.x, 0.01), K.device(w).color)
+  w.restore()
+end)
+
 T.section("Dim-To-Warm: a hold from off starts at the Dim color, whatever color the light kept, and stops in the mix")
 case(function()
   local w = K.world(K.ES, {}, 100)
