@@ -244,6 +244,15 @@ class CheckSortOrderTest(InTempDir):
         self.assertEqual(code, 1)
         self.assertIn("conditional C2 has <sort_order>1, as C1 does", err)
 
+    def test_a_sort_order_up_to_1000_passes(self):
+        path = self._xml("<sort_order>1000</sort_order>")
+        self.assertEqual(self._check(path), (0, ""))
+
+    def test_a_sort_order_above_1000_fails(self):
+        code, err = self._check(self._xml("<sort_order>1001</sort_order>"))
+        self.assertEqual(code, 1)
+        self.assertIn("conditional C1 has <sort_order>1001, above 1000", err)
+
     def test_each_driver_xml_is_checked_on_its_own(self):
         a = self._xml("<sort_order>1</sort_order>", name="a.xml")
         b = self._xml("<sort_order>1</sort_order>", "", name="b.xml")

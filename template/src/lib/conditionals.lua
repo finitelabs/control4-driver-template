@@ -188,7 +188,6 @@ function GetConditionals()
   --- @type Conditional[]
   local unsorted = {}
   eachConditional(conditionals:getConditionals(), function(conditional)
-    conditional = TableDeepCopy(conditional)
     progConditionals[tostring(conditional.conditionalId)] = conditional
     if conditional.sort_order == nil then
       unsorted[#unsorted + 1] = conditional

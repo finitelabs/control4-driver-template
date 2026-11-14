@@ -34,7 +34,8 @@ Subcommands:
 
   package.py check-sort-order <driver.xml>...
       Exit 1 unless every <conditional> in each driver.xml has a whole-number
-      <sort_order> no other conditional in it shares.
+      <sort_order> of at most 1000 no other conditional in it shares. From 1001
+      up is lib.conditionals', for the ones GetConditionals adds.
 """
 
 import re
@@ -175,6 +176,10 @@ def check_version(build: str, version: str) -> int:
     return 0
 
 
+# lib/conditionals.lua's SORT_ORDER_START: GetConditionals numbers its own from just above it.
+SORT_ORDER_START = 1000
+
+
 def check_sort_order(xml_paths: list[str]) -> int:
     problems = []
     for path in xml_paths:
@@ -188,6 +193,11 @@ def check_sort_order(xml_paths: list[str]) -> int:
                     f"{path}: conditional {name} has no whole-number <sort_order>"
                 )
                 continue
+            if order > SORT_ORDER_START:
+                problems.append(
+                    f"{path}: conditional {name} has <sort_order>{order}, above"
+                    f" {SORT_ORDER_START}, where GetConditionals numbers its own"
+                )
             if order in seen:
                 problems.append(
                     f"{path}: conditional {name} has <sort_order>{order}, as {seen[order]} does"
