@@ -266,7 +266,7 @@ do
     { 'json(42, "$")', 42 },
     { 'json(true, "$")', true },
     { 'json(\'{"a":{},"b":[]}\', "$.a") .. json(\'{"a":{},"b":[]}\', "$.b")', "{}[]" },
-    { "json(__p[2], \"$.a\")", nil },
+    { 'json(__p[2], "$.a")', nil },
     { "json(__p[1]) == nil and json() == nil", true },
   }
   for _, case in ipairs(cases) do
@@ -275,7 +275,11 @@ do
   end
   local long = '{"pad":"' .. ("x"):rep(20000) .. '","value":3}'
   T.eq("a 20 KB text reads", sandbox.eval('json(__p[1], "$.value")', { long }), 3)
-  T.eq("and reads twice in one expression", sandbox.eval('json(__p[1], "$.value") * json(__p[1], "$.value")', { long }), 9)
+  T.eq(
+    "and reads twice in one expression",
+    sandbox.eval('json(__p[1], "$.value") * json(__p[1], "$.value")', { long }),
+    9
+  )
   local _, bigErr = sandbox.eval('json(__p[1], "$.value")', { ("[1," .. ("2,"):rep(100000) .. "3]") })
   T.contains("a text too long to decode in time fails, not nil", bigErr or "", "ran too long")
   local _, loopErr, seconds = eval('(function() while true do json(__p[1], "$.value") end end)()', { long })

@@ -91,7 +91,11 @@ T.eq("and false counts as a result", Expressions.evaluate("condition", "PARAM{10
 T.eq("a string is its substitution", Expressions.evaluate("string", "at PARAM{100,LEVEL}").result, "at 42")
 T.eq("a global variable's agent reads too", Expressions.evaluate("equation", "PARAM{100001,GLOBAL_LIMIT}").result, 90)
 T.eq("Essentials' helpers work", Expressions.evaluate("equation", "round(c2f(PARAM{100,LEVEL} - 42), 1)").result, 32)
-T.eq("json() reads a variable's JSON", Expressions.evaluate("equation", 'json(PARAM{100,STATUS}, "$.battery.pct") + 1').result, 88)
+T.eq(
+  "json() reads a variable's JSON",
+  Expressions.evaluate("equation", 'json(PARAM{100,STATUS}, "$.battery.pct") + 1').result,
+  88
+)
 
 local evaluation = Expressions.evaluate("equation", "PARAM{100,LEVEL} +")
 T.contains("a syntax error says so", evaluation.error, "compile error")
