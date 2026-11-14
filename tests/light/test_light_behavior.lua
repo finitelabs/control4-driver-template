@@ -462,6 +462,25 @@ case(function()
   w.restore()
 end)
 
+T.section("the walk: a fade that ends between two steps is told with the step that lands it")
+case(function()
+  -- A short fade takes over a walk part way: the walk's next step, after the fade's time, is its last.
+  local o = K.copy(K.WALK)
+  o.levelSteps = 255
+  o.fade = { kind = "walk", stepMs = 250 }
+  o.feedback = { shows = "target", waitMs = 1000, refresh = false }
+  local w = K.world(o, { answers = true }, 20)
+  K.target(w, 0, 750)
+  w.run(300)
+  K.target(w, 62, 250)
+  w.run(285)
+  T.eq("not told the end before the step that lands it", w.proxy:changed(), {})
+  w.run(3000)
+  T.eq("told once, with that step", w.proxy:changed(), { 62 })
+  T.eq("the device there", K.devicePercent(w), 62)
+  w.restore()
+end)
+
 T.section("a relay: on and off with no fade time; SET_LEVEL 0 is off; Toggle switches it")
 case(function()
   local w = K.world(K.RELAY, {}, 0)

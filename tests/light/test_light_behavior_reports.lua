@@ -249,6 +249,30 @@ case(function()
   w.restore()
 end)
 
+T.section("another hand's off during our on from off: the level it keeps, reported beside the off, is no news")
+case(function()
+  -- A hold device that reports where it is, its color fade still running and reported under the off.
+  local base = K.copy(K.ES)
+  base.levelSteps = 100
+  base.fade = { kind = "device", curve = "linear", retimes = true }
+  base.feedback = { shows = "position", waitMs = 2500, refresh = true }
+  base.colorWhileOff = "hold"
+  local w = K.world(base, { latency = 20, pushEveryMs = 250 }, 50)
+  K.color(w, 0.33, 0.6, 5000)
+  w.run(700)
+  w.proxy:send("OFF")
+  w.run(2500)
+  w.proxy:mark()
+  K.target(w, 8, 750)
+  w.run(300)
+  w.m:other({ on = false, level = 0.16 })
+  w.run(10000)
+  local changed = w.proxy:changed()
+  T.eq("it ends off", changed[#changed], 0)
+  T.check("and is never told the level kept", not table.concat(changed, ","):find("16", 1, true), changed)
+  w.restore()
+end)
+
 T.section("target feedback: a push matching nothing in a window is another hand's: adopted, the ramp ends")
 case(function()
   local w = quiet(K.ES, 20)
@@ -551,6 +575,34 @@ case(function()
   w.run(5000)
   T.eq("the off is told once, and nothing after", w.proxy:changed(), { 0 })
   T.eq("the device is off", K.device(w).on, false)
+  w.restore()
+end)
+
+T.section("a re-timing device reporting one attribute at a time: the level it keeps, alone beside our off, is no news")
+case(function()
+  local base = K.copy(K.ES)
+  base.fade = { kind = "device", curve = "linear", preOn = true, retimes = true }
+  base.feedback = { shows = "target", waitMs = 2500, refresh = false }
+  local w = quiet(base, 87)
+  K.color(w, K.GREEN.x, K.GREEN.y, 3000)
+  w.run(10)
+  K.target(w, 100, 2000)
+  report(w, { level = 1 })
+  w.run(245)
+  w.proxy:mark()
+  K.target(w, 0, 890)
+  report(w, { on = false })
+  w.run(10)
+  -- Its fade to 100 had only begun, so it keeps the level it had before.
+  report(w, { level = 0.87 })
+  w.run(5000)
+  T.eq("the off is told, and no level after it", w.proxy:changed(), { 0 })
+  local c = w.proxy.color or {}
+  T.check(
+    "the color fade the off carried on ends where the light heads",
+    near(c.x, K.GREEN.x) and near(c.y, K.GREEN.y),
+    c
+  )
   w.restore()
 end)
 

@@ -108,6 +108,26 @@ case(function()
   w.restore()
 end)
 
+T.section("a hold device lit by another hand while a color is held is told the color it kept, with no report of it")
+case(function()
+  -- Its pushes carry only what changed, so its on says nothing of the color it lit in, and it can't be read.
+  local o = K.copy(K.HOLD)
+  o.feedback = { shows = "position", waitMs = 300, refresh = false }
+  local w = K.world(o, { split = true }, 100)
+  K.color(w, GREEN.x, GREEN.y)
+  w.run(3000)
+  w.proxy:send("OFF")
+  w.run(3000)
+  K.color(w, RED.x, RED.y)
+  w.run(1000)
+  T.check("the pick is told", near((w.proxy.color or {}).x, RED.x), w.proxy.color)
+  w.m:other({ on = true, level = 0.5 })
+  w.run(5000)
+  T.check("the device lit in the color it kept", near(K.device(w).color.x, GREEN.x, 0.005), K.device(w).color)
+  T.check("and the proxy shows it", near((w.proxy.color or {}).x, GREEN.x, 0.005), w.proxy.color)
+  w.restore()
+end)
+
 T.section("a white on a light with color and CCT goes as a color temperature, clamped to the device's range")
 case(function()
   local w = K.world(K.ES, {}, 100)
@@ -572,6 +592,29 @@ case(function()
   w.restore()
 end)
 
+T.section("a hold device off under Dim-To-Warm part way through a scene's color fade: its positions tell nothing")
+case(function()
+  -- It reports where it is and is read at a deadline, and its color fade runs on after the off.
+  local o = K.copy(K.ES)
+  o.colorWhileOff = "hold"
+  o.cct = nil
+  o.feedback = { shows = "position", waitMs = 300, refresh = true }
+  local w = K.world(o, { answers = true, latency = 20, pushEveryMs = 250 }, 0)
+  local dim = { id = 2, origin = 1, x = 0.15, y = 0.06 }
+  K.onMode(w, { id = 1, origin = 1, x = 0.61, y = 0.31 }, dim)
+  w.proxy:send("SET_LEVEL", { LEVEL = 60 })
+  w.run(5000)
+  K.scene(w, 1, { { level = 100, color = { x = 0.65, y = 0.17 }, rate = 2000 } })
+  w.proxy:send("ACTIVATE_SCENE", { SCENE_ID = 1 })
+  w.run(1100)
+  w.proxy:mark()
+  w.proxy:send("SET_LEVEL", { LEVEL = 0 })
+  w.run(5000)
+  T.eq("the proxy is told one color", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  T.check("the Dim color", near((w.proxy.color or {}).x, dim.x, 0.005), w.proxy.color)
+  w.restore()
+end)
+
 T.section("a hold device fading itself to off: a lit report of the color it kept on its way down is no news")
 case(function()
   local o = K.copy(K.OWN)
@@ -625,6 +668,39 @@ for _, shows in ipairs({ "target", "position" }) do
     T.eq(shows .. ": the proxy is told one color", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
     T.eq(shows .. ": and one level", w.proxy:count("LIGHT_BRIGHTNESS_CHANGED"), 1)
     T.check(shows .. ": the On's", near((w.proxy.color or {}).x, on.x or 0, 0.005), w.proxy.color)
+    w.restore()
+  end)
+end
+
+T.section("a hold device fading itself on to a held color: its positions from the color it kept are no news")
+for _, by in ipairs({ "ours", "another hand's" }) do
+  case(function()
+    -- It kept the color it was last lit in, or one another hand gave it while off, which a light that can't be
+    -- read reports in a frame of its own. Then the color held is the one it was lit in.
+    local other = by ~= "ours"
+    local held = other and GREEN or RED
+    local o = K.copy(K.OWN)
+    o.dims = false
+    o.colorWhileOff = "hold"
+    o.fade = { kind = "own", own = { onMs = 1000, offMs = 0, changeMs = 0 } }
+    o.feedback = { shows = "position", waitMs = other and 300 or 400, refresh = not other }
+    local w = K.world(o, { latency = other and 20 or 150, pushEveryMs = 250, split = other }, 100)
+    K.color(w, GREEN.x, GREEN.y)
+    w.run(3000)
+    w.proxy:send("OFF")
+    w.run(3000)
+    K.color(w, held.x, held.y)
+    w.run(1000)
+    if other then
+      w.m:other({ color = { x = 0.15, y = 0.06, mode = "xy" } })
+      w.run(1000)
+    end
+    w.proxy:mark()
+    w.proxy:send("ON")
+    w.run(5000)
+    T.eq(by .. ": the color is told once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+    T.check(by .. ": the one held", near((w.proxy.color or {}).x, held.x, 0.005), w.proxy.color)
+    T.check(by .. ": and the device is in it", near(K.device(w).color.x, held.x, 0.005), K.device(w).color)
     w.restore()
   end)
 end
@@ -1094,6 +1170,48 @@ case(function()
   w.restore()
 end)
 
+T.section("a light without color temperature that reports a color near the whites as a Kelvin keeps the color")
+case(function()
+  -- The strip reports a color in the white band as its Kelvin, whose white is a little off the color sent.
+  local px, py = Color.kelvinToXY(3000)
+  local near_white = { x = px, y = py - 0.01 }
+  local feedbacks = {
+    { shows = "position", waitMs = 5000, refresh = false },
+    { shows = "target", waitMs = 300, refresh = true },
+  }
+  for _, feedback in ipairs(feedbacks) do
+    local o = K.copy(K.ES)
+    o.cct = nil
+    o.feedback = feedback
+    local w = K.world(o, { kelvinWhites = true, answers = true, readbackMs = 1500 }, 50)
+    K.color(w, near_white.x, near_white.y, 0)
+    w.run(15000)
+    local label = feedback.shows .. ": "
+    T.eq(label .. "told once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+    local c = w.proxy.color or {}
+    T.check(label .. "the color sent", near(c.x, near_white.x, 0.001) and near(c.y, near_white.y, 0.001), c)
+    w.restore()
+  end
+end)
+
+T.section("a light with color temperature shown a color near the whites tells another hand's white at its Kelvin")
+case(function()
+  local px, py = Color.kelvinToXY(3000)
+  local near_white = { x = px, y = py - 0.01 }
+  local k = Color.kelvin(near_white.x, near_white.y)
+  local wx, wy = Color.kelvinToXY(k)
+  local w = K.world(K.ES, {}, 50)
+  K.color(w, near_white.x, near_white.y, 0)
+  w.run(5000)
+  w.proxy:mark()
+  w.m:other({ color = { x = wx, y = wy, mode = "cct", kelvin = k } })
+  w.run(2000)
+  T.eq("told once", w.proxy:count("LIGHT_COLOR_CHANGED"), 1)
+  local c = w.proxy.color or {}
+  T.check("in the white's own form", tonumber(c.mode) == K.CCT and near(c.x, wx, 0.003) and near(c.y, wy, 0.003), c)
+  w.restore()
+end)
+
 T.section("a Kelvin command, and a level on a lit white, are told once in the white's own form")
 case(function()
   for _, o in ipairs({ K.ES, K.ZB, K.WALK }) do
@@ -1111,4 +1229,29 @@ case(function()
     w.restore()
   end
 end)
+
+T.section("a light fading itself, reporting a white as a full color on its way: a mix that barely moves is no news")
+for _, hold in ipairs({ false, true }) do
+  case(function()
+    local name = hold and "an On from off on a hold device" or "a level on a lit light"
+    local o = K.copy(K.OWN)
+    o.cct = { minK = 2000, maxK = 6500 }
+    o.fade = { kind = "own", own = { onMs = 300, offMs = 300, changeMs = 300 } }
+    o.feedback = { shows = "position", waitMs = 5000, refresh = true }
+    o.colorWhileOff = hold and "hold" or nil
+    local w = K.world(o, { pushEveryMs = 250 })
+    K.onMode(w, K.WARM, K.DIM)
+    K.target(w, 97)
+    w.run(5000)
+    if hold then
+      w.proxy:send("OFF")
+      w.run(5000)
+    end
+    w.proxy:mark()
+    w.proxy:send("SET_LEVEL", { LEVEL = 100 })
+    w.run(5000)
+    T.eq(name .. ": the mix is told once at most, as a white", toldModes(w), hold and { K.CCT } or {})
+    w.restore()
+  end)
+end
 T.finish()

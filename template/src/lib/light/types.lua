@@ -215,6 +215,10 @@ Types.API = 1
 --   and the build stops without it. Raises on a profile.api other than Types.API, a
 --   profile field of the wrong type, or an adapter without send, refresh and show.
 --
+-- values:restoreValues()
+--   From OnDriverInit, as for any driver with variables: the library writes the Connected variable, and only
+--   one restored there keeps its id and the programming on it across a Director restart.
+--
 -- light:start()
 --   From OnDriverLateInit. Reads the proxy (GET_SETUP, 6661, 1001/1110, 1200/1210), tells offline until the
 --   device's first report, and asks refresh() once. Reports given before it are taken then, in order.
@@ -371,6 +375,7 @@ Types.API = 1
 --- @field extended boolean The deadline was extended once.
 --- @field deadline integer
 --- @field landed boolean|nil What is held is a position no command sent, reported once the newest change had landed.
+--- @field left boolean|nil An on report has shown the light away from where it stood when the window opened.
 
 --- What start read from the proxy, which Motion starts from and the first report is weighed against.
 --- @class LightSeed
@@ -383,6 +388,7 @@ Types.API = 1
 --- @field foreign LightAspect[] The aspects another hand moved.
 --- @field ask boolean Call adapter:refresh() once.
 --- @field form LightColor|nil The running color ramp's end in the form the light echoed it.
+--- @field kept LightColor|nil The color a "hold" device reports while a color is held: where its next on lights from.
 --- @field first LightAspect[] The aspects this was the first report of since a start or a loss, a match included:
 ---   each is told to the proxy, changed or not.
 
