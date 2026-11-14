@@ -457,7 +457,7 @@ local function callJson(method, value)
 end
 
 --- The value at a path in a decoded JSON value: `$` is the whole value, `.name` a field
---- and `[n]` an array's item, counted from 0.
+--- and `[n]` an array's item, counted from 0, which may follow another: `$.grid[0][1]`.
 --- @param value any
 --- @param path string
 --- @return any found nil when the path doesn't lead to a value.
@@ -470,17 +470,20 @@ local function atPath(value, path)
     if type(current) ~= "table" then
       return nil
     end
-    local field, index = part:match("^([^%[]*)%[(%d+)%]$")
-    if index then
+    local field, indexes = part:match("^([^%[]*)(%[.*)$")
+    if not indexes or indexes:gsub("%[%d+%]", "") ~= "" then
+      -- rawget: a strict-typed table's metatable would answer a missing key.
+      current = rawget(current, part)
+    else
       if field ~= "" then
-        current = current[field]
+        current = rawget(current, field)
+      end
+      for index in indexes:gmatch("%d+") do
         if type(current) ~= "table" then
           return nil
         end
+        current = rawget(current, tonumber(index) + 1)
       end
-      current = current[tonumber(index) + 1]
-    else
-      current = current[part]
     end
   end
   return current
@@ -499,7 +502,10 @@ local function json(text, path)
   text = tostring(text)
   if text ~= lastText then
     local ok, decoded = callJson(JSON.decode, text)
-    lastText, lastDecoded = text, ok and decoded or nil
+    lastText, lastDecoded = text, nil
+    if ok then
+      lastDecoded = decoded
+    end
   end
   local value = atPath(lastDecoded, path)
   if type(value) == "table" then
