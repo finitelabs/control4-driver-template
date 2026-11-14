@@ -202,10 +202,11 @@ local function intent(light, strCommand, tParams)
     return { kind = "off", source = "proxy" }
   elseif strCommand == "TOGGLE" then
     return { kind = "toggle", source = "proxy" }
-  elseif strCommand == "SET_LEVEL" then
+  elseif strCommand == "SET_LEVEL" or strCommand == "GROUP_SET_LEVEL" then
+    -- A load group's level command acts as its single light twin.
     return { kind = "level", level = level(Select(tParams, "LEVEL")), rateMs = 0, source = "proxy" }
-  elseif strCommand == "RAMP_TO_LEVEL" then
-    -- The legacy form older programming and Alexa Voice Scenes send.
+  elseif strCommand == "RAMP_TO_LEVEL" or strCommand == "GROUP_RAMP_TO_LEVEL" then
+    -- The legacy form older programming and Alexa Voice Scenes send, and a load group's ramp.
     return {
       kind = "level",
       level = level(Select(tParams, "LEVEL")),
@@ -238,16 +239,6 @@ local function intent(light, strCommand, tParams)
       ),
       presetId = presetId,
       presetOrigin = tointeger(Select(tParams, "LIGHT_COLOR_TARGET_PRESET_ORIGIN")),
-      source = "proxy",
-    }
-  elseif strCommand == "GROUP_SET_LEVEL" then
-    -- A load group's command acts as its single light twin, ending a running hold or scene.
-    return { kind = "level", level = level(Select(tParams, "LEVEL")), rateMs = 0, source = "proxy" }
-  elseif strCommand == "GROUP_RAMP_TO_LEVEL" then
-    return {
-      kind = "level",
-      level = level(Select(tParams, "LEVEL")),
-      rateMs = tointeger(Select(tParams, "TIME")),
       source = "proxy",
     }
   elseif strCommand == "SET_BRIGHTNESS_STOP" or strCommand == "GROUP_STOP_RAMP" then

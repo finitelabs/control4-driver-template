@@ -282,15 +282,7 @@ function Buttons:gateEnded(now, view)
   end
   press.waiting = false
   local up = press.direction == "up"
-  local level = self:_at(view)
-  local distance = up and (100 - level) or level
-  local hold = {
-    kind = "level",
-    level = up and 100 or 0,
-    rateMs = math.floor(self.settings:holdRate(up) * math.max(0, distance) / 100 + 0.5),
-    source = "button",
-    ramp = true,
-  }
+  local hold = self:_hold(up, self.settings:holdRate(up), view, "button")
   self:noted(hold, now)
   return hold
 end
@@ -302,13 +294,23 @@ end
 --- @param view LightView
 --- @return LightIntent
 function Buttons:groupHold(up, rateMs, view)
+  return self:_hold(up, rateMs or self.settings:holdRate(up), view, "proxy")
+end
+
+--- A hold ramp to full or off over `rateMs` for the whole range, scaled by the distance left.
+--- @param up boolean
+--- @param rateMs integer
+--- @param view LightView
+--- @param source LightSource
+--- @return LightIntent
+function Buttons:_hold(up, rateMs, view, source)
   local level = self:_at(view)
   local distance = up and (100 - level) or level
   return {
     kind = "level",
     level = up and 100 or 0,
-    rateMs = math.floor((rateMs or self.settings:holdRate(up)) * math.max(0, distance) / 100 + 0.5),
-    source = "proxy",
+    rateMs = math.floor(rateMs * math.max(0, distance) / 100 + 0.5),
+    source = source,
     ramp = true,
   }
 end
