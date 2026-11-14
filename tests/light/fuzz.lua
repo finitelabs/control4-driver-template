@@ -2,6 +2,8 @@
 -- hand's changes and a slow, late, lossy or silent transport, over MemoryLight in every device the
 -- contract's facts make (types.lua). Each run is judged by the invariants below once it is at rest.
 --
+-- Half the runs offer load groups and mix their commands in.
+--
 -- The template's own test: no driver repo gets it. Against a render with the light token:
 --   "$R/test/run_test.sh" "$PWD/tests/light/fuzz.lua"
 -- LIGHT_FUZZ_RUNS sets the count (20,000 by default), LIGHT_FUZZ_SEED the first seed (1). A failure prints
@@ -84,6 +86,12 @@ local KNOWN_EVERY = {
     [6868] = true,
     -- A light that runs its own fades reports its position on the way: SET_LEVEL 74 from off tells 1, 62, then 74.
     [14466] = true,
+    -- A light that runs its own fades is part way down a scene step's fade when SET_LEVEL 0 lands. Its off is told,
+    -- then its positions from the scene's fade, 18 and 15, then off again when it lands.
+    [18658] = true,
+    -- A light that runs its own fades answers SET_LEVEL 0 off at once, then pushes a position from the fade before
+    -- it. The answer closed the window, so 50 is told, then off when the light lands.
+    [19055] = true,
   },
 }
 -- The hold pass's own: its seeds draw other lights.
@@ -271,6 +279,7 @@ local function describe(d)
     d.inside and "reports inside send" or "",
     d.drops > 0 and ("drops " .. d.drops) or "",
     d.delays and "delays" or "",
+    o.profile.loadGroups and "load groups" or "",
   }
   local out = {}
   for _, p in ipairs(parts) do
@@ -588,6 +597,43 @@ local function malformed(run)
   end
   if run.malformedSeen ~= errors + 1 then
     violate(run, "malformed", "a malformed report (%s) logged %d errors", T.show(bad), run.malformedSeen - errors)
+  end
+end
+
+--- One load group command, drawn from the run's group draw: membership without sync, a group level or ramp, a hold
+--- and its stop, or a click as the stock group sends one.
+--- @param run FuzzRun
+--- @param g FuzzRandom
+local function groupMove(run, g)
+  local w = run.w
+  local group = tostring(g.pick({ 901, 902 }))
+  local function send(cmd, params, ms, lvl)
+    act(run, cmd .. " " .. T.show(params), function()
+      w.proxy:send(cmd, params)
+    end, ms, lvl)
+  end
+  local pick = g.int(1, 7)
+  if pick == 1 then
+    send("JOIN_GROUP", { GROUP_ID = group, KEEP_SYNC = "0" })
+  elseif pick == 2 then
+    send("LEAVE_GROUP", { GROUP_ID = group })
+  elseif pick == 3 then
+    local l = level(g)
+    send("GROUP_SET_LEVEL", { GROUP_ID = group, LEVEL = l }, 0, l)
+  elseif pick == 4 then
+    local ms = g.pick(RATES)
+    send("GROUP_RAMP_TO_LEVEL", { GROUP_ID = group, LEVEL = level(g), TIME = ms }, ms)
+  elseif pick == 5 then
+    send("GROUP_START_RAMP", { GROUP_ID = group, RAMP_UP = g.pick({ "0", "1" }), RATE = 5000 }, 5000)
+  elseif pick == 6 then
+    send("GROUP_STOP_RAMP", { GROUP_ID = group })
+  else
+    local up = g.chance(0.5)
+    act(run, "a group click " .. (up and "up" or "down"), function()
+      w.proxy:send("GROUP_START_RAMP", { GROUP_ID = group, RAMP_UP = up and "1" or "0", RATE = 5000 })
+      w.run(3)
+      w.proxy:send("GROUP_RAMP_TO_LEVEL", { GROUP_ID = group, LEVEL = up and 100 or 0, TIME = up and 250 or 750 })
+    end, 5000)
   end
 end
 
@@ -1433,6 +1479,10 @@ end
 local function fuzz(seed)
   local r = rng(seed)
   local d = draw(r)
+  -- Load groups draw from a generator of their own, so a run without them is the run its seed always was.
+  local g = rng(seed + 1000003)
+  local groups = g.chance(0.5)
+  d.o.profile.loadGroups = groups
   local run = {
     seed = seed,
     r = r,
@@ -1522,7 +1572,9 @@ local function fuzz(seed)
   end
   local count = r.int(6, 30)
   for _ = 1, count do
-    if r.chance(0.03) and run.online then
+    if groups and g.chance(0.25) then
+      groupMove(run, g)
+    elseif r.chance(0.03) and run.online then
       restart(run)
     else
       local roll = r.float() * total

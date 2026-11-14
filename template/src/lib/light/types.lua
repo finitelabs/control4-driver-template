@@ -69,6 +69,8 @@ Types.API = 1
 --- @field onModes boolean|nil The brightness and color on modes.
 --- @field flash boolean|nil Scene flash elements (disable_flash false).
 --- @field extras boolean|nil has_extras. The driver sends EXTRAS_* and handles EXTRA_SET itself.
+--- @field loadGroups boolean|nil load_group_support: the light joins Control4 load groups, takes their commands, and
+---   hands its own on, off, level and button commands to a group that keeps it in sync.
 
 -----------------------------------------------------------------------------------------------------
 -- The device: the facts of one connection
@@ -263,6 +265,7 @@ Types.API = 1
 --     brightness_rate_default, color_rate_default, brightness_on_mode, button_colors, brightness_presets,
 --     color_presets, color_on_mode, previous_color, brightness_on_mode_preset, max_on_level, min_on_level
 --   Scenes: scenes
+--   Groups: load_groups
 
 -----------------------------------------------------------------------------------------------------
 -- The library's own shapes

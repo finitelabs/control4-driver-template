@@ -295,6 +295,24 @@ function Buttons:gateEnded(now, view)
   return hold
 end
 
+--- A load group's GROUP_START_RAMP: a hold ramp to full or off over the group's hold rate scaled by the distance
+--- left, as a held button's.
+--- @param up boolean
+--- @param rateMs integer|nil The group's hold rate for the whole range; nil takes the light's own.
+--- @param view LightView
+--- @return LightIntent
+function Buttons:groupHold(up, rateMs, view)
+  local level = self:_at(view)
+  local distance = up and (100 - level) or level
+  return {
+    kind = "level",
+    level = up and 100 or 0,
+    rateMs = math.floor((rateMs or self.settings:holdRate(up)) * math.max(0, distance) / 100 + 0.5),
+    source = "proxy",
+    ramp = true,
+  }
+end
+
 --- Another source moved the light: a hold or a scene ramp it replaced no longer runs, so a release stops
 --- nothing. A press still in its gate keeps waiting, as the button is still down.
 function Buttons:cancel()

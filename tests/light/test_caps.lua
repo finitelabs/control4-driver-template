@@ -51,6 +51,7 @@ do
     onModes = false,
     flash = false,
     extras = false,
+    loadGroups = false,
     maxMs = 65535,
   })
 end
@@ -354,8 +355,20 @@ do
     seen[row.key] = true
   end
   T.check("unique keys, string values", unique)
-  local names =
-    { "dims", "color", "cct", "known", "fades", "defaultOn", "scenes", "onModes", "flash", "extras", "links" }
+  local names = {
+    "dims",
+    "color",
+    "cct",
+    "known",
+    "fades",
+    "defaultOn",
+    "scenes",
+    "onModes",
+    "flash",
+    "extras",
+    "loadGroups",
+    "links",
+  }
   local ok = true
   for mask = 0, 2 ^ #names - 1 do
     local fields = {}
@@ -391,11 +404,12 @@ do
     is("color_on_mode_fade", p.onModes and (color or cct))
     is("has_extras", p.extras)
     is("disable_flash", not p.flash)
+    is("load_group_support", p.loadGroups)
     ok = ok and r.color_rate_behavior == (p.fades and "1" or "0")
     ok = ok and r.color_correlated_temperature_min == (p.known and cct and "2700" or "2000")
     ok = ok and r.color_correlated_temperature_max == (p.known and cct and "6000" or "6500")
   end
-  T.check("every flag over all 2048 profiles", ok)
+  T.check("every flag over all 4096 profiles", ok)
 end
 
 T.section("dynamic: by the device's fade kind")
