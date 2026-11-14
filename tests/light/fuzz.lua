@@ -78,27 +78,20 @@ local INVARIANTS = {
 -- never takes a seed here.
 --- @type table<string, table<integer, boolean>>
 local KNOWN_EVERY = {
-  told = {
-    -- A light that reports one aspect at a time and can't be asked to refresh is off at 30, and another client turns
-    -- it on at 20. Its on lands before its level, so lit at 30 is told, then 20 when the level comes.
-    [4395] = true,
-  },
   quiet = {
     -- A re-timing light's level report from before a SET_LEVEL 100 lands after the echo closed the window. Its 20 is
     -- told as another client's, and the light's next report, 180 ms on, tells 100 again.
     [6868] = true,
     -- A light that runs its own fades reports its position on the way: SET_LEVEL 74 from off tells 1, 62, then 74.
     [14466] = true,
-    -- The same kind of light, on an off from 19, tells 14, 10 and 5, then off: its positions on its own fade down.
-    [16794] = true,
   },
 }
 -- The hold pass's own: its seeds draw other lights.
 --- @type table<string, table<integer, boolean>>
 local KNOWN_HOLD = {
   told = {
-    -- The mixed pass's 4395, the same light drawn again: off at 30, another client lights it at 20, and lit at 30 is
-    -- told before its level lands.
+    -- A light that reports one aspect at a time and can't be asked to refresh is off at 30, and another client turns
+    -- it on at 20. Its on lands before its level, so lit at 30 is told, then 20 when the level comes.
     [4395] = true,
   },
   quiet = {
