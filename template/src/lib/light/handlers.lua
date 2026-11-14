@@ -1,6 +1,7 @@
 --- The light's bindings: one RFP function for the proxy binding and one for each Button Link, with the
 --- native signature. Each parses a command into one of Light's entry points. No command-keyed RFP
---- is set, so a driver's own one for a command the library does not handle (EXTRA_SET) runs first.
+--- is set, so a driver's own one for a command the library does not handle (EXTRA_SET) runs first. A light that
+--- offers load groups also takes a group driver's commands as ExecuteCommand, the way one driver reaches another.
 
 local log = require("lib.logging")
 local Buttons = require("lib.light.buttons")
@@ -38,6 +39,7 @@ local DEVICE = {
   GROUP_RAMP_TO_LEVEL = true,
   GROUP_START_RAMP = true,
   GROUP_STOP_RAMP = true,
+  LIGHT_GROUP_COMMAND = true,
 }
 
 -- The families a profile can leave out, and their commands: a family not offered takes none of them.
@@ -68,10 +70,27 @@ local FAMILY = {
   GROUP_RAMP_TO_LEVEL = "loadGroups",
   GROUP_START_RAMP = "loadGroups",
   GROUP_STOP_RAMP = "loadGroups",
+  LIGHT_GROUP_JOIN = "loadGroups",
+  LIGHT_GROUP_LEAVE = "loadGroups",
+  LIGHT_GROUP_COMMAND = "loadGroups",
 }
 
 -- The membership commands a load group sends.
 local MEMBERSHIP = { JOIN_GROUP = true, LEAVE_GROUP = true, SET_GROUP_SYNC = true }
+
+-- What a group driver built on lib.light.group sends a member.
+local GROUP_DRIVER = { LIGHT_GROUP_JOIN = true, LIGHT_GROUP_LEAVE = true, LIGHT_GROUP_COMMAND = true }
+
+-- The intents a group driver's command names.
+--- @type table<string, LightIntentKind>
+local DECIDED = {
+  level = "level",
+  off = "off",
+  color = "color",
+  stopLevel = "stopLevel",
+  stopColor = "stopColor",
+  stop = "stop",
+}
 
 -- The light's own commands a load group in sync takes instead of the light, and the name each goes on as.
 --- @type table<string, string>
@@ -143,7 +162,7 @@ local Handlers = {}
 Handlers.COMMANDS = {}
 do
   local seen = {}
-  for _, set in ipairs({ DEVICE, FAMILY, MEMBERSHIP, SCENE_OPS, SETTINGS, ASKS, IGNORED, LINK_ACTIONS }) do
+  for _, set in ipairs({ DEVICE, FAMILY, MEMBERSHIP, GROUP_DRIVER, SCENE_OPS, SETTINGS, ASKS, IGNORED, LINK_ACTIONS }) do
     for command in pairs(set) do
       if not seen[command] then
         seen[command] = true
@@ -249,6 +268,34 @@ local function intent(light, strCommand, tParams)
   return nil
 end
 
+--- A group driver's LIGHT_GROUP_COMMAND as the intent it decided, or nil for one that names nothing.
+--- @param tParams table<string, string>
+--- @return LightIntent|nil
+local function decided(tParams)
+  local kind = DECIDED[Select(tParams, "KIND") or ""]
+  if not kind then
+    log:warn("LIGHT_GROUP_COMMAND names no command: %s", tParams)
+    return nil
+  end
+  local color
+  local x, y = tonumber(Select(tParams, "X")), tonumber(Select(tParams, "Y"))
+  if x and y then
+    color = { x = x, y = y, mode = Select(tParams, "MODE") == "cct" and "cct" or "xy" }
+    color.kelvin = color.mode == "cct" and tointeger(Select(tParams, "KELVIN")) or nil
+  end
+  if kind == "color" and not color then
+    log:warn("LIGHT_GROUP_COMMAND names no color: %s", tParams)
+    return nil
+  end
+  return {
+    kind = kind,
+    level = kind == "level" and level(Select(tParams, "LEVEL")) or nil,
+    color = color,
+    rateMs = tointeger(Select(tParams, "RATE")) or 0,
+    source = "proxy",
+  }
+end
+
 --- Whether the light's profile offers a family.
 --- @param light Light
 --- @param family LightFamily|nil
@@ -273,6 +320,10 @@ local function onProxy(light, strCommand, tParams)
   end
   if MEMBERSHIP[strCommand] then
     light:membership(strCommand, tParams)
+    return
+  end
+  if strCommand == "LIGHT_GROUP_JOIN" or strCommand == "LIGHT_GROUP_LEAVE" then
+    light:groupDriver(strCommand, tParams)
     return
   end
   local toGroup = light.profile.loadGroups and TO_GROUP[strCommand]
@@ -305,6 +356,11 @@ local function onProxy(light, strCommand, tParams)
     end
   elseif strCommand == "GROUP_START_RAMP" then
     light:groupHold(toboolean(Select(tParams, "RAMP_UP")), tointeger(Select(tParams, "RATE")))
+  elseif strCommand == "LIGHT_GROUP_COMMAND" then
+    local taken = decided(tParams)
+    if taken then
+      light:take(taken)
+    end
   else
     local motion = intent(light, strCommand, tParams)
     if motion then
@@ -322,6 +378,13 @@ function Handlers.register(light)
   RFP[profile.proxy] = function(idBinding, strCommand, tParams, _args)
     log:trace("RFP[%s] %s %s", idBinding, strCommand, tParams)
     onProxy(light, strCommand, tParams or {})
+  end
+  if profile.loadGroups then
+    for command in pairs(GROUP_DRIVER) do
+      EC[command] = function(tParams)
+        onProxy(light, command, tParams or {})
+      end
+    end
   end
   local links = profile.links
   if not links then

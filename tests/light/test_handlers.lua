@@ -426,10 +426,11 @@ do
     "DO_PUSH",
     "JOIN_GROUP",
     "GROUP_SET_LEVEL",
+    "LIGHT_GROUP_COMMAND",
   }) do
     T.check("includes " .. command, seen[command])
   end
-  T.eq("and no more than them", #Handlers.COMMANDS, 52)
+  T.eq("and no more than them", #Handlers.COMMANDS, 55)
 end
 
 T.finish()
