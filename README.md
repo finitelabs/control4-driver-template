@@ -32,7 +32,7 @@ packager's crypto/XML libs), and re-installs whenever that list changes.
 
 ### Common Libraries (`src/lib/`)
 - **bindings.lua**: binding management (add/remove/query Control4 driver bindings)
-- **conditionals.lua**: conditional/programming UI management
+- **conditionals.lua**: conditional/programming UI management; gives each one a `sort_order`
 - **events.lua**: event firing and management
 - **http.lua**: HTTP client wrapper around C4:urlGet/urlPost/urlPut/urlDelete, with a body cap, a headers check, redirects followed and a private URL for fetching from an address the integrator gives
 - **lru.lua**: LRU cache utility
