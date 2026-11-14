@@ -25,10 +25,16 @@ local function fakeLight(profile, online)
   function light.settings:colorPreset(id)
     return id == 4 and PRESET or nil
   end
-  for _, name in ipairs({ "command", "button", "scene", "setting", "ask" }) do
+  for _, name in ipairs({ "command", "button", "scene", "setting", "ask", "membership", "groupHold" }) do
     light[name] = function(self, ...)
       self.calls[#self.calls + 1] = { name, ... }
     end
+  end
+  -- A group in sync takes what is handed to it.
+  light.synced = false
+  function light:toGroups(...)
+    self.calls[#self.calls + 1] = { "toGroups", ... }
+    return self.synced
   end
   return light
 end
@@ -279,6 +285,107 @@ do
   T.eq("a level still lands", #run(light, PROXY, "SET_LEVEL", { LEVEL = "5" }), 1)
 end
 
+T.section("load group commands: membership, a group level or ramp as its single light twin, a hold and its stop")
+do
+  RFP = { suppressDebug = {} }
+  local profile = { api = 1, proxy = PROXY, links = LINKS, dims = true, loadGroups = true }
+  local light = fakeLight(profile)
+  Handlers.register(light)
+  for _, command in ipairs({ "JOIN_GROUP", "LEAVE_GROUP", "SET_GROUP_SYNC" }) do
+    local params = { GROUP_ID = "1205", KEEP_SYNC = "1" }
+    T.eq(command .. " is membership", run(light, PROXY, command, params), { { "membership", command, params } })
+  end
+  T.eq(
+    "GROUP_SET_LEVEL is SET_LEVEL",
+    run(light, PROXY, "GROUP_SET_LEVEL", { GROUP_ID = "1205", LEVEL = "100" }),
+    { { "command", { kind = "level", level = 100, rateMs = 0, source = "proxy" } } }
+  )
+  T.eq(
+    "GROUP_RAMP_TO_LEVEL is RAMP_TO_LEVEL",
+    run(light, PROXY, "GROUP_RAMP_TO_LEVEL", { GROUP_ID = "1205", LEVEL = "80", TIME = "2000" }),
+    { { "command", { kind = "level", level = 80, rateMs = 2000, source = "proxy" } } }
+  )
+  T.eq("GROUP_START_RAMP is a hold, up or down at the group's rate", {
+    run(light, PROXY, "GROUP_START_RAMP", { GROUP_ID = "1205", RAMP_UP = "1", RATE = "5000" }),
+    run(light, PROXY, "GROUP_START_RAMP", { GROUP_ID = "1205", RAMP_UP = "0", RATE = "5000" }),
+  }, { { { "groupHold", true, 5000 } }, { { "groupHold", false, 5000 } } })
+  T.eq(
+    "GROUP_STOP_RAMP stops the level",
+    run(light, PROXY, "GROUP_STOP_RAMP", { GROUP_ID = "1205" }),
+    { { "command", { kind = "stopLevel", source = "proxy" } } }
+  )
+
+  light.online = false
+  for _, command in ipairs({ "GROUP_SET_LEVEL", "GROUP_RAMP_TO_LEVEL", "GROUP_START_RAMP", "GROUP_STOP_RAMP" }) do
+    T.eq(command .. " waits for the device like any motion", run(light, PROXY, command, { LEVEL = "5" }), {})
+  end
+  T.eq("membership does not", #run(light, PROXY, "JOIN_GROUP", { GROUP_ID = "1205" }), 1)
+  light.online = true
+
+  RFP = { suppressDebug = {} }
+  local without = fakeLight(FULL)
+  Handlers.register(without)
+  for _, command in ipairs({ "JOIN_GROUP", "SET_GROUP_SYNC", "GROUP_SET_LEVEL", "GROUP_START_RAMP" }) do
+    T.eq(command .. " is dropped by a profile without load groups", run(without, PROXY, command, { LEVEL = "5" }), {})
+  end
+  T.eq(
+    "and its own commands are never handed on",
+    run(without, PROXY, "ON"),
+    { { "command", { kind = "on", source = "proxy" } } }
+  )
+end
+
+T.section("a light a group keeps in sync hands its own commands to the group and does not act on them")
+do
+  RFP = { suppressDebug = {} }
+  local light = fakeLight({ api = 1, proxy = PROXY, links = LINKS, dims = true, color = true, loadGroups = true })
+  Handlers.register(light)
+  light.synced = true
+  local cases = {
+    { "ON", {}, "ON", {} },
+    { "DYNAMIC_ON", {}, "ON", {} },
+    { "OFF", {}, "OFF", {} },
+    { "DYNAMIC_OFF", {}, "OFF", {} },
+    { "TOGGLE", {}, "TOGGLE", {} },
+    { "SET_LEVEL", { LEVEL = "40" }, "SET_LEVEL", { LEVEL = "40" } },
+    { "RAMP_TO_LEVEL", { LEVEL = "60", TIME = "900" }, "RAMP_TO_LEVEL", { LEVEL = "60", TIME = "900" } },
+    {
+      "SET_BRIGHTNESS_TARGET",
+      { LIGHT_BRIGHTNESS_TARGET = "30", RATE = "750" },
+      "RAMP_TO_LEVEL",
+      { LEVEL = "30", TIME = "750" },
+    },
+    { "BUTTON_ACTION", { BUTTON_ID = "0", ACTION = "1" }, "BUTTON_ACTION", { BUTTON_ID = "0", ACTION = "1" } },
+  }
+  for _, c in ipairs(cases) do
+    T.eq(c[1] .. " goes to the group as " .. c[3], run(light, PROXY, c[1], c[2]), { { "toGroups", c[3], c[4] } })
+  end
+  T.eq(
+    "a link press goes as BUTTON_ACTION",
+    run(light, 302, "DO_PUSH"),
+    { { "toGroups", "BUTTON_ACTION", { BUTTON_ID = "1", ACTION = "1" } } }
+  )
+  light.online = false
+  T.eq("even before the device's first report", run(light, PROXY, "ON"), { { "toGroups", "ON", {} } })
+  light.online = true
+  T.eq(
+    "a color is the light's own: a load group carries level only",
+    #run(light, PROXY, "SET_COLOR_TARGET", { LIGHT_COLOR_TARGET_X = "0.3", LIGHT_COLOR_TARGET_Y = "0.3" }),
+    1
+  )
+  T.eq(
+    "the group's own commands are never handed back",
+    run(light, PROXY, "GROUP_SET_LEVEL", { GROUP_ID = "1205", LEVEL = "20" }),
+    { { "command", { kind = "level", level = 20, rateMs = 0, source = "proxy" } } }
+  )
+  light.synced = false
+  T.eq(
+    "with no group in sync the light acts",
+    run(light, PROXY, "ON"),
+    { { "toGroups", "ON", {} }, { "command", { kind = "on", source = "proxy" } } }
+  )
+end
+
 T.section("a driver's command-keyed handler for a command the library leaves runs first")
 do
   RFP = { suppressDebug = {} }
@@ -317,10 +424,12 @@ do
     "ALL_SCENES_PUSHED",
     "SET_COLOR_ON_MODE",
     "DO_PUSH",
+    "JOIN_GROUP",
+    "GROUP_SET_LEVEL",
   }) do
     T.check("includes " .. command, seen[command])
   end
-  T.eq("and no more than them", #Handlers.COMMANDS, 45)
+  T.eq("and no more than them", #Handlers.COMMANDS, 52)
 end
 
 T.finish()

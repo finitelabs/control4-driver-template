@@ -27,11 +27,15 @@ local Buttons = require("lib.light.buttons")
 local Scenes = require("lib.light.scenes")
 local Motion = require("lib.light.motion")
 local Ledger = require("lib.light.ledger")
+local Groups = require("lib.light.groups")
 local LightProxy = require("lib.light.proxy")
 local Handlers = require("lib.light.handlers")
 -- The pure modules adapters may use, required here so the build bundles them with every light.
 require("lib.light.color")
 require("lib.light.range")
+
+require("drivers-common-public.global.lib")
+require("lib.utils")
 
 local ADAPTER_METHODS = { "send", "refresh", "show" }
 
@@ -66,6 +70,7 @@ local MOVES = {
 --- @field scenes LightScenes
 --- @field motion LightMotion
 --- @field ledger LightLedger
+--- @field groups LightGroups
 --- @field proxy LightProxy
 local Light = {}
 Light.__index = Light
@@ -115,6 +120,7 @@ function Light.new(adapter, profile)
   self.scenes = Scenes.new(self, checked)
   self.motion = Motion.new(self)
   self.ledger = Ledger.new(self)
+  self.groups = Groups.new()
   self.proxy = LightProxy.new(checked, self.settings)
   Handlers.register(self)
   Light.made[#Light.made + 1] = self
@@ -291,6 +297,43 @@ end
 function Light:setting(strCommand, tParams)
   self.settings:apply(strCommand, tParams)
   self:_followUp({})
+end
+
+--- A load group's JOIN_GROUP, LEAVE_GROUP or SET_GROUP_SYNC.
+--- @param strCommand string
+--- @param tParams table<string, string>
+function Light:membership(strCommand, tParams)
+  local groupId = tointeger(Select(tParams, "GROUP_ID"))
+  if not groupId then
+    log:warn("%s names no group: %s", strCommand, tParams)
+    return
+  end
+  if strCommand == "LEAVE_GROUP" then
+    self.groups:leave(groupId)
+  else
+    self.groups:join(groupId, toboolean(Select(tParams, "KEEP_SYNC")))
+  end
+end
+
+--- Hand one of the light's own commands to every load group that keeps it in sync. Returns whether any took it,
+--- in which case the light does not act on it.
+--- @param strCommand string
+--- @param tParams table<string, string>
+--- @return boolean
+function Light:toGroups(strCommand, tParams)
+  if strCommand == "RAMP_TO_LEVEL" and Select(tParams, "TIME") == nil then
+    tParams = { LEVEL = Select(tParams, "LEVEL"), TIME = tostring(self.settings:forMotion().rate) }
+  end
+  return self.groups:forward(strCommand, tParams)
+end
+
+--- A load group's GROUP_START_RAMP: a hold to full or off over the group's hold rate.
+--- @param up boolean
+--- @param rateMs integer|nil
+function Light:groupHold(up, rateMs)
+  local intent = self.buttons:groupHold(up, rateMs, self.motion:view())
+  self.proxy:taken(intent)
+  self:_followUp(self:_move(intent))
 end
 
 --- A read the proxy asks: GET_CONNECTED_STATE, GET_LIGHT_LEVEL, REQUEST_BUTTON_COLORS.

@@ -145,6 +145,7 @@ light = Light.new(
     scenes = true,
     onModes = true,
     flash = true,
+    loadGroups = true,
   }
 )
 

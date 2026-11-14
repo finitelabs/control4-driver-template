@@ -31,6 +31,7 @@ M.KEYS = {
   "max_on_level",
   "min_on_level",
   "light_rate_caps",
+  "load_groups",
 }
 
 --- @param t any

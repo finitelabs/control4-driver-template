@@ -1,5 +1,5 @@
 --- The light's bindings: one RFP function for the proxy binding and one for each Button Link, with the
---- native signature. Each parses a command into one of Light's five entry points. No command-keyed RFP
+--- native signature. Each parses a command into one of Light's entry points. No command-keyed RFP
 --- is set, so a driver's own one for a command the library does not handle (EXTRA_SET) runs first.
 
 local log = require("lib.logging")
@@ -10,7 +10,7 @@ require("drivers-common-public.global.handlers")
 require("drivers-common-public.global.lib")
 require("lib.utils")
 
---- @alias LightFamily "scenes"|"onModes"|"links"
+--- @alias LightFamily "scenes"|"onModes"|"links"|"loadGroups"
 
 -- The commands that move or ask the device. With no state from its device the light drops them: from a
 -- load, a loss or a reset until the device's next report.
@@ -34,6 +34,10 @@ local DEVICE = {
   STOP_RAMP_SCENE = true,
   TOGGLE_SCENE = true,
   BUTTON_ACTION = true,
+  GROUP_SET_LEVEL = true,
+  GROUP_RAMP_TO_LEVEL = true,
+  GROUP_START_RAMP = true,
+  GROUP_STOP_RAMP = true,
 }
 
 -- The families a profile can leave out, and their commands: a family not offered takes none of them.
@@ -57,6 +61,30 @@ local FAMILY = {
   REQUEST_BUTTON_COLORS = "links",
   SET_BUTTON_COLOR = "links",
   BUTTON_ACTION = "links",
+  JOIN_GROUP = "loadGroups",
+  LEAVE_GROUP = "loadGroups",
+  SET_GROUP_SYNC = "loadGroups",
+  GROUP_SET_LEVEL = "loadGroups",
+  GROUP_RAMP_TO_LEVEL = "loadGroups",
+  GROUP_START_RAMP = "loadGroups",
+  GROUP_STOP_RAMP = "loadGroups",
+}
+
+-- The membership commands a load group sends.
+local MEMBERSHIP = { JOIN_GROUP = true, LEAVE_GROUP = true, SET_GROUP_SYNC = true }
+
+-- The light's own commands a load group in sync takes instead of the light, and the name each goes on as.
+--- @type table<string, string>
+local TO_GROUP = {
+  ON = "ON",
+  DYNAMIC_ON = "ON",
+  OFF = "OFF",
+  DYNAMIC_OFF = "OFF",
+  TOGGLE = "TOGGLE",
+  SET_LEVEL = "SET_LEVEL",
+  RAMP_TO_LEVEL = "RAMP_TO_LEVEL",
+  SET_BRIGHTNESS_TARGET = "RAMP_TO_LEVEL",
+  BUTTON_ACTION = "BUTTON_ACTION",
 }
 
 -- The scene commands, and the LightScenes method each one is. The published name is STOP_RAMP_SCENE;
@@ -115,7 +143,7 @@ local Handlers = {}
 Handlers.COMMANDS = {}
 do
   local seen = {}
-  for _, set in ipairs({ DEVICE, FAMILY, SCENE_OPS, SETTINGS, ASKS, IGNORED, LINK_ACTIONS }) do
+  for _, set in ipairs({ DEVICE, FAMILY, MEMBERSHIP, SCENE_OPS, SETTINGS, ASKS, IGNORED, LINK_ACTIONS }) do
     for command in pairs(set) do
       if not seen[command] then
         seen[command] = true
@@ -174,10 +202,11 @@ local function intent(light, strCommand, tParams)
     return { kind = "off", source = "proxy" }
   elseif strCommand == "TOGGLE" then
     return { kind = "toggle", source = "proxy" }
-  elseif strCommand == "SET_LEVEL" then
+  elseif strCommand == "SET_LEVEL" or strCommand == "GROUP_SET_LEVEL" then
+    -- A load group's level command acts as its single light twin.
     return { kind = "level", level = level(Select(tParams, "LEVEL")), rateMs = 0, source = "proxy" }
-  elseif strCommand == "RAMP_TO_LEVEL" then
-    -- The legacy form older programming and Alexa Voice Scenes send.
+  elseif strCommand == "RAMP_TO_LEVEL" or strCommand == "GROUP_RAMP_TO_LEVEL" then
+    -- The legacy form older programming and Alexa Voice Scenes send, and a load group's ramp.
     return {
       kind = "level",
       level = level(Select(tParams, "LEVEL")),
@@ -212,7 +241,7 @@ local function intent(light, strCommand, tParams)
       presetOrigin = tointeger(Select(tParams, "LIGHT_COLOR_TARGET_PRESET_ORIGIN")),
       source = "proxy",
     }
-  elseif strCommand == "SET_BRIGHTNESS_STOP" then
+  elseif strCommand == "SET_BRIGHTNESS_STOP" or strCommand == "GROUP_STOP_RAMP" then
     return { kind = "stopLevel", source = "proxy" }
   elseif strCommand == "SET_COLOR_STOP" then
     return { kind = "stopColor", source = "proxy" }
@@ -242,6 +271,20 @@ local function onProxy(light, strCommand, tParams)
     log:debug("%s dropped: the light does not offer %s", strCommand, FAMILY[strCommand])
     return
   end
+  if MEMBERSHIP[strCommand] then
+    light:membership(strCommand, tParams)
+    return
+  end
+  local toGroup = light.profile.loadGroups and TO_GROUP[strCommand]
+  if toGroup then
+    local params = tParams
+    if strCommand == "SET_BRIGHTNESS_TARGET" then
+      params = { LEVEL = Select(tParams, "LIGHT_BRIGHTNESS_TARGET"), TIME = Select(tParams, "RATE") }
+    end
+    if light:toGroups(toGroup, params) then
+      return
+    end
+  end
   if DEVICE[strCommand] and not light.online then
     log:debug("%s dropped: no state from the device yet", strCommand)
     return
@@ -260,6 +303,8 @@ local function onProxy(light, strCommand, tParams)
     if button and action then
       light:button(button, action, true)
     end
+  elseif strCommand == "GROUP_START_RAMP" then
+    light:groupHold(toboolean(Select(tParams, "RAMP_UP")), tointeger(Select(tParams, "RATE")))
   else
     local motion = intent(light, strCommand, tParams)
     if motion then
@@ -294,6 +339,12 @@ function Handlers.register(light)
       local action = LINK_ACTIONS[strCommand]
       if action == nil then
         log:trace("%s on a link is not a light command: dropped", strCommand)
+        return
+      end
+      if
+        profile.loadGroups
+        and light:toGroups("BUTTON_ACTION", { BUTTON_ID = tostring(button), ACTION = tostring(action) })
+      then
         return
       end
       if not light.online then
