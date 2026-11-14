@@ -715,6 +715,30 @@ function C.run(T, rig)
       T.eq(name .. ": out of the group, the On lights it", h.device.state().on, true)
       finish(h)
     end)
+
+    T.section(name .. ": a group driver's decided level reaches the device, and the group is told it")
+    C.case(T, name, function()
+      local h = fresh(rig)
+      local p = h.proxy
+      local told = {}
+      local sendToDevice = C4.SendToDevice
+      C4.SendToDevice = function(c4, id, cmd, params, ...)
+        if cmd == "LIGHT_GROUP_STATE" then
+          told[#told + 1] = { id, params.LEVEL }
+        end
+        return sendToDevice(c4, id, cmd, params, ...)
+      end
+      open[#open + 1] = function()
+        C4.SendToDevice = sendToDevice
+      end
+      p:send("LIGHT_GROUP_JOIN", { GROUP_ID = 9002, MEMBER_ID = "5" })
+      p:send("LIGHT_GROUP_COMMAND", { GROUP_ID = 9002, KIND = "level", LEVEL = 40, RATE = 0 })
+      h.clock.run(ms)
+      T.eq(name .. ": the device is at 40", percent(h), 40)
+      T.eq(name .. ": and the group was told 40", told[#told], { 9002, "40" })
+      p:send("LIGHT_GROUP_LEAVE", { GROUP_ID = 9002 })
+      finish(h)
+    end)
   end
 
   if profile.scenes then

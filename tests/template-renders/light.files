@@ -37,6 +37,7 @@ src/lib/light/buttons.lua
 src/lib/light/caps.lua
 src/lib/light/color.lua
 src/lib/light/fade.lua
+src/lib/light/group.lua
 src/lib/light/groups.lua
 src/lib/light/handlers.lua
 src/lib/light/ledger.lua

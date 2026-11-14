@@ -70,7 +70,8 @@ Types.API = 1
 --- @field flash boolean|nil Scene flash elements (disable_flash false).
 --- @field extras boolean|nil has_extras. The driver sends EXTRAS_* and handles EXTRA_SET itself.
 --- @field loadGroups boolean|nil load_group_support: the light joins Control4 load groups, takes their commands, and
----   hands its own on, off, level and button commands to a group that keeps it in sync.
+---   hands its own on, off, level and button commands to a group that keeps it in sync. It is also a member of
+---   group drivers built on lib.light.group: it takes their decided commands and tells them what it shows.
 
 -----------------------------------------------------------------------------------------------------
 -- The device: the facts of one connection
@@ -253,6 +254,10 @@ Types.API = 1
 -- library does not handle (EXTRA_SET) is the driver's, as a command-keyed RFP: the dispatcher tries that
 -- before the binding's function.
 --
+-- Group commands. On a light that offers load groups, the ExecuteCommand handlers EC.LIGHT_GROUP_JOIN,
+-- EC.LIGHT_GROUP_LEAVE and EC.LIGHT_GROUP_COMMAND; on a group driver's kit, EC.LIGHT_GROUP_STATE. A driver sets
+-- none of them.
+--
 -- Notifies. Every notify to the proxy and the links: LIGHT_*, DYNAMIC_CAPABILITIES_CHANGED, ONLINE_CHANGED,
 -- the link LEDs and button colors, and the answers to GET_CONNECTED_STATE and GET_LIGHT_LEVEL. EXTRAS_*
 -- stay the driver's.
@@ -265,7 +270,7 @@ Types.API = 1
 --     brightness_rate_default, color_rate_default, brightness_on_mode, button_colors, brightness_presets,
 --     color_presets, color_on_mode, previous_color, brightness_on_mode_preset, max_on_level, min_on_level
 --   Scenes: scenes
---   Groups: load_groups
+--   Groups: load_groups, light_groups
 
 -----------------------------------------------------------------------------------------------------
 -- The library's own shapes

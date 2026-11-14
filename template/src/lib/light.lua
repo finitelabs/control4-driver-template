@@ -30,6 +30,7 @@ local Ledger = require("lib.light.ledger")
 local Groups = require("lib.light.groups")
 local LightProxy = require("lib.light.proxy")
 local Handlers = require("lib.light.handlers")
+local Range = require("lib.light.range")
 -- The pure modules adapters may use, required here so the build bundles them with every light.
 require("lib.light.color")
 require("lib.light.range")
@@ -252,6 +253,7 @@ function Light:lost(suspended)
   self:_endRun()
   self.online = false
   self.proxy:lost(suspended == true)
+  self:_tellGroups()
 end
 
 --- Reset Driver: end the run, tell offline until the next report, ask the device.
@@ -327,6 +329,30 @@ function Light:toGroups(strCommand, tParams)
   return self.groups:forward(strCommand, tParams)
 end
 
+--- A group driver's LIGHT_GROUP_JOIN or LIGHT_GROUP_LEAVE. A group joined is told the light's state at once.
+--- @param strCommand string
+--- @param tParams table<string, string>
+function Light:groupDriver(strCommand, tParams)
+  local groupId = tointeger(Select(tParams, "GROUP_ID"))
+  if not groupId then
+    log:warn("%s names no group: %s", strCommand, tParams)
+    return
+  end
+  if strCommand == "LIGHT_GROUP_LEAVE" then
+    self.groups:withdraw(groupId)
+    return
+  end
+  self.groups:enroll(groupId, tostring(Select(tParams, "MEMBER_ID") or C4:GetDeviceID()))
+  self:_tellGroups()
+end
+
+--- A command a group driver decided: its on mode, Dim-To-Warm and rates are already applied, so the light's own
+--- are not. The light's Min and Max On still place the level, as for any command.
+--- @param intent LightIntent
+function Light:take(intent)
+  self:_followUp(self:_move(intent, true))
+end
+
 --- A load group's GROUP_START_RAMP: a hold to full or off over the group's hold rate.
 --- @param up boolean
 --- @param rateMs integer|nil
@@ -390,8 +416,9 @@ end
 --- An intent to Motion, after cancelling the parts it did not come from.
 --- @private
 --- @param intent LightIntent
+--- @param decided boolean|nil A group driver chose the on's level and color: the light's on modes stay out.
 --- @return LightCommand[]
-function Light:_move(intent)
+function Light:_move(intent, decided)
   if intent.source ~= "button" then
     self.buttons:cancel()
   end
@@ -402,7 +429,8 @@ function Light:_move(intent)
   self.buttons:noted(intent, self.motion:now())
   self.ledger:taken(intent)
   self.motion:assumeLit(self.ledger:lit())
-  return self.motion:command(intent, OnColor.choose(intent, self:_onInputs()), self.settings:forMotion())
+  local choice = not decided and OnColor.choose(intent, self:_onInputs()) or nil
+  return self.motion:command(intent, choice, self.settings:forMotion())
 end
 
 --- What OnColor.choose reads: plain values from the parts that hold them.
@@ -502,8 +530,31 @@ function Light:_followUp(cmds)
       end
     end
   end
+  self:_tellGroups()
   self.inside = false
   self:_takeWaiting()
+end
+
+--- Tell each group driver the light is a member of where the light is heading, if that changed.
+--- @private
+function Light:_tellGroups()
+  if not self.profile.loadGroups or next(self.groups:drivers()) == nil then
+    return
+  end
+  local device = self.device or { dims = false, color = false }
+  local view = self.motion:view()
+  local level = view.levelTarget or view.level
+  local on = view.on and level > 0
+  local m = self.settings:forMotion()
+  self.groups:tell({
+    online = self.online,
+    dims = device.dims == true,
+    hasColor = device.color == true,
+    cct = device.cct,
+    on = on,
+    level = on and Range.toLevel(level, m.lo, m.hi) or 0,
+    color = view.colorTarget or view.color,
+  })
 end
 
 --- Ask the device for its whole state. Reports it makes meanwhile wait until it returns.
