@@ -60,6 +60,13 @@ do
   T.eq("continuous", Range.step(0.4321, nil), 0.4321)
 end
 
+T.section("percent: a brightness as a whole percent from 1 to 100")
+do
+  T.eq("0.8", Range.percent(0.8), 80)
+  T.eq("rounds", { Range.percent(0.744), Range.percent(0.745) }, { 74, 75 })
+  T.eq("never under 1 or over 100", { Range.percent(0), Range.percent(1.2) }, { 1, 100 })
+end
+
 T.section("slack and sameLevel: half a device step, spread over a narrow range")
 do
   T.eq("full range, 254 steps", Range.slack(1, 100, 254), 0)
