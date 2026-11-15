@@ -64,6 +64,7 @@ test/dc_cloud.lua
 test/light_conformance.lua
 test/light_contract_cases.lua
 test/light_drivers.lua
+test/light_group_rig.lua
 test/light_proxy_fake.lua
 test/light_rig.lua
 test/light_setup/setup-607.xml
