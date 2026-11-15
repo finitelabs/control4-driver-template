@@ -268,9 +268,10 @@ end
 --- that isn't evaluated: a value in it could be anything, so nothing may evaluate it.
 --- @param template string
 --- @param mode? string The template's mode: "string" has no comments.
+--- @param format? fun(value: string): string How a value reads in the result (optional; as it is).
 --- @return string result
 --- @return string|nil problem Why the first token that has no value doesn't.
-function Expressions.substitute(template, mode)
+function Expressions.substitute(template, mode, format)
   local out, problem = {}, nil
   scanTokens(template, mode, function(text)
     out[#out + 1] = text
@@ -282,7 +283,8 @@ function Expressions.substitute(template, mode)
       problem = problem or reason
       out[#out + 1] = ERROR_VARIABLE_NOT_FOUND
     else
-      out[#out + 1] = tostring(value)
+      value = tostring(value)
+      out[#out + 1] = format and format(value) or value
     end
   end)
   return table.concat(out), problem
