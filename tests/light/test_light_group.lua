@@ -282,6 +282,25 @@ case(function()
   g.restore()
 end)
 
+T.section("a member that tells its state within its join is taken")
+case(function()
+  local g = groupWorld()
+  g.group:setMembers({})
+  local send = C4.SendToDevice
+  C4.SendToDevice = function(c4, id, cmd, params, ...)
+    if cmd == "LIGHT_GROUP_JOIN" then
+      state(id, true, 30)
+      return
+    end
+    return send(c4, id, cmd, params, ...)
+  end
+  g.group:setMembers({ 11, 12 })
+  C4.SendToDevice = send
+  g.run(1000)
+  T.eq("online, at the members' level", { g.proxy.online, g.proxy.level }, { true, 30 })
+  g.restore()
+end)
+
 T.section("the report rule: most members, the lowest or the highest")
 case(function()
   local g = groupWorld()

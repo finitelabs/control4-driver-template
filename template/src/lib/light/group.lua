@@ -111,12 +111,15 @@ function Group:setMembers(ids)
       self.states[tostring(id)] = nil
     end
   end
+  -- A member's state can come back within its join, so the list is set before any join goes out.
   self.members = {}
+  for _, id in ipairs(ids) do
+    self.members[#self.members + 1] = id
+  end
   for _, id in ipairs(ids) do
     if not was[id] or not self.states[tostring(id)] then
       C4:SendToDevice(id, "LIGHT_GROUP_JOIN", { GROUP_ID = me, MEMBER_ID = tostring(id) })
     end
-    self.members[#self.members + 1] = id
   end
   self:_changed()
 end
