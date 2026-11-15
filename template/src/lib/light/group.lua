@@ -2,8 +2,9 @@
 --- that offer load groups.
 ---
 --- The group's own Light decides each command once, with the group's on modes, Dim-To-Warm, presets, scenes and
---- rates, and this adapter hands it to every member as LIGHT_GROUP_COMMAND, the final level and color. Each member
---- places the level on its own Min and Max On, takes what it can do and fades itself. A member tells the group what
+--- rates and Min and Max On, and this adapter hands it to every member as LIGHT_GROUP_COMMAND, the final level (a
+--- percent of the device's brightness) and color. Each member goes there inside its own Min and Max On, takes what it
+--- can do and fades itself. A member tells the group what
 --- it shows as LIGHT_GROUP_STATE, and the group shows its members by one rule: what most of them show, or the
 --- lowest or highest member. After a command the group waits out the fade before it reconciles, so members
 --- reporting one by one do not move it.
@@ -52,8 +53,8 @@ Group.__index = Group
 --- How long after a command's fade the group waits for its members' last reports.
 Group.SETTLE_MS = 500
 
---- The level a member is sent for the group's device brightness: the group's Min and Max On have placed it, and
---- the member places it again on its own.
+--- The level a member is sent for the group's device brightness, and a member tells back: a percent of the device's
+--- brightness, which the group's Min and Max On have placed.
 --- @param brightness number 0-1.
 --- @return integer level 1-100.
 function Group.levelOf(brightness)
