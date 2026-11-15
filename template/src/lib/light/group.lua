@@ -19,6 +19,7 @@
 --- The group's profile says cct = true and leaves loadGroups out: a group is not a member of a group.
 
 local log = require("lib.logging")
+local Range = require("lib.light.range")
 local Timer = require("lib.light.timer")
 
 require("drivers-common-public.global.handlers")
@@ -58,7 +59,7 @@ Group.SETTLE_MS = 500
 --- @param brightness number 0-1.
 --- @return integer level 1-100.
 function Group.levelOf(brightness)
-  return math.max(1, math.min(100, math.floor(brightness * 100 + 0.5)))
+  return Range.percent(brightness)
 end
 
 --- @type table<string, boolean>

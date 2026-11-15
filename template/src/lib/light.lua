@@ -556,8 +556,7 @@ function Light:_tellGroups()
     hasColor = device.color == true,
     cct = device.cct,
     on = on,
-    -- A percent of the device's brightness, the scale a group driver sends.
-    level = on and math.max(1, math.min(100, math.floor(level * 100 + 0.5))) or 0,
+    level = on and Range.percent(level) or 0,
     color = view.colorTarget or view.color,
   })
 end
