@@ -304,13 +304,13 @@ function Companions:setup(needs, options)
         return nextNeed()
       end
       taken[added.id] = true
+      showOnlyInRoom(added.proxy or added.id, roomOf(need))
       if boundTo(need.binding) ~= nil then
         -- An earlier add for this binding answered late and took it while this one was asked for.
         log:warn("Companions: binding %s was taken already; %s is left bound to nothing", need.binding, added.id)
         count("failed")
       elseif connect(need, added.id) then
         count("added")
-        showOnlyInRoom(added.proxy or added.id, roomOf(need))
       else
         count("failed")
       end

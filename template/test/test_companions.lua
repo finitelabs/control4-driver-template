@@ -87,6 +87,18 @@ local function run(needs, options)
   return result
 end
 
+--- Whether a proxy was shown in the kitchen's Navigators and hidden in the office's.
+--- @param proxy integer
+--- @return boolean
+local function shownOnlyInKitchen(proxy)
+  local seen = {}
+  for _, line in ipairs(shown) do
+    seen[line] = true
+  end
+  return seen[string.format("%d %d false", KITCHEN, proxy)] == true
+    and seen[string.format("%d %d true", OFFICE, proxy)] == true
+end
+
 local function consumerOf(binding)
   return next(C4:GetBoundConsumerDevices(ME, binding) or {})
 end
@@ -247,11 +259,7 @@ ShimFireTimers()
 T.eq("one failed and one was added", done and { done.failed, done.added }, { 1, 1 })
 light = consumerOf(5012)
 T.truthy("the late one is bound to the first binding", light)
-local shownThere = false
-for _, line in ipairs(shown) do
-  shownThere = shownThere or line == string.format("%d %d false", KITCHEN, (light or 0) + 1)
-end
-T.truthy("and shown in its room", shownThere)
+T.truthy("and shown only in its room", light and shownOnlyInKitchen(light + 1))
 result = run({ need(5012), need(5013) })
 T.eq("a second setup keeps both", result and { result.kept, result.added }, { 2, 0 })
 T.eq("the project has two", lights(), 2)
@@ -273,6 +281,13 @@ for _ in pairs(C4:GetBoundConsumerDevices(ME, 5012) or {}) do
 end
 T.eq("one companion is on the binding", onBinding, 1)
 T.eq("the second setup's add counts failed", done and { done.added, done.failed }, { 0, 1 })
+local left
+for id in pairs(C4:GetDevices({ C4iNames = LIGHT })) do
+  if C4:GetBoundProviderDevice(id, 5002) == 0 then
+    left = id
+  end
+end
+T.truthy("the one left bound to nothing is shown only in its room", left and shownOnlyInKitchen(left + 1))
 
 T.section("A companion whose bind does not hold is bound again by the next setup, not added beside")
 project()
@@ -281,6 +296,8 @@ C4.Bind = function() end
 result = run({ need(5012) })
 C4.Bind = bind
 T.eq("it failed", result and result.failed, 1)
+local only = next(C4:GetDevices({ C4iNames = LIGHT }))
+T.truthy("it is shown only in its room", only and shownOnlyInKitchen(only + 1))
 result = run({ need(5012) })
 T.eq("the next setup binds it again", result and { result.rebound, result.added }, { 1, 0 })
 T.eq("the project has one", lights(), 1)
