@@ -92,7 +92,7 @@ T.eq(
   "<42>% and <Charging>"
 )
 text, problem = Expressions.substitute("1 PARAM{200,NOPE}", "string", bracket)
-T.eq("a missing value isn't one", text, "1 ERROR_VARIABLE_NOT_FOUND")
+T.eq("a missing value isn't formatted", text, "1 ERROR_VARIABLE_NOT_FOUND")
 T.truthy("and is still the problem", problem ~= nil)
 
 T.section("Evaluation")
