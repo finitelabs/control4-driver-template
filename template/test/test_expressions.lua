@@ -83,6 +83,17 @@ local text, problem = Expressions.substitute("PARAM{100,LEVEL}% and PARAM{100,10
 T.eq("values replace the tokens", text, "42% and Charging")
 T.eq("with no problem", problem, nil)
 T.contains("a token renders as its names", Expressions.render("PARAM{100,1001}"), "LEVEL]")
+local function bracket(value)
+  return "<" .. value .. ">"
+end
+T.eq(
+  "a format reads each value, and the text around them stays",
+  Expressions.substitute("PARAM{100,LEVEL}% and PARAM{100,1002}", "string", bracket),
+  "<42>% and <Charging>"
+)
+text, problem = Expressions.substitute("1 PARAM{200,NOPE}", "string", bracket)
+T.eq("a missing value isn't one", text, "1 ERROR_VARIABLE_NOT_FOUND")
+T.truthy("and is still the problem", problem ~= nil)
 
 T.section("Evaluation")
 T.eq("an equation gives a number", Expressions.evaluate("equation", "PARAM{100,LEVEL} * 2").result, 84)
