@@ -25,6 +25,7 @@ resources/drivercentral/photos/photos.txt
 resources/drivercentral/render.sh
 src/constants.lua
 src/lib/bindings.lua
+src/lib/companions.lua
 src/lib/conditionals.lua
 src/lib/driver-filenames.lua
 src/lib/drivercentral.lua
@@ -47,6 +48,7 @@ test/test_bindings_rename.lua
 test/test_bindings_static_connections.lua
 test/test_bindings_unnamed.lua
 test/test_c4_shim.lua
+test/test_companions.lua
 test/test_conditionals_sort_order.lua
 test/test_deferred.lua
 test/test_device_id_list.lua
