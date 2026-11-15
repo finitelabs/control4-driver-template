@@ -256,6 +256,24 @@ result = run({ need(5012), need(5013) })
 T.eq("a second setup keeps both", result and { result.kept, result.added }, { 2, 0 })
 T.eq("the project has two", lights(), 2)
 
+T.section("A late answer and a second setup's add for the same binding leave one companion on it")
+project()
+companions:setup({ need(5012) })
+ShimFireTimers()
+done = nil
+companions:setup({ need(5012) }):next(function(r)
+  done = r
+end)
+T.eq("both adds are unanswered", ShimPendingAdds(), 2)
+ShimAnswerAdds()
+ShimFireTimers()
+local onBinding = 0
+for _ in pairs(C4:GetBoundConsumerDevices(ME, 5012) or {}) do
+  onBinding = onBinding + 1
+end
+T.eq("one companion is on the binding", onBinding, 1)
+T.eq("the second setup's add counts failed", done and { done.added, done.failed }, { 0, 1 })
+
 T.section("A companion whose bind does not hold is bound again by the next setup, not added beside")
 project()
 local bind = C4.Bind
