@@ -166,10 +166,11 @@ local function rig(name, property)
       end)
     end
 
-    local send, done = C4.SendToDevice, h.done
-    function h.done()
+    -- The clock's restore runs on every way a case ends, a raised error too.
+    local send, restoreClock = C4.SendToDevice, h.clock.restore
+    h.clock.restore = function()
       C4.SendToDevice = send
-      done()
+      restoreClock()
     end
     C4.SendToDevice = function(c4, id, cmd, params, ...)
       local m = byId[tonumber(id)]
