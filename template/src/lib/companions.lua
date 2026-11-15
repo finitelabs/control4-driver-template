@@ -112,18 +112,19 @@ local function showOnlyInRoom(proxyId, room)
   end
 end
 
---- Binds a companion to a need's binding, and reads it back from the companion, since C4:Bind answers nothing.
+--- Binds a companion to a need's binding, and reads it back from the companion, since C4:Bind answers nothing. The
+--- companion is the binding's from here, bound or not, so a later setup binds it again rather than adding another.
 --- @param need CompanionNeed
 --- @param deviceId integer
 --- @return boolean bound
 local function connect(need, deviceId)
   local me = tointeger(C4:GetDeviceID())
+  remember(need.binding, deviceId)
   Bind(me, need.binding, deviceId, need.consumer, need.class)
   if tointeger(C4:GetBoundProviderDevice(deviceId, need.consumer)) ~= me then
     log:error("Companions: %s did not bind to binding %s", deviceId, need.binding)
     return false
   end
-  remember(need.binding, deviceId)
   return true
 end
 
@@ -177,25 +178,34 @@ local function add(need)
   end)
   log:info("Companions: adding %s as %s in room %s", need.file, need.name, roomOf(need))
   C4:AddDevice(need.file, roomOf(need), need.name, function(deviceId, info)
+    deviceId = tointeger(deviceId)
+    local added
+    if deviceId and deviceId ~= 0 then
+      local proxy
+      for _, node in pairs(type(info) == "table" and info.ChildNodes or {}) do
+        if node.Name == "proxy" then
+          proxy = tointeger(node.Value)
+        end
+      end
+      added = { id = deviceId, proxy = proxy or proxyOf(deviceId) }
+    end
     if settled then
-      log:warn("Companions: %s was added as %s after its timeout, and is left bound to nothing", need.file, deviceId)
+      -- Counted as failed, it is still this binding's: it is given the binding now when that is still free.
+      if added then
+        log:warn("Companions: %s was added as %s after its timeout", need.file, deviceId)
+        showOnlyInRoom(added.proxy or added.id, roomOf(need))
+        if boundTo(need.binding) == nil and unbound(added.id, need.consumer) and connect(need, added.id) then
+          RefreshNavs()
+        end
+      end
       return
     end
     settled = true
     CancelTimer(timer)
-    deviceId = tointeger(deviceId)
-    if deviceId == nil or deviceId == 0 then
+    if not added then
       log:warn("Companions: the controller could not add %s: %s", need.file, type(info) == "table" and info.Value or "")
-      d:resolve(nil)
-      return
     end
-    local proxy
-    for _, node in pairs(type(info) == "table" and info.ChildNodes or {}) do
-      if node.Name == "proxy" then
-        proxy = tointeger(node.Value)
-      end
-    end
-    d:resolve({ id = deviceId, proxy = proxy or proxyOf(deviceId) })
+    d:resolve(added)
   end)
   return d
 end
@@ -203,8 +213,9 @@ end
 --- Gives every need's binding a companion, one at a time. A binding already bound is left alone. Otherwise the
 --- companion it had is bound again, when it is in the project and bound to nothing; else a spare the rule allows;
 --- else a new one, added in the need's room with its name and shown only in that room, ADD_SPACING_MS before the
---- next. Nothing is renamed but a spare with `renameSpares`, and nothing is unbound or removed. Navigators are
---- refreshed at the end when anything was bound.
+--- next. An add with no answer in ADD_TIMEOUT_MS fails, and the next need goes on; if it answers later, its companion
+--- takes the binding when that is still free. Nothing is renamed but a spare with `renameSpares`, and nothing is
+--- unbound or removed. Navigators are refreshed at the end when anything was bound.
 --- @param needs CompanionNeed[]
 --- @param options? CompanionOptions
 --- @return Deferred<CompanionResult, string> result Rejected only when a setup is already running.
