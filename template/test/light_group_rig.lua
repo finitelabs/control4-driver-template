@@ -166,7 +166,11 @@ local function rig(name, property)
       end)
     end
 
-    local send = C4.SendToDevice
+    local send, done = C4.SendToDevice, h.done
+    function h.done()
+      C4.SendToDevice = send
+      done()
+    end
     C4.SendToDevice = function(c4, id, cmd, params, ...)
       local m = byId[tonumber(id)]
       if not m then
