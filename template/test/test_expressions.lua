@@ -47,7 +47,11 @@ local function setDevices()
         ["1003"] = { name = "STATUS", value = '{"battery":{"pct":87}}', type = "STRING" },
       },
     },
-    [200] = { deviceName = "Meter", roomName = "Garage", variables = { ["7"] = { name = "WATTS", value = "1500" } } },
+    [200] = {
+      deviceName = "Meter",
+      roomName = "Garage",
+      variables = { ["7"] = { name = "WATTS", value = "1500" } },
+    },
     [300] = { deviceName = "Empty", roomName = "Attic" },
     [100001] = { variables = { ["2301"] = { name = "GLOBAL_LIMIT", value = "90" } } },
   })
@@ -100,6 +104,18 @@ T.eq("an equation gives a number", Expressions.evaluate("equation", "PARAM{100,L
 T.eq("a condition gives true or false", Expressions.evaluate("condition", "PARAM{100,LEVEL} < 50").result, true)
 T.eq("and false counts as a result", Expressions.evaluate("condition", "PARAM{100,LEVEL} > 50").result, false)
 T.eq("a string is its substitution", Expressions.evaluate("string", "at PARAM{100,LEVEL}").result, "at 42")
+T.eq("a value can be a number", Expressions.evaluate("value", "PARAM{100,LEVEL} / 4").result, 10.5)
+T.eq("or text", Expressions.evaluate("value", 'round(PARAM{100,LEVEL} / 4) .. "%"').result, "11%")
+T.eq(
+  "which a comparison can pick",
+  Expressions.evaluate("value", 'PARAM{100,LEVEL} > 40 and "High" or "Low"').result,
+  "High"
+)
+T.eq(
+  "a variable in quotes is written into the text",
+  Expressions.evaluate("value", '"PARAM{100,LEVEL}" .. 1').result,
+  "421"
+)
 T.eq("a global variable's agent reads too", Expressions.evaluate("equation", "PARAM{100001,GLOBAL_LIMIT}").result, 90)
 T.eq("Essentials' helpers work", Expressions.evaluate("equation", "round(c2f(PARAM{100,LEVEL} - 42), 1)").result, 32)
 T.eq(
@@ -147,6 +163,33 @@ T.contains(
   Expressions.evaluate("condition", "1").error,
   "not a boolean (got number)"
 )
+T.eq(
+  "a value that is true or false says so",
+  Expressions.evaluate("value", "PARAM{100,LEVEL} > 40").error,
+  "result is not a number or text (got boolean)"
+)
+T.eq(
+  "and so does one that is nothing",
+  Expressions.evaluate("value", "nil").error,
+  "result is not a number or text (got nil)"
+)
+
+T.section("round")
+for _, case in ipairs({
+  { "2.5", 3 },
+  { "-2.5", -3 },
+  { "2.4", 2 },
+  { "-2.4", -2 },
+  { "0.5", 1 },
+  { "-0.5", -1 },
+  { "2.25, 1", 2.3 },
+  { "-2.25, 1", -2.3 },
+  { "1234, -2", 1200 },
+}) do
+  T.eq("round(" .. case[1] .. ")", Expressions.evaluate("equation", "round(" .. case[1] .. ")").result, case[2])
+end
+T.eq("what rounds to zero is 0, not -0", tostring(Expressions.evaluate("equation", "round(-0.4)").result), "0")
+T.eq("and to places too", tostring(Expressions.evaluate("equation", "round(-0.04, 1)").result), "0")
 
 T.section("A value can't become code")
 -- A value that ran as code would hang here, not fail, so a hook turns that into an error.
@@ -322,7 +365,10 @@ ShimSetDevices({
   },
   [97] = {
     deviceName = "Sensor B",
-    variables = { ["1001"] = { name = "Temperature", value = "71" }, ["1002"] = { name = "Humidity", value = "44.9" } },
+    variables = {
+      ["1001"] = { name = "Temperature", value = "71" },
+      ["1002"] = { name = "Humidity", value = "44.9" },
+    },
   },
   [98] = { deviceName = "Sensor C", variables = { ["1001"] = { name = "Temperature", value = "72.5" } } },
   [120] = {

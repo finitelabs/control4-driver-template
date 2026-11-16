@@ -375,8 +375,20 @@ local function bindValues(template)
   return table.concat(out), bindings
 end
 
+--- @class ExpressionResultKind
+--- @field types table<string, boolean> The Lua types a result may have.
+--- @field name string How an error names them.
+
+--- What each evaluated mode's result has to be.
+--- @type table<string, ExpressionResultKind>
+local RESULTS = {
+  equation = { types = { number = true }, name = "number" },
+  condition = { types = { boolean = true }, name = "boolean" },
+  value = { types = { number = true, string = true }, name = "number or text" },
+}
+
 --- Evaluate a template without touching anything.
---- @param mode string "equation" for a number, "condition" for true or false, "string" for the substituted text.
+--- @param mode string "equation" for a number, "condition" for true or false, "value" for a number or text, "string" for the substituted text.
 --- @param template string
 --- @return ExpressionEvaluation evaluation
 function Expressions.evaluate(mode, template)
@@ -390,11 +402,11 @@ function Expressions.evaluate(mode, template)
   else
     local source, bindings = bindValues(template)
     local result, err = sandbox.eval(source, bindings)
-    local want = mode == "condition" and "boolean" or "number"
+    local want = RESULTS[mode] or RESULTS.equation
     if err then
       evaluation.error = err
-    elseif type(result) ~= want then
-      evaluation.error = string.format("result is not a %s (got %s)", want, type(result))
+    elseif not want.types[type(result)] then
+      evaluation.error = string.format("result is not a %s (got %s)", want.name, type(result))
     else
       evaluation.result = result
     end
