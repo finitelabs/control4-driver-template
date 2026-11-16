@@ -62,13 +62,14 @@ def globals_of(files: list[Path]) -> tuple[dict, dict]:
     errors: dict = {}
     if not files:
         return found, errors
-    listing = subprocess.run(
+    run = subprocess.run(
         ["luajit", str(Path(__file__).parent / "globals.lua"), *map(str, files)],
         capture_output=True,
         text=True,
-        check=True,
-    ).stdout
-    for line in listing.splitlines():
+    )
+    if run.returncode != 0:
+        raise SystemExit(f"Error: tools/globals.lua failed: {run.stderr.strip()}")
+    for line in run.stdout.splitlines():
         path, op, name = line.split("\t", 2)
         if op == "ERROR":
             errors[Path(path)] = name

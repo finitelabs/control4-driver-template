@@ -3,14 +3,27 @@
 --- tools/globals.py compares a build's files with their source this way.
 
 local util = require("jit.util")
-local vmdef = require("jit.vmdef")
 local bit = require("bit")
 
---- The bytecode op names, indexed by opcode.
-local OPS = {}
-for i = 0, #vmdef.bcnames / 6 - 1 do
-  OPS[i] = vmdef.bcnames:sub(i * 6 + 1, i * 6 + 6):gsub(" +$", "")
+--- The opcode of the first instruction LuaJIT compiles fn to. Opcodes differ between LuaJIT versions, and
+--- jit.vmdef, which names them, is not in every install, so each one is read from a function that uses it.
+--- @param fn function
+--- @return integer
+local function firstOp(fn)
+  return bit.band(util.funcbc(fn, 1), 0xff)
 end
+
+local OPS = {
+  [firstOp(function()
+    return Probe
+  end)] = "GGET",
+  [firstOp(function(value)
+    Probe = value
+  end)] = "GSET",
+  [firstOp(function()
+    return function() end
+  end)] = "FNEW",
+}
 
 --- @param fn function A compiled chunk or one of its child prototypes.
 --- @param found table<string, true> Each `<op>\t<name>` seen so far.
