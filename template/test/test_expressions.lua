@@ -185,11 +185,26 @@ for _, case in ipairs({
   { "2.25, 1", 2.3 },
   { "-2.25, 1", -2.3 },
   { "1234, -2", 1200 },
+  { "0.145, 2", 0.15 },
+  { "-0.145, 2", -0.15 },
+  { "1.005, 2", 1.01 },
 }) do
   T.eq("round(" .. case[1] .. ")", Expressions.evaluate("equation", "round(" .. case[1] .. ")").result, case[2])
 end
 T.eq("what rounds to zero is 0, not -0", tostring(Expressions.evaluate("equation", "round(-0.4)").result), "0")
 T.eq("and to places too", tostring(Expressions.evaluate("equation", "round(-0.04, 1)").result), "0")
+local misses = {}
+for hundredths = 5, 995, 10 do
+  for _, sign in ipairs({ 1, -1 }) do
+    local half = sign * hundredths / 1000
+    local want = sign * (hundredths + 5) / 1000
+    local got = Expressions.evaluate("equation", string.format("round(%.3f, 2)", half)).result
+    if math.abs(got - want) > 1e-9 then
+      misses[#misses + 1] = string.format("%.3f gave %s", half, tostring(got))
+    end
+  end
+end
+T.eq("every two-place half from 0.005 to 0.995 rounds away from zero", table.concat(misses, ", "), "")
 
 T.section("A value can't become code")
 -- A value that ran as code would hang here, not fail, so a hook turns that into an error.
