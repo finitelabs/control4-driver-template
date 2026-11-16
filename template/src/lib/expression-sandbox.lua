@@ -401,9 +401,9 @@ end
 local function roundHalfAway(num, places)
   local mult = 10 ^ (places or 0)
   local scaled = num * mult
-  -- To 15 digits, so a half the float holds a hair under, as 0.145 * 100 is 14.4999..., is still a half. A number of
-  -- 16 digits or more keeps them all.
-  if math.abs(scaled) < 1e15 then
+  -- To 15 digits, so a half the float holds a hair under, as 0.145 * 100 is 14.4999..., is still a half. From 1e14 the
+  -- float holds every half exactly, and the step would round one away.
+  if math.abs(scaled) < 1e14 then
     scaled = tonumber(string.format("%.15g", scaled)) or scaled
   end
   if scaled >= 0 then
