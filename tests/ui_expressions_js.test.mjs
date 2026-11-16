@@ -43,7 +43,7 @@ function highlighter() {
   };
 }
 
-test("equation and condition modes color variables, text, names, numbers and operators", () => {
+test("equation, condition and value modes color variables, text, names, numbers and operators", () => {
   const highlight = highlighter();
   const html = highlight('abs(PARAM{96,1002} - 3.5) >= 2 and not x1 or "a PARAM{1,2}" ~= device_name(7)', "condition");
   assert.match(html, /<span class="kit-hl-fn">abs<\/span>/);
@@ -65,9 +65,13 @@ test("equation and condition modes color variables, text, names, numbers and ope
   assert.match(eq, /kit-hl-num">1e3</);
   assert.doesNotMatch(eq, /kit-hl-fn">value</, "names the sandbox no longer has stay plain");
   assert.doesNotMatch(eq, /kit-hl-fn">map</);
+  const value = highlight('round(PARAM{1,2}) .. "%"', "value");
+  assert.match(value, /kit-hl-fn">round</);
+  assert.match(value, /kit-hl-op">\.\.</);
+  assert.match(value, /kit-hl-str">&quot;%&quot;</);
 });
 
-test("string and text modes color only variables, and escapes when asked", () => {
+test("string and text modes color only variables, and escapes when asked, and plain mode nothing", () => {
   const highlight = highlighter();
   const s = highlight('abs(PARAM{1,2}) "x" <b>', "string");
   assert.equal(s, 'abs(<span class="kit-hl-tok">PARAM{1,2}</span>) &quot;x&quot; &lt;b&gt;');
@@ -78,6 +82,7 @@ test("string and text modes color only variables, and escapes when asked", () =>
   assert.match(escaped, /<span class="kit-hl-esc">\\x0D<\/span>/);
   assert.match(escaped, /<span class="kit-hl-esc">\\\\<\/span>/);
   assert.doesNotMatch(escaped, /kit-hl-esc">\\q/, "\\q is no escape");
+  assert.equal(highlight("02 PARAM{5,6} \\r <b>", "plain", true), "02 PARAM{5,6} \\r &lt;b&gt;", "plain mode colors nothing");
   assert.equal(highlight("", "equation"), "​", "an empty field still has a line");
   assert.equal(highlight("1\n", "equation"), '<span class="kit-hl-num">1</span>\n​', "and so does a last empty line");
 });
@@ -131,6 +136,10 @@ test("an edit is previewed after a pause, and preview(true) at once, with the ed
   type(text.textarea, "PWR ON");
   flush();
   assert.equal(sent().length, 2, "text mode is never evaluated");
+  text.setMode("plain");
+  type(text.textarea, "02 41");
+  flush();
+  assert.equal(sent().length, 2, "nor is plain mode");
   const gated = Kit.expressionEditor(field(body), { mode: "string", onResult: () => {}, previewWhen: (t) => /PARAM/.test(t) });
   type(gated.textarea, "Plain words");
   flush();
@@ -138,10 +147,13 @@ test("an edit is previewed after a pause, and preview(true) at once, with the ed
   type(gated.textarea, "Level PARAM{1,2}");
   flush();
   assert.equal(sent().at(-1).params.mode, "string");
+  gated.setMode("value");
+  flush();
+  assert.equal(sent().at(-1).params.mode, "value", "value mode is evaluated");
   const silent = Kit.expressionEditor(field(body), { mode: "equation" });
   type(silent.textarea, "1 + 1");
   flush();
-  assert.equal(sent().length, 3, "an editor with no preview and no onResult asks nothing");
+  assert.equal(sent().length, 4, "an editor with no preview and no onResult asks nothing");
 });
 
 test("each answer goes to its own editor, and only for the text as it stands", () => {
@@ -259,7 +271,7 @@ test("the help follows the mode, takes a page's own sections, and opens from its
   const row = new Element("div");
   const editor = Kit.expressionEditor(field(body), { mode: "condition", help: { toggle, panel, wrap: row } });
   const titles = () => [...panel.innerHTML.matchAll(/<h4>(.*?)<\/h4>/g)].map((m) => m[1]);
-  assert.deepEqual(titles(), ["True or false", "Variables", "Comparing", "Text", "Functions"]);
+  assert.deepEqual(titles(), ["True or false", "Variables", "Comparing", "Text", "Math", "Functions"]);
   assert.equal(panel.className, "kit-help");
   assert.equal(toggle.className, "kit-help-toggle");
   assert.equal(toggle.getAttribute("type"), "button");
@@ -272,13 +284,22 @@ test("the help follows the mode, takes a page's own sections, and opens from its
   toggle.fire("click");
   assert.equal(row.hidden, true);
   editor.setMode("equation");
-  assert.deepEqual(titles(), ["Variables", "A number", "Comparing", "Text", "Functions"]);
+  assert.deepEqual(titles(), ["A number", "Variables", "Math", "Comparing", "Text", "Functions"]);
+  editor.setMode("value");
+  assert.deepEqual(titles(), ["A number or text", "Variables", "Math", "Comparing", "Text", "Functions"]);
+  assert.match(panel.innerHTML, /<code>\.\.<\/code> joins text/, "only a value joins text");
   editor.setMode("string");
-  assert.deepEqual(titles(), ["Variables", "Text with variables"]);
+  assert.deepEqual(titles(), ["Text with variables", "Variables"]);
+  editor.setMode("plain");
+  assert.equal(panel.innerHTML, "", "plain mode has no help of its own");
   const own = new Element("div");
   Kit.expressionEditor(field(body), { mode: "text", escapes: true, help: { panel: own } });
   assert.deepEqual([...own.innerHTML.matchAll(/<h4>(.*?)<\/h4>/g)].map((m) => m[1]), ["Variables", "Escapes"]);
   assert.equal(own.hidden, true, "with no wrap, the panel itself hides");
+  const hexPanel = new Element("div");
+  const hex = Kit.expressionEditor(field(body), { mode: "text", escapes: true, help: { panel: hexPanel } });
+  hex.setMode("plain");
+  assert.equal(hexPanel.innerHTML, "", "a plain field has no escapes to explain");
   const shared = new Element("div");
   const help = Kit.expressionHelp({ panel: shared, sections: [{ title: "Hex <payloads>", html: "<p>Raw bytes.</p>" }, "escapes", "nothing"] });
   assert.match(shared.innerHTML, /^<section><h4>Hex &lt;payloads&gt;<\/h4><p>Raw bytes\.<\/p><\/section><section><h4>Escapes<\/h4>/);
@@ -312,6 +333,8 @@ test("an engine error reads as a plain sentence", () => {
   assert.equal(plain("result is not a boolean (got number)", "", "", "Show when"), '"Show when" has to come out true or false: add a comparison.');
   assert.equal(plain("result is not a boolean (got number)"), "It has to come out true or false: add a comparison.");
   assert.equal(plain("result is not a number (got string)", "", "", "Value"), '"Value" has to come out a number, and this gives text.');
+  assert.equal(plain("result is not a number or text (got boolean)", "", "", "Badge"), '"Badge" has to come out a number or text, and this gives true or false.');
+  assert.equal(plain("result is not a number or text (got nil)"), "It has to come out a number or text, and this gives nothing.");
   assert.equal(plain("variable 1003 not found on device 96", "PARAM{96,1003}", "[Bath > Sensor > 1003]"), "Bath > Sensor has no variable 1003.");
   assert.equal(plain("variable HUMID not found on device 96"), "Device 96 has no variable named HUMID.");
   assert.equal(plain("device 140 not found"), "There's no device 140 in this project.");
