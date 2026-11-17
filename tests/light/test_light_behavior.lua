@@ -41,6 +41,18 @@ case(function()
   w.restore()
 end)
 
+T.section("a restart tells the capabilities at the first report though 6661 lists them, as it lags the proxy")
+case(function()
+  local before = K.world(K.ES, { offline = true })
+  before.m:connect()
+  local listed = before.proxy.vars["6661"].value
+  before.restore()
+  local w = K.world(K.ES, { offline = true, variables = { [6661] = listed } })
+  w.m:connect()
+  T.eq("told once", w.proxy:count("DYNAMIC_CAPABILITIES_CHANGED"), 1)
+  w.restore()
+end)
+
 T.section("a report before start is kept, and taken at start, in order")
 case(function()
   local w = K.world(K.ES, { noStart = true })
