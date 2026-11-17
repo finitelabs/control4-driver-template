@@ -560,7 +560,7 @@ T.section("a re-timing target device's push from before an off is history: the l
 case(function()
   -- It reports its targets, may report up to 2.5 s late, and re-times every channel.
   local base = K.copy(K.ES)
-  base.fade = { kind = "device", curve = "linear", preOn = true, retimes = true, maxMs = 86400000 }
+  base.fade = { kind = "device", curve = "linear", preOn = true, retimes = true, maxMs = 999999 }
   base.feedback = { shows = "target", waitMs = 2500, refresh = true }
   local w = quiet(base, 35)
   local warm = { x = 0.3805, y = 0.3768, mode = "cct" }

@@ -58,12 +58,13 @@ end
 
 T.section("a profile's maxMs is the longest rate its static capabilities offer")
 do
-  local p, errors = Caps.profile({ api = 1, dims = true, color = true, fades = true, maxMs = 86400000 })
+  local p, errors = Caps.profile({ api = 1, dims = true, color = true, fades = true, maxMs = 999999 })
   T.eq("no errors", errors, {})
   local r = rows(p)
-  T.eq("brightness and color rates reach it", { r.brightness_rate_max, r.color_rate_max }, { "86400000", "86400000" })
+  T.eq("brightness and color rates reach it", { r.brightness_rate_max, r.color_rate_max }, { "999999", "999999" })
   T.eq("the default", { rows(FULL).brightness_rate_max, rows(FULL).color_rate_max }, { "65535", "65535" })
-  for _, bad in ipairs({ 0, -1, 1.5, "1000", true }) do
+  -- Director writes a rate bound with six significant digits: 1000000 reaches Composer as 1e+06.
+  for _, bad in ipairs({ 0, -1, 1.5, "1000", true, 1000000, 86400000 }) do
     local q, errs = Caps.profile({ api = 1, maxMs = bad })
     T.check(
       "maxMs " .. tostring(bad) .. " is an error",
@@ -157,6 +158,7 @@ do
     { { kind = "glide" }, "fade.kind", "kind", "device" },
     { { kind = "device", curve = "eased" }, "fade.curve", "curve", "linear" },
     { { kind = "device", maxMs = -1 }, "fade.maxMs", "maxMs", 65535 },
+    { { kind = "device", maxMs = 86400000 }, "fade.maxMs is past the 999999 ms", "maxMs", 999999 },
     { { kind = "walk", stepMs = 0 }, "fade.stepMs", "stepMs", 100 },
     { { kind = "own" }, "fade.own is required", "own", ZERO },
     { { kind = "device", speed = 2 }, "fade.speed", "speed", nil },
@@ -174,16 +176,14 @@ do
   local noDims, errors = Caps.device({ fade = { kind = "device", preOn = true } }, FULL)
   T.eq("preOn needs dims", noDims.fade.preOn, false)
   T.check("and says so", hasError(errors, "fade.preOn needs dims"), errors)
-  local smooth = Caps.device(
-    { dims = true, fade = { curve = "smootherstep", preOn = true, retimes = true, maxMs = 86400000 } },
-    FULL
-  )
+  local smooth =
+    Caps.device({ dims = true, fade = { curve = "smootherstep", preOn = true, retimes = true, maxMs = 999999 } }, FULL)
   T.eq("a device fade keeps its own fields", smooth.fade, {
     kind = "device",
     curve = "smootherstep",
     preOn = true,
     retimes = true,
-    maxMs = 86400000,
+    maxMs = 999999,
   })
 end
 
@@ -418,8 +418,8 @@ do
   for _, case in ipairs({
     {
       "a device fade",
-      { kind = "device", maxMs = 86400000 },
-      { stop = true, behavior = 1, fixed = false, rate = 0, min = 0, max = 86400000 },
+      { kind = "device", maxMs = 999999 },
+      { stop = true, behavior = 1, fixed = false, rate = 0, min = 0, max = 999999 },
     },
     { "a walk", { kind = "walk" }, { stop = true, behavior = 1, fixed = false, rate = 0, min = 0, max = 65535 } },
     {
