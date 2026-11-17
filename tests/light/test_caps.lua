@@ -63,7 +63,6 @@ do
   local r = rows(p)
   T.eq("brightness and color rates reach it", { r.brightness_rate_max, r.color_rate_max }, { "999999", "999999" })
   T.eq("the default", { rows(FULL).brightness_rate_max, rows(FULL).color_rate_max }, { "65535", "65535" })
-  -- Director writes a rate bound with six significant digits: 1000000 reaches Composer as 1e+06.
   for _, bad in ipairs({ 0, -1, 1.5, "1000", true, 1000000, 86400000 }) do
     local q, errs = Caps.profile({ api = 1, maxMs = bad })
     T.check(
@@ -159,6 +158,12 @@ do
     { { kind = "device", curve = "eased" }, "fade.curve", "curve", "linear" },
     { { kind = "device", maxMs = -1 }, "fade.maxMs", "maxMs", 65535 },
     { { kind = "device", maxMs = 86400000 }, "fade.maxMs is past the 999999 ms", "maxMs", 999999 },
+    {
+      { kind = "own", own = { onMs = 0, offMs = 0, changeMs = 1000000 } },
+      "fade.own.changeMs is past the 999999 ms",
+      "own",
+      { onMs = 0, offMs = 0, changeMs = 999999 },
+    },
     { { kind = "walk", stepMs = 0 }, "fade.stepMs", "stepMs", 100 },
     { { kind = "own" }, "fade.own is required", "own", ZERO },
     { { kind = "device", speed = 2 }, "fade.speed", "speed", nil },
@@ -431,6 +436,11 @@ do
       "an own fade with a change length",
       { kind = "own", own = { onMs = 0, offMs = 0, changeMs = 1500 } },
       { stop = false, behavior = 0, fixed = true, rate = 1500, min = 1500, max = 1500 },
+    },
+    {
+      "an own fade whose change is past what Composer reads",
+      { kind = "own", own = { onMs = 0, offMs = 0, changeMs = 1000000 } },
+      { stop = false, behavior = 0, fixed = true, rate = 999999, min = 999999, max = 999999 },
     },
   }) do
     local d = Caps.device({ dims = true, color = true, cct = { minK = 2200, maxK = 6000 }, fade = case[2] }, profile)

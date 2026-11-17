@@ -361,6 +361,11 @@ local function fade(errors, f, profile, dims)
         errors[#errors + 1] = string.format("fade.own.%s must be a whole number of ms; taken as 0", name)
       end
     end
+    -- changeMs is the proxy's fixed rate and both brightness bounds.
+    if out.own.changeMs > Caps.RATE_LIMIT then
+      out.own.changeMs = Caps.RATE_LIMIT
+      errors[#errors + 1] = "fade.own.changeMs is past the 999999 ms Composer reads; taken as 999999"
+    end
   elseif f.own ~= nil then
     errors[#errors + 1] = 'fade.own is for an "own" fade; ignored'
   end

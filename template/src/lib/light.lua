@@ -11,7 +11,7 @@
 --- A connection's states, and what moves it:
 ---   made      --start-->                        offline (the proxy is told so, and the device asked)
 ---   offline   --a report, after declare-->      online (ONLINE_CHANGED, then the capabilities)
----   online    --lost(), reset-->       offline (the run ends: ramps, windows, picks, presses, steps)
+---   online    --lost(), reset-->                offline (the run ends: ramps, windows, picks, presses, steps)
 ---   offline   --declare-->                      offline, with the facts stored for the next report
 --- Commands reach the adapter only while online. A report before start, or one made inside send or refresh,
 --- waits and is taken in order once the library is free.
