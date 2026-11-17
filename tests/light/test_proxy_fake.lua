@@ -157,12 +157,12 @@ do
   end
   T.eq("lists every key, in its order", order, P.CAPABILITY_KEYS)
   T.eq("driver.xml's held until told others", listed(p, "brightness_rate_max"), "65535")
-  tell("DYNAMIC_CAPABILITIES_CHANGED", { brightness_rate_max = 86400000 })
+  tell("DYNAMIC_CAPABILITIES_CHANGED", { brightness_rate_max = 999999 })
   T.eq("a brightness rate alone does not rewrite it", listed(p, "brightness_rate_max"), "65535")
-  T.eq("though the proxy holds it", p.held.brightness_rate_max, "86400000")
-  tell("DYNAMIC_CAPABILITIES_CHANGED", { color_rate_max = 86400000 })
-  T.eq("a color rate rewrites it", listed(p, "color_rate_max"), "86400000")
-  T.eq("and the held brightness rate shows with it", listed(p, "brightness_rate_max"), "86400000")
+  T.eq("though the proxy holds it", p.held.brightness_rate_max, "999999")
+  tell("DYNAMIC_CAPABILITIES_CHANGED", { color_rate_max = 999999 })
+  T.eq("a color rate rewrites it", listed(p, "color_rate_max"), "999999")
+  T.eq("and the held brightness rate shows with it", listed(p, "brightness_rate_max"), "999999")
   p:restore()
 end
 

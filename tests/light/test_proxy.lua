@@ -218,21 +218,16 @@ do
 
   p:sync(rest(true, 0.5))
   take()
-  p:lost(true)
-  T.eq("a suspend tells offline and keeps the level", names(), { "ONLINE_CHANGED" })
-  p:lost(false)
-  got = take()
-  T.eq("a loss after it reads off once", got[1].cmd, "LIGHT_BRIGHTNESS_CHANGED")
-  T.eq("at 0", got[1].params.LIGHT_BRIGHTNESS_CURRENT, 0)
-  T.eq("its LEDs with it", { got[2].cmd, got[2].params.STATE }, { "MATCH_LED_STATE", false })
-  p:lost(false)
+  p:lost()
+  T.eq("a loss tells offline alone: the level and the LEDs are kept", names(), { "ONLINE_CHANGED" })
+  p:lost()
   T.eq("once per outage", names(), {})
 
   p = make()
   p:offline()
   take()
-  p:lost(false)
-  T.eq("a loss with no report since start reads off too", names(), { "LIGHT_BRIGHTNESS_CHANGED" })
+  p:lost()
+  T.eq("a loss with no report since start tells nothing more", names(), {})
 end
 
 T.section("capabilities: told at every connection's first report, and after it only when they change")
@@ -250,7 +245,7 @@ do
   take()
   p:capabilities(DEVICE)
   take()
-  p:lost(true)
+  p:lost()
   take()
   p:online(DEVICE)
   T.check(
@@ -730,17 +725,15 @@ do
   T.eq("inside the first report's ONLINE_CHANGED: the level the proxy showed at start", answered(p), "100")
   p:sync(rest(true, Range.toDevice(40, 1, 100), nil))
   T.eq("online: the level last told", answered(p), "40")
-  p:lost(true)
-  T.eq("suspended: the level it keeps", answered(p), "40")
-  p:lost(false)
-  T.eq("lost: the off its loss told", answered(p), "0")
+  p:lost()
+  T.eq("lost: the level it keeps", answered(p), "40")
   vars = {}
   p = make()
   p:read()
   T.eq("nothing read and nothing told: no answer", answered(p), nil)
 end
 
-T.section("the link LEDs: told at the first report after a load and after a suspend")
+T.section("the link LEDs: told at the first report after a load and after a loss")
 do
   local level = Range.toDevice(60, 1, 100)
   local p = connected({ [1001] = "60", [1110] = "60" }, LINKS)
@@ -748,16 +741,11 @@ do
   local all = take()
   T.eq("after a load the LEDs are told, though the level is as the proxy shows", #named(all, "MATCH_LED_STATE"), 3)
   T.eq("and no level", #named(all, "LIGHT_BRIGHTNESS_CHANGED"), 0)
-  p:lost(true)
+  p:lost()
   p:online(DEVICE)
   sent = {}
   p:sync(rest(true, level, nil))
-  T.eq("after a suspend, again", #named(take(), "MATCH_LED_STATE"), 3)
-  p:lost(false)
-  p:online(DEVICE)
-  sent = {}
-  p:sync(rest(false, level, nil))
-  T.eq("after a loss, whose off told them, not again", #named(take(), "MATCH_LED_STATE"), 0)
+  T.eq("after a loss, again", #named(take(), "MATCH_LED_STATE"), 3)
 end
 
 T.section("a replacing color ramp's CHANGING starts where the color has got to")
@@ -878,7 +866,7 @@ do
   p:online(DEVICE)
   p:sync(rest(true, 0.5))
   take()
-  p:lost(true)
+  p:lost()
   T.eq("offline at the lapse", names(), { "ONLINE_CHANGED" })
   p:answer("GET_LIGHT_LEVEL", {}, rest(true, 0.5))
   T.eq("LIGHT_LEVEL alone", names(), { "LIGHT_LEVEL" })
@@ -893,11 +881,8 @@ do
   p:offline()
   T.eq("a reset while offline writes it false", (values:getValue("Connected") or {}).value, false)
   values:delete("Connected")
-  p:lost(true)
+  p:lost()
   T.eq("and so does a loss while offline", (values:getValue("Connected") or {}).value, false)
-  values:delete("Connected")
-  p:lost(false)
-  T.eq("a real loss too", (values:getValue("Connected") or {}).value, false)
 end
 
 T.section("with Min On at Max On or above, a light lit any other way keeps its level lit, or is told full from off")

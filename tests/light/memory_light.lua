@@ -686,11 +686,10 @@ function Memory:inject(at, report)
   end)
 end
 
---- The device is lost: `suspended` as light:lost takes it.
---- @param suspended boolean|nil
-function Memory:drop(suspended)
+--- The device is lost.
+function Memory:drop()
   self.online = false
-  self.light:lost(suspended == true)
+  self.light:lost()
 end
 
 --- The device reports its state again after a loss.
