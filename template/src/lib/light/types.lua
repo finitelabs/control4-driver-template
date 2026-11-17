@@ -236,10 +236,10 @@ Types.API = 1
 --   made inside send or refresh waits until the library's follow-up ends. One with a non-finite or out-of-range
 --   value, or an unknown kind, is dropped whole with an error logged.
 --
--- light:lost(suspended)
---   The connection is gone, and the run ends: no send until the next report. true (stopped on purpose: an
---   account's suspend, an unbind) keeps the level the proxy shows. false (a loss) reads off once per outage,
---   also after an earlier lost(true) and when no report came since start. Idempotent.
+-- light:lost()
+--   The connection is gone, whether lost or stopped on purpose, and the run ends: no send until the next
+--   report. The proxy is told offline and keeps the level and the link LEDs it shows; the first report after
+--   it shows the device. Idempotent.
 --
 -- light:reset()
 --   Reset Driver. Ends the run (ramps, windows, picks, presses, scene steps), tells offline until the next

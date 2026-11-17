@@ -64,7 +64,7 @@ local INVARIANTS = {
   { name = "once", says = "one CHANGING per ramp per aspect" },
   {
     name = "binds",
-    says = "while lost the proxy hears only offline, at most one off and dark LEDs, and nothing is sent",
+    says = "while lost the proxy hears only offline, the links nothing, and nothing is sent",
   },
   { name = "commands", says = "every command keeps to the contract's shape for its device" },
   { name = "sends", says = "a walk sends at most one step per stepMs, plus two" },
@@ -200,7 +200,7 @@ local function draw(r)
       curve = r.pick({ "linear", "smootherstep" }),
       preOn = o.dims and r.chance(0.5),
       retimes = r.chance(0.5),
-      maxMs = r.pick({ 65535, 86400000 }),
+      maxMs = r.pick({ 65535, 999999 }),
     }
     o.retimes = o.fade.retimes
   elseif fadeKind == "own" then
@@ -304,9 +304,7 @@ end
 --- @class FuzzLoss
 --- @field from integer
 --- @field to integer|nil
---- @field suspended boolean
 --- @field fromNote integer The notes before the loss.
---- @field dropEnd integer The notes once the loss was told.
 --- @field toNote integer|nil The notes before the device came back.
 --- @field fromSent integer
 --- @field toSent integer|nil
@@ -873,13 +871,11 @@ local function moves(run)
       if not run.online then
         return
       end
-      local suspended = r.chance(0.5)
       collect(run)
-      local loss = { from = w.clock.now(), suspended = suspended, fromNote = #run.notes, fromSent = #run.sent }
-      act(run, suspended and "the device is suspended" or "the device is lost", function()
-        w.m:drop(suspended)
+      local loss = { from = w.clock.now(), fromNote = #run.notes, fromSent = #run.sent }
+      act(run, "the device is lost", function()
+        w.m:drop()
       end)
-      loss.dropEnd = #run.notes
       run.online = false
       run.losses[#run.losses + 1] = loss
     end,
@@ -1193,31 +1189,11 @@ local function judgeBinds(run)
   for _, loss in ipairs(run.losses) do
     if loss.to then
       run.judged.binds = true
-      local offs = 0
       for i = loss.fromNote + 1, loss.toNote do
         local n = run.notes[i]
-        local p = n.params
-        local atLoss = i <= loss.dropEnd
-        local ok = false
-        if n.binding ~= M.PROXY then
-          ok = n.cmd == "MATCH_LED_STATE" and p.STATE == false
-        elseif n.cmd == "ONLINE_CHANGED" then
-          ok = p.STATE == false
-        elseif n.cmd == "LIGHT_BRIGHTNESS_CHANGED" then
-          ok = not loss.suspended and atLoss
-          offs = offs + ((tonumber(p.LIGHT_BRIGHTNESS_CURRENT) or -1) == 0 and 1 or 0)
-        elseif n.cmd == "LIGHT_COLOR_CHANGED" then
-          ok = not loss.suspended and atLoss
-        elseif n.cmd == "LIGHT_BRIGHTNESS_CHANGING" then
-          -- The Previous On keep an off tells first.
-          ok = not loss.suspended and atLoss and (tonumber(p.RATE) or 0) == 0
+        if not (n.binding == M.PROXY and n.cmd == "ONLINE_CHANGED" and n.params.STATE == false) then
+          violate(run, "binds", "%s at %d while lost from %d: %s", n.cmd, n.at, loss.from, T.show(n.params))
         end
-        if not ok then
-          violate(run, "binds", "%s at %d while lost from %d: %s", n.cmd, n.at, loss.from, T.show(p))
-        end
-      end
-      if offs > 1 then
-        violate(run, "binds", "the off was told %d times for the loss at %d", offs, loss.from)
       end
       for i = loss.fromSent + 1, loss.toSent do
         violate(run, "binds", "a command went at %d while lost from %d", run.sent[i].at, loss.from)
