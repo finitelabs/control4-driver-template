@@ -69,7 +69,7 @@ do
     { 500, 500, 250, 750 }
   )
   T.eq("hold rates", { s:holdRate(true), s:holdRate(false) }, { 5000, 5000 })
-  T.eq("button colors: the defaults", { s:buttonColors(0) }, { "0000ff", "000000" })
+  T.eq("no button colors", { s:buttonColors(0) }, {})
   T.eq("no Previous On level", s:previousOnLevel(), nil)
   local on = s:forOn()
   T.eq("an on reads no on mode", { on.onModeLevel, on.colorOnMode, on.onColor, on.previousColor }, { nil, "none" })
@@ -163,7 +163,7 @@ do
       function()
         return { s:buttonColors(2) }
       end,
-      { "ff0000", "000000" },
+      { "ff0000" },
     },
   }
   for _, c in ipairs(cases) do
@@ -377,7 +377,7 @@ do
   T.eq("Toggle's from the setup", { s:buttonColors(2) }, { "0000ff", "000000" })
   s:apply("SET_BUTTON_COLOR", { BUTTON_ID = "1", ON_COLOR = "ff0000" })
   T.eq("a saved color wins, and the other keeps the setup's", { s:buttonColors(1) }, { "ff0000", "0000ff" })
-  T.eq("a button with neither has the defaults", { fresh():buttonColors(2) }, { "0000ff", "000000" })
+  T.eq("a button with neither has none", { fresh():buttonColors(2) }, {})
 end
 
 T.section("a setup that cannot be read leaves what is stored")
@@ -407,14 +407,14 @@ do
 end
 
 fresh()
-T.section("button colors with none saved and no setup: the defaults, Bottom's with the Off look")
+T.section("button colors with none saved and no setup: none is made up")
 do
   local s = fresh()
-  T.eq("Top", { s:buttonColors(0) }, { "0000ff", "000000" })
-  T.eq("Bottom", { s:buttonColors(1) }, { "000000", "0000ff" })
-  T.eq("Toggle", { s:buttonColors(2) }, { "0000ff", "000000" })
+  T.eq("Top", { s:buttonColors(0) }, {})
+  T.eq("Bottom", { s:buttonColors(1) }, {})
+  T.eq("Toggle", { s:buttonColors(2) }, {})
   s:apply("SET_BUTTON_COLOR", { BUTTON_ID = "1", ON_COLOR = "ffffff" })
-  T.eq("a saved color wins, and the other keeps the default", { s:buttonColors(1) }, { "ffffff", "0000ff" })
+  T.eq("a saved color stands alone", { s:buttonColors(1) }, { "ffffff" })
 end
 
 T.section("the setup's rates and range fill a store that has none, and never replace one")

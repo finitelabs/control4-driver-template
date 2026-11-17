@@ -349,21 +349,44 @@ case(function()
   w.restore()
 end)
 
-T.section("button colors are stored and told back, and Request Button Colors answers each button")
+T.section("button colors are stored and told back, and Request Button Colors answers each button that has them")
 case(function()
   local w = K.world(K.ES, {}, 50)
   w.proxy:send("SET_BUTTON_COLOR", { BUTTON_ID = 1, ON_COLOR = "ff0000", OFF_COLOR = "00ff00" })
   w.proxy:mark()
   w.proxy:send("REQUEST_BUTTON_COLORS")
   local colors = w.proxy:told("BUTTON_COLORS")
-  T.eq("each button answered", #colors, 3)
-  local bottom
-  for _, c in ipairs(colors) do
-    if tonumber(c.BUTTON_ID) == 1 then
-      bottom = c
-    end
-  end
+  T.eq("the button with colors answered alone", #colors, 1)
+  local bottom = colors[1]
   T.eq("with the colors stored", bottom and { bottom.ON_COLOR, bottom.OFF_COLOR }, { "ff0000", "00ff00" })
+  w.restore()
+end)
+
+T.section("a button with no colors saved and none in the setup is told none: no color is made up")
+case(function()
+  local w = K.world(K.ES, { offline = true })
+  w.m:connect()
+  local named, colored = 0, 0
+  for _, info in ipairs(w.proxy:told("BUTTON_INFO")) do
+    named = named + (info.NAME and 1 or 0)
+    colored = colored + ((info.ON_COLOR or info.OFF_COLOR) and 1 or 0)
+  end
+  T.eq("each button is named to the proxy, with no colors", { named, colored }, { 3, 0 })
+  local function linkColors()
+    local n = 0
+    for _, link in pairs(M.LINKS) do
+      n = n + #w.proxy:toldLink(link, "BUTTON_COLORS")
+    end
+    return n
+  end
+  T.eq("no link is told colors", linkColors(), 0)
+  w.proxy:mark()
+  w.proxy:send("REQUEST_BUTTON_COLORS")
+  T.eq("the proxy's request is answered with no colors", w.proxy:count("BUTTON_COLORS"), 0)
+  w.proxy:mark()
+  w.proxy:link(M.LINKS.bottom, "REQUEST_BUTTON_COLORS")
+  T.eq("a link's request is answered with no colors", linkColors(), 0)
+  T.eq("and that link still gets its LED", #w.proxy:toldLink(M.LINKS.bottom, "MATCH_LED_STATE"), 1)
   w.restore()
 end)
 

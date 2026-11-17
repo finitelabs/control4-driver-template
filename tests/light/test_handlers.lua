@@ -260,7 +260,7 @@ do
   T.eq("a scene is still stored", #run(light, PROXY, "PUSH_SCENE", {}), 1)
   T.eq("the connected state is still answered", #run(light, PROXY, "GET_CONNECTED_STATE", {}), 1)
   T.eq(
-    "GET_LIGHT_LEVEL still reaches the light, which answers a suspended light's kept level",
+    "GET_LIGHT_LEVEL still reaches the light, which answers a lost light's kept level",
     #run(light, PROXY, "GET_LIGHT_LEVEL", {}),
     1
   )
