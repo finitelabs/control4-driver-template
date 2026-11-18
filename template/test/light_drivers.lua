@@ -63,6 +63,26 @@ function D.path(root, folder)
   return string.format("%s/drivers/%s/driver.lua", root, folder)
 end
 
+--- Whether driver.lua's top-level OnDriverInit calls restoreValues outside a comment. The library writes the
+--- Connected variable, and only a variable restored in OnDriverInit keeps its id and programming across a
+--- Director restart.
+--- @param root string
+--- @param folder string
+--- @return boolean|nil restores nil when driver.lua defines no top-level OnDriverInit.
+function D.initRestores(root, folder)
+  local inside = false
+  for line in ((read(D.path(root, folder)) or "") .. "\n"):gmatch("([^\n]*)\n") do
+    if not inside then
+      inside = line:match("^function OnDriverInit%(") ~= nil
+    elseif line:match("^end%s*$") then
+      return false
+    elseif line:gsub("%-%-.*$", ""):match(":restoreValues%(%)") then
+      return true
+    end
+  end
+  return nil
+end
+
 --- Load a driver's chunk as its OSS build compiles it, and the one light it made there.
 --- @param root string
 --- @param folder string

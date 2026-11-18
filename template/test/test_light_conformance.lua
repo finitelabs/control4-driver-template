@@ -2,8 +2,8 @@
 -- case reaches every light repo at its next copier update.
 --
 -- For each driver whose driver.xml names the light_v2 proxy, its chunk makes one light at its top level,
--- and sets no command-keyed RFP for a command the library handles. Then every rig test/light_rigs.lua
--- gives for it runs the cases in test/light_conformance.lua.
+-- sets no command-keyed RFP for a command the library handles, and its OnDriverInit restores the driver's
+-- variables. Then every rig test/light_rigs.lua gives for it runs the cases in test/light_conformance.lua.
 --
 -- test/light_rigs.lua is the repo's own: { version = C.RIG_VERSION, rigs = { [folder] = { LightRig, ... } } },
 -- each rig loading its driver as it ships and faking only its transport.
@@ -52,6 +52,13 @@ for _, folder in ipairs(lights) do
     end
   end
   T.eq(folder .. ": no command-keyed RFP names a command the library handles", taken, {})
+  T.section(folder .. ": its OnDriverInit restores its variables")
+  local restores = D.initRestores(root, folder)
+  T.check(
+    folder .. ": OnDriverInit calls values:restoreValues(), so the Connected variable keeps its id at a restart",
+    restores == true,
+    restores == nil and "driver.lua defines no top-level OnDriverInit" or "its OnDriverInit never calls it"
+  )
 end
 
 local ok, rigsOrErr = pcall(require, "light_rigs")
