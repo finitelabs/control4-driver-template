@@ -535,4 +535,23 @@ case(function()
   g.restore()
 end)
 
+T.section("the driver's hook counts the online members after each change")
+case(function()
+  local g = groupWorld()
+  local told = {}
+  g.group:onChange(function(online, total)
+    told[#told + 1] = { online, total }
+  end)
+  state(11, true, 30)
+  state(12, true, 30, { online = false })
+  state(13, true, 30)
+  g.group:setMembers({ 11, 12 })
+  g.group:setRule("lowest")
+  state(99, true, 30)
+  g.group:setMembers({})
+  T.eq("one each, a stranger none", told, { { 1, 3 }, { 1, 3 }, { 2, 3 }, { 1, 2 }, { 1, 2 }, { 0, 0 } })
+  T.eq("the kit still takes the members' state", g.proxy.online, false)
+  g.restore()
+end)
+
 T.finish()
