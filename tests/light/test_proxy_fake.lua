@@ -120,6 +120,24 @@ do
   p:restore()
 end
 
+T.section("a CHANGING naming a preset id never shows its target in 1110 (dev 2026-11-18, example_light 1298)")
+do
+  local p = P.install(clock)
+  local shown = {}
+  for _, id in ipairs({ 1, 2, 10, 3 }) do
+    tell("LIGHT_BRIGHTNESS_CHANGED", { LIGHT_BRIGHTNESS_CURRENT = 55 })
+    tell("LIGHT_BRIGHTNESS_CHANGING", {
+      LIGHT_BRIGHTNESS_CURRENT = 55,
+      LIGHT_BRIGHTNESS_TARGET = 40,
+      RATE = 2000,
+      LIGHT_BRIGHTNESS_TARGET_PRESET_ID = id,
+    })
+    shown[#shown + 1] = var(p, 1110)
+  end
+  T.eq("the id for 1, 2 and 10, the target before it for any other", shown, { "1", "2", "10", "55" })
+  p:restore()
+end
+
 T.section("a color told with a preset id and no origin is dropped whole (zb 682, dev 2026-10-29)")
 do
   local p = P.install(clock)

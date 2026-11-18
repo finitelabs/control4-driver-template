@@ -525,7 +525,7 @@ case(function()
   w.restore()
 end)
 
-T.section("the proxy's level commands: RAMP_TO_LEVEL takes its TIME, and a target keeps its preset id")
+T.section("the proxy's level commands: RAMP_TO_LEVEL takes its TIME, and a target's preset id is told once it lands")
 case(function()
   local w = K.world(K.ES, {}, 20)
   w.proxy:send("RAMP_TO_LEVEL", { LEVEL = 60, TIME = 1500 })
@@ -537,12 +537,34 @@ case(function()
     { LIGHT_BRIGHTNESS_TARGET = 40, RATE = 1000, LIGHT_BRIGHTNESS_TARGET_PRESET_ID = 3 }
   )
   T.eq(
-    "the preset id told with it",
+    "the fade names no preset",
     (w.proxy:last("LIGHT_BRIGHTNESS_CHANGING") or {}).LIGHT_BRIGHTNESS_TARGET_PRESET_ID,
-    3
+    nil
   )
   w.run(5000)
   T.eq("lands", w.proxy.level, 40)
+  T.eq(
+    "where it names the preset",
+    (w.proxy:last("LIGHT_BRIGHTNESS_CHANGED") or {}).LIGHT_BRIGHTNESS_CURRENT_PRESET_ID,
+    3
+  )
+  w.restore()
+end)
+
+T.section("the app's On from off shows its level as the target for the whole fade")
+case(function()
+  local w = K.world(K.ES, {}, 0)
+  w.proxy:presetLevel(55)
+  w.run(100)
+  w.proxy:appOn(55)
+  local shown = {}
+  for _ = 1, 7 do
+    w.run(100)
+    shown[#shown + 1] = w.proxy.vars["1110"] and w.proxy.vars["1110"].value
+  end
+  T.eq("55 at every step", shown, { "55", "55", "55", "55", "55", "55", "55" })
+  w.run(5000)
+  T.eq("lands", w.proxy.level, 55)
   w.restore()
 end)
 
