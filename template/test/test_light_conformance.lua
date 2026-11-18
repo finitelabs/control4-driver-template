@@ -3,7 +3,8 @@
 --
 -- For each driver whose driver.xml names the light_v2 proxy, its chunk makes one light at its top level,
 -- sets no command-keyed RFP for a command the library handles, and its OnDriverInit restores the driver's
--- variables. Then every rig test/light_rigs.lua gives for it runs the cases in test/light_conformance.lua.
+-- variables when called. Then every rig test/light_rigs.lua gives for it runs the cases in
+-- test/light_conformance.lua.
 --
 -- test/light_rigs.lua is the repo's own: { version = C.RIG_VERSION, rigs = { [folder] = { LightRig, ... } } },
 -- each rig loading its driver as it ships and faking only its transport.
@@ -15,6 +16,7 @@ require("c4_shim")
 local C = require("light_conformance")
 local D = require("light_drivers")
 local Light = require("lib.light")
+local values = require("lib.values")
 
 -- The commands lib.light handles on the proxy and link bindings, as its handlers list them.
 local LIBRARY_COMMANDS = require("lib.light.handlers").COMMANDS
@@ -39,6 +41,7 @@ for _, folder in ipairs(lights) do
   for _, cmd in ipairs(LIBRARY_COMMANDS) do
     RFP[cmd] = nil
   end
+  OnDriverInit = nil
   D.seedProperties(D.xml(root, folder) or "")
   local light, err = D.load(root, folder)
   T.check(folder .. ": driver.lua loads and makes its light", light ~= nil, err)
@@ -53,12 +56,24 @@ for _, folder in ipairs(lights) do
   end
   T.eq(folder .. ": no command-keyed RFP names a command the library handles", taken, {})
   T.section(folder .. ": its OnDriverInit restores its variables")
-  local restores = D.initRestores(root, folder)
-  T.check(
-    folder .. ": OnDriverInit calls values:restoreValues(), so the Connected variable keeps its id at a restart",
-    restores == true,
-    restores == nil and "driver.lua defines no top-level OnDriverInit" or "its OnDriverInit never calls it"
-  )
+  local defined = type(OnDriverInit) == "function"
+  T.check(folder .. ": driver.lua defines OnDriverInit", defined)
+  if defined then
+    local restored = false
+    local own = rawget(values, "restoreValues")
+    local restoreValues = values.restoreValues
+    values.restoreValues = function(self)
+      restored = true
+      return restoreValues(self)
+    end
+    local ran, initErr = pcall(OnDriverInit)
+    values.restoreValues = own
+    T.check(folder .. ": OnDriverInit runs", ran, initErr)
+    T.check(
+      folder .. ": and calls values:restoreValues(), so the Connected variable keeps its id at a restart",
+      restored
+    )
+  end
 end
 
 local ok, rigsOrErr = pcall(require, "light_rigs")
