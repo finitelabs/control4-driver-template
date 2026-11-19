@@ -18,7 +18,6 @@ local function read(path)
   return text
 end
 
---- F.repoRoot: the folder above test/.
 D.root = F.repoRoot
 
 --- Every driver folder under drivers/ whose driver.xml names the light_v2 proxy, sorted.
@@ -75,10 +74,7 @@ function D.load(root, folder)
   return Light.made[#Light.made], nil
 end
 
---- F.answerConfig: Director's answers to the config reads, from a driver.xml.
 D.answerConfig = F.answerConfig
-
---- F.seedProperties: each property driver.xml declares, at its default.
 D.seedProperties = F.seedProperties
 
 return D
