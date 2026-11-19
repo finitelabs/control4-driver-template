@@ -83,46 +83,10 @@ function D.load(root, folder)
   return Light.made[#Light.made], nil
 end
 
---- Answer the driver config reads the shim leaves out, minimum_os_version and version, from a
---- driver.xml, as Director answers them from the driver's own, and run the driver on the OS it asks for.
---- @param xml string
---- @return fun() restore Puts the shim's answer back.
-function D.answerConfig(xml)
-  local prior = C4.GetDriverConfigInfo
-  function C4:GetDriverConfigInfo(section)
-    if section == "minimum_os_version" or section == "version" then
-      return xml:match("<" .. section .. ">([^<]*)</" .. section .. ">") or ""
-    end
-    return prior(self, section)
-  end
-  local priorVersion = C4.GetVersionInfo
-  local minimum = xml:match("<minimum_os_version>([^<]*)</minimum_os_version>")
-  if minimum and minimum ~= "" then
-    function C4:GetVersionInfo()
-      local info = {}
-      for k, v in pairs(priorVersion(self)) do
-        info[k] = v
-      end
-      info.version = minimum
-      return info
-    end
-  end
-  return function()
-    C4.GetDriverConfigInfo = prior
-    C4.GetVersionInfo = priorVersion
-  end
-end
+--- F.answerConfig: Director's answers to the config reads, from a driver.xml.
+D.answerConfig = F.answerConfig
 
---- Give Properties each property driver.xml declares, at its default, as Director does before a driver loads,
---- so the driver can UpdateProperty its own properties.
---- @param xml string
-function D.seedProperties(xml)
-  for block in xml:gmatch("<property>(.-)</property>") do
-    local name = block:match("<name>(.-)</name>")
-    if name then
-      Properties[name] = block:match("<default>(.-)</default>") or ""
-    end
-  end
-end
+--- F.seedProperties: each property driver.xml declares, at its default.
+D.seedProperties = F.seedProperties
 
 return D
