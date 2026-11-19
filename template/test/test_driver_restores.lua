@@ -6,20 +6,10 @@
 -- build compiles it, and runs OnDriverInit and OnDriverLateInit. Loading such a library is what owes its restore,
 -- so a driver that loads none owes none.
 
+local F = require("c4_fixtures")
 local T = require("testlib")
 
 local MARK = "@@restore "
-
---- The repo's root: the folder above test/.
---- @return string
-local function repoRoot()
-  local source = debug.getinfo(1, "S").source:gsub("^@", "")
-  local dir = source:match("^(.*)/[^/]*$") or "."
-  local pipe = assert(io.popen(string.format("cd %q/.. && pwd", dir)))
-  local root = pipe:read("*l")
-  pipe:close()
-  return root
-end
 
 --- The interpreter this run is under, as make test or run_test.sh started it.
 --- @return string
@@ -91,7 +81,7 @@ local function probe(root, folder)
   return seen
 end
 
-local root = repoRoot()
+local root = F.repoRoot()
 local folders = {}
 local pipe = assert(io.popen(string.format("cd %s && ls -d drivers/*/ 2>/dev/null", quote(root))))
 for line in pipe:lines() do

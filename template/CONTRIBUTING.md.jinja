@@ -467,6 +467,9 @@ runs `fn` with `print` collected and returns `ok, err, output`, and
   so a test plays minutes of timers at once and in a fixed order. Drive it with
   `run(ms)` and `at(ms, fn)`, read `now()` and `errors` (what a timer or promise
   callback threw), then `restore()`.
+- `F.repoRoot()` is the repo's root. `F.seedProperties(xml)` sets `Properties`
+  to each default a `driver.xml` declares, and `F.answerConfig(xml)` answers the
+  version reads from it, so a driver loads as it does on a controller.
 
 ### Persisted values
 

@@ -18,16 +18,8 @@ local function read(path)
   return text
 end
 
---- The repo's root: the folder above test/.
---- @return string
-function D.root()
-  local source = debug.getinfo(1, "S").source:gsub("^@", "")
-  local dir = source:match("^(.*)/[^/]*$") or "."
-  local pipe = assert(io.popen(string.format("cd %q/.. && pwd", dir)))
-  local root = pipe:read("*l")
-  pipe:close()
-  return root
-end
+--- F.repoRoot: the folder above test/.
+D.root = F.repoRoot
 
 --- Every driver folder under drivers/ whose driver.xml names the light_v2 proxy, sorted.
 --- @param root string

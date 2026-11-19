@@ -25,10 +25,7 @@ local function restoreOf(value)
   if type(value) ~= "table" then
     return nil
   end
-  local ok, restore = pcall(function()
-    return value.RESTORE
-  end)
-  return ok and type(restore) == "table" and restore or nil
+  return type(value.RESTORE) == "table" and value.RESTORE or nil
 end
 
 local file = io.open(dir .. "/driver.xml", "rb")

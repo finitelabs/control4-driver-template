@@ -301,6 +301,17 @@ function F.virtualClock(opts)
   return clock
 end
 
+--- The repo's root: the folder above test/.
+--- @return string
+function F.repoRoot()
+  local source = debug.getinfo(1, "S").source:gsub("^@", "")
+  local dir = source:match("^(.*)/[^/]*$") or "."
+  local pipe = assert(io.popen(string.format("cd %q/.. && pwd", dir)))
+  local root = pipe:read("*l")
+  pipe:close()
+  return root
+end
+
 --- Answer the driver config reads the shim leaves out, minimum_os_version and version, from a
 --- driver.xml, as Director answers them from the driver's own, and run the driver on the OS it asks for.
 --- @param xml string
