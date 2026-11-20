@@ -330,6 +330,9 @@ function Settings:readSetup(xml)
   local level = levelId and setupPreset(levels, levelId)
   if level and tonumber(level.level) then
     self:_updateBrightnessOnMode({ BRIGHTNESS_PRESET_ID = levelId, BRIGHTNESS_PRESET_LEVEL = level.level })
+  elseif levelId and not level then
+    persist:delete(Settings.P_ON_MODE)
+    persist:delete(Settings.P_BRIGHTNESS_ON_MODE_PRESET)
   end
   -- A preset's level is sent only when it changes, so the setup holds Previous On's, which an unlit ramp's end keeps.
   for _, element in ipairs(IsList(levels) and levels or { levels }) do

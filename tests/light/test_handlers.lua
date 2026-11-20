@@ -23,7 +23,7 @@ local function fakeLight(profile, online)
     settings = {},
   }
   function light.settings:colorPreset(id, origin)
-    return id == 4 and origin == 1 and PRESET or nil
+    return id == 4 and (origin == nil or origin == 1) and PRESET or nil
   end
   for _, name in ipairs({ "command", "button", "scene", "setting", "ask", "membership", "groupHold" }) do
     light[name] = function(self, ...)
@@ -163,6 +163,12 @@ do
       LIGHT_COLOR_TARGET_PRESET_ORIGIN = "2",
     }),
     {}
+  )
+  calls = run(light, PROXY, "SET_COLOR_TARGET", { LIGHT_COLOR_TARGET_PRESET_ID = "4" })
+  T.eq(
+    "a preset id with no origin and no coordinates is looked up with no origin",
+    calls[1] and calls[1][2].color,
+    PRESET
   )
   T.eq(
     "an unknown preset with no coordinates is dropped",

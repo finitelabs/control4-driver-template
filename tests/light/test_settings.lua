@@ -394,6 +394,20 @@ do
   T.eq("a new light's setup lists no colors: no mode", persist:get(Settings.P_COLOR_ON_MODE, false), false)
 end
 
+T.section("a setup naming an on mode preset it does not list leaves the Default On level")
+do
+  local s = fresh()
+  s:apply("SET_PRESET_LEVEL", { LEVEL = "57" })
+  s:apply("UPDATE_BRIGHTNESS_PRESET", { COMMAND = "ADDED", ID = "42", NAME = "Reading", LEVEL = "43" })
+  s:apply("SET_BRIGHTNESS_ON_MODE", { PRESET_ID = "42" })
+  T.eq("a Top click goes to the preset's level", s:clickLevel(), 43)
+  s:readSetup(
+    setupFile("setup-607.xml"):gsub("<light_brightness_on_mode_preset_id>1<", "<light_brightness_on_mode_preset_id>42<")
+  )
+  T.eq("read, a Top click goes to Default On", { s:clickLevel(), s:onModeLevel() }, { 57, nil })
+  T.eq("no on mode preset is kept", persist:get(Settings.P_BRIGHTNESS_ON_MODE_PRESET), nil)
+end
+
 T.section("button colors: saved, else the setup's, else empty")
 do
   local s = fresh()
