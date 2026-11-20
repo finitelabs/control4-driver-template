@@ -521,6 +521,29 @@ case(function()
   g.restore()
 end)
 
+T.section("a group deleted from the project tells every member it left, and hands them nothing more")
+case(function()
+  local g = groupWorld()
+  for _, id in ipairs(MEMBERS) do
+    state(id, true, 40)
+  end
+  g.run(1000)
+  local mark = #g.handed
+  g.group:dissolve()
+  local after = {}
+  for i = mark + 1, #g.handed do
+    after[#after + 1] = g.handed[i]
+  end
+  local leaves = named(after, "LIGHT_GROUP_LEAVE")
+  T.eq("each told once, in the list's order", { #after, #leaves, leaves[1][1], leaves[3][1] }, { 3, 3, 11, 13 })
+  T.eq("naming this group", leaves[2][3].GROUP_ID, tostring(C4:GetDeviceID()))
+  mark = #g.handed
+  g.proxy:send("ON")
+  g.run(1000)
+  T.eq("a command after reaches no member", #g.handed, mark)
+  g.restore()
+end)
+
 T.section("the group is offline while no member is online")
 case(function()
   local g = groupWorld()
