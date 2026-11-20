@@ -211,6 +211,30 @@ do
   T.eq("Previous On's level is its preset 10's", s:previousOnLevel(), 33)
 end
 
+T.section("removing the on mode's preset leaves the Default On level, whether or not the removal carries LEVEL")
+do
+  for _, withLevel in ipairs({ true, false }) do
+    local name = withLevel and "with LEVEL" or "without LEVEL"
+    local s = fresh()
+    s:apply("SET_PRESET_LEVEL", { LEVEL = "57" })
+    s:apply("UPDATE_BRIGHTNESS_PRESET", { COMMAND = "ADDED", ID = "7", NAME = "Evening", LEVEL = "30" })
+    s:apply("UPDATE_BRIGHTNESS_PRESET", { COMMAND = "ADDED", ID = "42", NAME = "Reading", LEVEL = "43" })
+    s:apply("SET_BRIGHTNESS_ON_MODE", { PRESET_ID = "42" })
+    T.eq(name .. ": a Top click goes to the preset's level", s:clickLevel(), 43)
+    s:apply(
+      "UPDATE_BRIGHTNESS_PRESET",
+      { COMMAND = "REMOVED", ID = "42", NAME = "Reading", LEVEL = withLevel and "43" or nil }
+    )
+    T.eq(name .. ": removed, a Top click goes to Default On", { s:clickLevel(), s:onModeLevel() }, { 57, nil })
+    T.eq(name .. ": no on mode preset is kept", persist:get(Settings.P_BRIGHTNESS_ON_MODE_PRESET), nil)
+    T.eq(name .. ": the other preset stays", persist:get(Settings.P_BRIGHTNESS_PRESETS)["7"].level, 30)
+    s:apply("UPDATE_BRIGHTNESS_PRESET", { COMMAND = "ADDED", ID = "42", NAME = "Hall", LEVEL = "80" })
+    T.eq(name .. ": a new preset under the removed id is no on mode", s:clickLevel(), 57)
+    s:apply("SET_BRIGHTNESS_ON_MODE", { PRESET_ID = "7" })
+    T.eq(name .. ": the other preset can be the on mode", s:clickLevel(), 30)
+  end
+end
+
 T.section("a profile without on modes reads none, whatever is stored")
 do
   local s = fresh({ api = 1, proxy = 5001, dims = true, color = true, onModes = false, defaultOn = false })
@@ -313,6 +337,8 @@ do
   local color = s:colorPreset(9)
   T.check("a pushed preset's xy", color ~= nil and near(color.x, 0.2) and near(color.y, 0.35), color)
   T.eq("in the contract's mode", color and color.mode, "xy")
+  T.check("named as the device's", near((s:colorPreset(9, 1) or {}).x, 0.2), s:colorPreset(9, 1))
+  T.eq("the Color Agent's preset under the same id has none", s:colorPreset(9, 2), nil)
   s:apply("UPDATE_COLOR_PRESET", { ID = "9", COMMAND = "REMOVED" })
   T.eq("a removed preset has none", s:colorPreset(9), nil)
 end

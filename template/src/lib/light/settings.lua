@@ -193,10 +193,15 @@ local function presetColor(preset)
   return { x = preset.x, y = preset.y, mode = Color.fromProxyMode(preset.mode) }
 end
 
---- The color of a color preset the proxy pushed, for a SET_COLOR_TARGET that names only its id.
+--- The color of a color preset the proxy pushed, for a SET_COLOR_TARGET that names only the preset. The proxy
+--- pushes only the device's presets, and the Color Agent's use the same ids, so another origin has none.
 --- @param id integer
+--- @param origin integer|nil
 --- @return LightColor|nil
-function Settings:colorPreset(id)
+function Settings:colorPreset(id, origin)
+  if origin ~= nil and origin ~= Settings.PRESET_ORIGIN_DEVICE then
+    return nil
+  end
   return presetColor(persist:get(Settings.P_COLOR_PRESETS, {})[tostring(id)])
 end
 
@@ -414,7 +419,8 @@ function Settings:_setBrightnessOnMode(tParams)
   end
 end
 
---- UPDATE_BRIGHTNESS_PRESET. The on level follows an edit of the preset the on mode names.
+--- UPDATE_BRIGHTNESS_PRESET. The on level follows an edit of the preset the on mode names, and removing that
+--- preset leaves no on mode.
 --- @private
 --- @param tParams table<string, string>
 function Settings:_updateBrightnessPreset(tParams)
@@ -422,10 +428,12 @@ function Settings:_updateBrightnessPreset(tParams)
   if presetId == nil then
     return
   end
-  local level = tonumber(Select(tParams, "LEVEL"))
+  local removed = Select(tParams, "COMMAND") == "REMOVED"
+  -- A removal carries the deleted preset's LEVEL too (Light V2 UPDATE_BRIGHTNESS_PRESET).
+  local level = not removed and tonumber(Select(tParams, "LEVEL")) or nil
   local presets = persist:get(Settings.P_BRIGHTNESS_PRESETS, {})
   local key = tostring(presetId)
-  if Select(tParams, "COMMAND") == "REMOVED" then
+  if removed then
     presets[key] = nil
   else
     presets[key] = { id = presetId, name = Select(tParams, "NAME"), level = level }
@@ -437,6 +445,9 @@ function Settings:_updateBrightnessPreset(tParams)
       persist:delete(Settings.P_ON_MODE)
     else
       persist:set(Settings.P_ON_MODE, { id = presetId, level = level })
+    end
+    if removed then
+      persist:delete(Settings.P_BRIGHTNESS_ON_MODE_PRESET)
     end
   end
 end
