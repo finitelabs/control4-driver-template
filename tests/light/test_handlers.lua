@@ -22,8 +22,8 @@ local function fakeLight(profile, online)
     calls = {},
     settings = {},
   }
-  function light.settings:colorPreset(id)
-    return id == 4 and PRESET or nil
+  function light.settings:colorPreset(id, origin)
+    return id == 4 and (origin == nil or origin == 1) and PRESET or nil
   end
   for _, name in ipairs({ "command", "button", "scene", "setting", "ask", "membership", "groupHold" }) do
     light[name] = function(self, ...)
@@ -156,6 +156,20 @@ do
   color = calls[1][2].color
   T.eq("xy in mode 1 is cct", color.mode, "cct")
   T.check("and gets its kelvin", color.kelvin and math.abs(color.kelvin - 2700) <= 10, color)
+  T.eq(
+    "a preset with no coordinates is looked up with its origin",
+    run(light, PROXY, "SET_COLOR_TARGET", {
+      LIGHT_COLOR_TARGET_PRESET_ID = "4",
+      LIGHT_COLOR_TARGET_PRESET_ORIGIN = "2",
+    }),
+    {}
+  )
+  calls = run(light, PROXY, "SET_COLOR_TARGET", { LIGHT_COLOR_TARGET_PRESET_ID = "4" })
+  T.eq(
+    "a preset id with no origin and no coordinates is looked up with no origin",
+    calls[1] and calls[1][2].color,
+    PRESET
+  )
   T.eq(
     "an unknown preset with no coordinates is dropped",
     run(light, PROXY, "SET_COLOR_TARGET", {
