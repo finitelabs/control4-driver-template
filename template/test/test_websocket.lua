@@ -309,4 +309,32 @@ do
   T.check("and none once it has run", timersFor() == 0, timersFor())
 end
 
+--------------------------------------------------------------------------------
+T.section("A pong echoes the ping's payload (delta 11)")
+--------------------------------------------------------------------------------
+do
+  resetBindings()
+  -- A Samsung TV on 8002 pings with one byte of data and hangs up ~20 s later
+  -- when the pong comes back empty.
+  local ws = WebSocket:new("wss://pong.example.com:8002/ws")
+  ws:ConnectionChanged("ONLINE")
+  ws.running = true
+  local frames = ShimSentFrames()
+  local before = #frames
+  ws:ParsePacket(string.char(0x89, 0x01, 0x41))
+  local pong = frames[before + 1] and frames[before + 1].data or ""
+  T.check("one frame sent", #frames == before + 1, #frames - before)
+  T.check(
+    "masked pong carrying the same byte",
+    pong == string.char(0x8A, 0x81, 0, 0, 0, 0, 0x41),
+    (pong:gsub(".", function(c)
+      return string.format("%02X ", c:byte())
+    end))
+  )
+  ws:ParsePacket(string.char(0x89, 0x00))
+  local empty = frames[before + 2] and frames[before + 2].data or ""
+  T.check("an empty ping gets an empty pong", empty == string.char(0x8A, 0x80, 0, 0, 0, 0))
+  simulateClose(ws)
+end
+
 T.finish()
