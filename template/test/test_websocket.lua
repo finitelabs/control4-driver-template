@@ -4,6 +4,7 @@
 --   3. Host header omits the default port
 --   4. 64-bit extended-length field uses %016X
 --   5. delete(onComplete), with a second delete() chaining its callback
+--  11. a pong echoes the ping's payload
 --
 -- It also checks each place v15 stops the Ping and PongResponse timers.
 --
@@ -307,6 +308,69 @@ do
   T.check("delete() leaves only the close timer", timersFor() == 1 and running("Closing"), timersFor())
   fireTimers()
   T.check("and none once it has run", timersFor() == 0, timersFor())
+end
+
+--------------------------------------------------------------------------------
+T.section("A pong echoes the ping's payload (delta 11)")
+--------------------------------------------------------------------------------
+do
+  resetBindings()
+  local ws = WebSocket:new("wss://pong.example.com:8002/ws")
+  ws:ConnectionChanged("ONLINE")
+  ws.running = true
+  local delivered = {}
+  function ws:ProcessMessage(data)
+    table.insert(delivered, data)
+  end
+
+  local seen = #sentFrames
+  --- The frames sent since the last call, as { opcode, masked, len, payload } with the payload unmasked.
+  local function sent()
+    local out = {}
+    for i = seen + 1, #sentFrames do
+      local f = sentFrames[i].data
+      local key = { f:byte(3, 6) }
+      local payload = f:sub(7):gsub("()(.)", function(n, c)
+        return string.char(bit.bxor(c:byte(), key[(n - 1) % 4 + 1]))
+      end)
+      table.insert(out, { opcode = f:byte(1), masked = f:byte(2) >= 0x80, len = f:byte(2) % 0x80, payload = payload })
+    end
+    seen = #sentFrames
+    return out
+  end
+
+  ws:ParsePacket(string.char(0x89, 0x01, 0x41))
+  local out = sent()
+  T.check(
+    "a 1-byte ping gets one masked pong carrying the same byte",
+    #out == 1 and out[1].opcode == 0x8A and out[1].masked and out[1].len == 1 and out[1].payload == "A",
+    #out
+  )
+
+  ws:ParsePacket(string.char(0x89, 0x00))
+  out = sent()
+  T.check("an empty ping gets an empty pong", #out == 1 and out[1].opcode == 0x8A and out[1].payload == "", #out)
+
+  ws:ParsePacket(string.char(0x89, 0x03, 0x61))
+  T.check("a ping cut short waits for the rest", #sent() == 0)
+  ws:ParsePacket("bc")
+  out = sent()
+  T.check("and is answered once it arrives", #out == 1 and out[1].payload == "abc", #out)
+
+  ws:ParsePacket(string.char(0x01, 0x03) .. "hel" .. string.char(0x89, 0x02) .. "pi" .. string.char(0x80, 0x02) .. "lo")
+  out = sent()
+  T.check("a ping between fragments is answered", #out == 1 and out[1].payload == "pi", #out)
+  T.check("and the message around it arrives whole", #delivered == 1 and delivered[1] == "hello", delivered[1])
+
+  local long = string.rep("x", 130)
+  ws:ParsePacket(string.char(0x89, 0x7E, 0x00, #long) .. long)
+  out = sent()
+  T.check(
+    "a ping over the 125-byte limit gets a pong cut to 125",
+    #out == 1 and out[1].len == 125 and out[1].payload == long:sub(1, 125),
+    out[1] and out[1].len
+  )
+  simulateClose(ws)
 end
 
 T.finish()
