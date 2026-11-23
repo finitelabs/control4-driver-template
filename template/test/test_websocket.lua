@@ -324,7 +324,7 @@ do
   end
 
   local seen = #sentFrames
-  --- The frames sent since the last call, as { opcode, masked, payload } with the payload unmasked.
+  --- The frames sent since the last call, as { opcode, masked, len, payload } with the payload unmasked.
   local function sent()
     local out = {}
     for i = seen + 1, #sentFrames do
