@@ -172,28 +172,79 @@ end
 
 --- @class DriverPackage
 --- @field name string The driver's file, as `example_light.c4z`.
---- @field body string The .c4z's contents.
+--- @field body? string The .c4z's contents; nil takes the copy this driver carries in its own package, under the
+--- folder `make package` puts the embedded_drivers answer's drivers in, at this driver's version.
 
---- Installs driver packages as an update in Composer does: puts each in the controller's driver store, then asks
---- Director, on port 5020, to update the project's drivers of each file that has any. Nothing is sent when a write
---- doesn't take; that file keeps its old contents. Director is asked one file at a time, since it drops requests still
---- queued on a socket that closes, and this driver's own file last, since its update reloads this driver.
+-- Where `make package` puts the drivers a host carries in the host's own package.
+local CARRIED_DIR = "c4z"
+
+--- A driver version as a number: the build stamps the date, as 20261125.
+--- @param version string|nil
+--- @return number|nil
+local function versionNumber(version)
+  return tonumber(string.match(tostring(version or ""), "^%d+$") or "")
+end
+
+--- The contents to install for a package, or nil when there is nothing to install: a carried copy this driver doesn't
+--- have, or one the project's drivers already run at this driver's version or newer. A carried copy in the store
+--- with none of its drivers unpacked yet has no version to compare, so it is left as it is too.
+--- @param package DriverPackage
+--- @return string|nil body
+local function bodyToInstall(package)
+  if package.body ~= nil then
+    return package.body
+  end
+  local unpacked = versionNumber(GetDriverVersion(package.name))
+  local carried = versionNumber(C4:GetDriverConfigInfo("version"))
+  UnlockC4ZRoot()
+  C4:FileSetDir("C4Z_ROOT")
+  if C4:FileExists(package.name) and (unpacked == nil or carried == nil or unpacked >= carried) then
+    return nil
+  end
+  C4:FileSetDir("C4Z", CARRIED_DIR)
+  local body = FileRead(package.name)
+  return not IsEmpty(body) and body or nil
+end
+
+--- Puts each package in the controller's driver store and writes it there, then asks Director to update the
+--- project's drivers of it, as an update in Composer does.
+--- @param packages DriverPackage[]
+--- @return string[] written
+local function writePackages(packages)
+  local written = {}
+  for _, package in ipairs(packages) do
+    local body = bodyToInstall(package)
+    if body ~= nil then
+      UnlockC4ZRoot()
+      C4:FileSetDir("C4Z_ROOT")
+      -- Already the same when an earlier install wrote it and Director's update was lost.
+      if FileRead(package.name) ~= body then
+        if not replaceFile(package.name, body) then
+          error(string.format("failed to write %s", package.name), 0)
+        end
+        log:info("Put %s in the controller's driver store", package.name)
+      end
+      table.insert(written, package.name)
+    end
+  end
+  return written
+end
+
+--- Installs drivers as an update in Composer does: puts each in the controller's driver store, then asks Director, on
+--- port 5020, to update the project's drivers of each file that has any. A package with no body is the copy this
+--- driver carries in its own package, installed only when the store has none or the project's drivers of it run an
+--- older version than this driver; that is how a host adds the drivers it carries, and how updating the host updates
+--- them. A write that doesn't take keeps the file's old contents, and nothing is sent. Director is asked one file at a
+--- time, since it drops requests still queued on a socket that closes, and this driver's own file last, since its
+--- update reloads this driver. It leaves the file folder at the driver store, as GetDriverVersion does.
 --- @param packages DriverPackage[]
 --- @return Deferred<string[], string> installed The files written, once Director answered each update or this
 --- driver's own was sent.
 function InstallDrivers(packages)
-  local written = {}
-  for _, package in ipairs(packages) do
-    UnlockC4ZRoot()
-    C4:FileSetDir("C4Z_ROOT")
-    -- Already the same when an earlier install wrote it and Director's update was lost.
-    if FileRead(package.name) ~= package.body then
-      if not replaceFile(package.name, package.body) then
-        return reject(string.format("failed to write %s", package.name))
-      end
-      log:info("Put %s in the controller's driver store", package.name)
-    end
-    table.insert(written, package.name)
+  local ok, written = pcall(writePackages, packages)
+  if not ok then
+    log:error("Couldn't install drivers: %s", written)
+    return reject(written)
   end
 
   local ownFilename = C4.GetDriverFileName and C4:GetDriverFileName()
@@ -240,56 +291,6 @@ function InstallDrivers(packages)
   end
   send(1)
   return d
-end
-
---- A driver version as a number: the build stamps the date, as 20261125.
---- @param version string|nil
---- @return number|nil
-local function versionNumber(version)
-  return tonumber(string.match(tostring(version or ""), "^%d+$") or "")
-end
-
--- Where `make package` puts the drivers a host carries (the embedded_drivers answer) in the host's own package.
-local CARRIED_DIR = "c4z"
-
---- @param filename string
---- @return boolean available
-local function installCarriedDriver(filename)
-  -- The version Director unpacked, which the project's drivers of the file run.
-  local unpacked = versionNumber(GetDriverVersion(filename))
-  local carried = versionNumber(C4:GetDriverConfigInfo("version"))
-  UnlockC4ZRoot()
-  C4:FileSetDir("C4Z_ROOT")
-  local inStore = C4:FileExists(filename)
-  -- A copy with none of its drivers unpacked yet has no version to compare, so it is left as it is too.
-  if inStore and (unpacked == nil or carried == nil or unpacked >= carried) then
-    return true
-  end
-  C4:FileSetDir("C4Z", CARRIED_DIR)
-  local body = FileRead(filename)
-  if IsEmpty(body) then
-    return inStore
-  end
-  InstallDrivers({ { name = filename, body = body } }):next(nil, function(err)
-    log:error("Couldn't install %s: %s", filename, err)
-  end)
-  return C4:FileExists(filename)
-end
-
---- Installs a driver this driver carries in its own package, when the store has none or the project's drivers of it
---- run an older version than this driver. Otherwise the store is left as it is: drivers on this driver's version or
---- newer, or a copy put there another way before any driver of it was added. `lib.companions` runs it before adding
---- companions; a host also runs it at start, so an update of the host brings the drivers it carries along. It leaves
---- the file folder at the driver store, as GetDriverVersion does.
---- @param filename string The carried driver's file, as `example_light.c4z`.
---- @return boolean available Whether the store has the file, so a driver of it can be added.
-function InstallCarriedDriver(filename)
-  local ok, available = pcall(installCarriedDriver, filename)
-  if not ok then
-    log:error("Couldn't check the driver store for %s: %s", filename, available)
-    return false
-  end
-  return available
 end
 
 --- What a send's trace shows in place of parameters that hold a secret.

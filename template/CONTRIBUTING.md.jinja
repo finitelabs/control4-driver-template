@@ -395,12 +395,12 @@ its package. Each embedded driver also ships as its own `.c4z`, so
 `lib.driver-filenames` lists it and the OSS build's updater keeps an installed
 copy current.
 
-`InstallCarriedDriver(file)` in `lib.utils` installs a carried driver with
-`InstallDrivers`, the same install the GitHub updater uses for a download. The
-host calls it at start, so updating the host updates the drivers it carries, and
-`lib.companions` calls it for each companion's file before adding any. It
-installs when the store has none or the project's drivers of it run an older
-version than the host, and otherwise leaves the store as it is.
+`InstallDrivers(packages)` in `lib.utils` installs drivers, and the GitHub
+updater uses it for a download. A package given with no body is the copy the
+host carries, installed only when the store has none or the project's drivers of
+it run an older version than the host. The host installs what it carries at
+start, so updating the host updates them, and `lib.companions` installs each
+companion's file before adding any.
 {%- endif %}
 
 ## Writing Tests

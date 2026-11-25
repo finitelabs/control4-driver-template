@@ -210,7 +210,7 @@ local function add(need)
   return d
 end
 
---- Gives every need's binding a companion, one at a time, after InstallCarriedDriver for each need's file. A
+--- Gives every need's binding a companion, one at a time, after InstallDrivers for each need's file. A
 --- binding already bound is left alone. Otherwise the companion it had is bound again, when it is in the project and
 --- bound to nothing; else a spare the rule allows; else a new one, added in the need's room with its name and shown
 --- only in that room, ADD_SPACING_MS before the next. An add with no answer in ADD_TIMEOUT_MS fails, and the next need
@@ -233,13 +233,14 @@ function Companions:setup(needs, options)
   for i, need in ipairs(needs) do
     pending[i] = need
   end
-  local installed = {}
+  local carried, seen = {}, {}
   for _, need in ipairs(needs) do
-    if not installed[need.file] then
-      installed[need.file] = true
-      InstallCarriedDriver(need.file)
+    if not seen[need.file] then
+      seen[need.file] = true
+      table.insert(carried, { name = need.file })
     end
   end
+  InstallDrivers(carried)
   -- A companion some binding had is never another's spare.
   local taken = {}
   for _, id in pairs(remembered()) do

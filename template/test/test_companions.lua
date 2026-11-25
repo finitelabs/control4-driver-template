@@ -339,6 +339,16 @@ local function updatesSent(capture)
   return count
 end
 
+--- Installs the copy the host carries, as a host does at start.
+--- @return string|nil refused Why the install was refused, nil when it was not.
+local function install()
+  local refused
+  InstallDrivers({ { name = LIGHT } }):next(nil, function(err)
+    refused = err
+  end)
+  return refused
+end
+
 T.section("A companion the host carries is put in the store and added when the store has none")
 project()
 ShimSetDriverFiles({})
@@ -364,7 +374,7 @@ T.section("Companions on an older version are updated to the one the host carrie
 project({ [500] = existing("Island", KITCHEN) })
 restore = store({ stored = "older package", running = "20261101", carried = CARRIED, version = "20261125" })
 tcp = F.captureTcpClient()
-T.truthy("it is available", InstallCarriedDriver(LIGHT))
+T.eq("the install is not refused", install(), nil)
 T.eq("the store has the carried copy", ShimFiles("C4Z_ROOT")[LIGHT], CARRIED)
 T.eq("Director is asked to update them once", updatesSent(tcp), 1)
 tcp.restore()
@@ -374,7 +384,7 @@ T.section("Companions on the host's version or newer are left alone, and so is t
 for _, running in ipairs({ "20261125", "20261201" }) do
   restore = store({ stored = "their package", running = running, carried = CARRIED, version = "20261125" })
   tcp = F.captureTcpClient()
-  T.truthy("it is available, running " .. running, InstallCarriedDriver(LIGHT))
+  T.eq("the install is not refused, running " .. running, install(), nil)
   T.eq("the store keeps its copy, running " .. running, ShimFiles("C4Z_ROOT")[LIGHT], "their package")
   T.eq("no update is asked for, running " .. running, updatesSent(tcp), 0)
   tcp.restore()
@@ -383,7 +393,7 @@ end
 
 T.section("A copy in the store with no companion of it in the project is left as it is")
 restore = store({ stored = "newer package 20261201", carried = CARRIED, version = "20261125" })
-T.truthy("it is available", InstallCarriedDriver(LIGHT))
+T.eq("the install is not refused", install(), nil)
 T.eq("the store keeps its copy", ShimFiles("C4Z_ROOT")[LIGHT], "newer package 20261201")
 restore()
 
@@ -391,12 +401,12 @@ T.section("An update lost on an earlier start is asked for again")
 project({ [500] = existing("Island", KITCHEN) })
 restore = store({ stored = CARRIED, running = "20261101", carried = CARRIED, version = "20261125" })
 tcp = F.captureTcpClient()
-InstallCarriedDriver(LIGHT)
+install()
 T.eq("Director is asked to update them", updatesSent(tcp), 1)
 tcp.restore()
 restore()
 
-T.section("A write the store refuses leaves the companion unavailable, or the store's older copy in place")
+T.section("A write the store refuses is refused, and leaves the store with nothing, or its older copy")
 local write = C4.FileWrite
 local function refuseWrites()
   C4.FileWrite = function()
@@ -405,7 +415,8 @@ local function refuseWrites()
 end
 restore = store({ carried = CARRIED, version = "20261125" })
 refuseWrites()
-T.eq("with no copy, it is not available", InstallCarriedDriver(LIGHT), false)
+T.eq("with no copy, the install is refused", install(), "failed to write " .. LIGHT)
+T.eq("the store has none", ShimFiles("C4Z_ROOT")[LIGHT], nil)
 C4.FileWrite = write
 restore()
 restore = store({ stored = "older package", running = "20261101", carried = CARRIED, version = "20261125" })
@@ -418,7 +429,7 @@ C4.FileWrite = function(...)
   end
   return write(...)
 end
-T.truthy("with an older copy, it is still available", InstallCarriedDriver(LIGHT))
+T.eq("with an older copy, the install is refused", install(), "failed to write " .. LIGHT)
 T.eq("the older copy is put back", ShimFiles("C4Z_ROOT")[LIGHT], "older package")
 T.eq("no update is asked for", updatesSent(tcp), 0)
 C4.FileWrite = write
@@ -443,7 +454,7 @@ C4.FileSetDir = function(self, dir, ...)
   end
   return setDir(self, dir, ...)
 end
-T.eq("it is not available", InstallCarriedDriver(LIGHT), false)
+T.truthy("the install is refused", install())
 result = run({ need(5012, "Kitchen Pendant") })
 T.eq("a setup still adds", result and result.added, 1)
 result = run({ need(5013, "Island") })
