@@ -380,6 +380,12 @@ for _, running in ipairs({ "20261125", "20261201" }) do
   restore()
 end
 
+T.section("A copy in the store with no companion of it in the project is left as it is")
+restore = store({ stored = "newer package 20261201", carried = CARRIED, version = "20261125" })
+T.truthy("it is available", companions:install(LIGHT))
+T.eq("the store keeps its copy", ShimFiles("C4Z_ROOT")[LIGHT], "newer package 20261201")
+restore()
+
 T.section("An update lost on an earlier start is asked for again")
 restore = store({ stored = CARRIED, running = "20261101", carried = CARRIED, version = "20261125" })
 tcp = F.captureTcpClient()

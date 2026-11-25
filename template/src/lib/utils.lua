@@ -129,6 +129,23 @@ function GetDriverVersion(filename)
   return Select(ParseXml(FileRead("driver.xml")) or {}, "devicedata", "version") or nil
 end
 
+--- Replaces a file in the current FileSetDir folder, and puts its old contents back when the write doesn't take.
+--- @param filename string
+--- @param contents string
+--- @return boolean written Whether the file now holds `contents`.
+function ReplaceFile(filename, contents)
+  local previous = C4:FileExists(filename) and FileRead(filename) or nil
+  FileWrite(filename, contents, true)
+  -- The vendored FileWrite returns nothing, so only reading the file back shows a failed write.
+  if FileRead(filename) == contents then
+    return true
+  end
+  if previous ~= nil then
+    FileWrite(filename, previous, true)
+  end
+  return false
+end
+
 --- The request that asks Director, on port 5020, to update every driver of a file in the project to the copy in the
 --- controller's driver store, as an update in Composer does.
 --- @param filename string The driver's file, as `example_light.c4z`.

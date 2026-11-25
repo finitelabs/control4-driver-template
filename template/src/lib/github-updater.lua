@@ -159,14 +159,7 @@ function GitHubUpdater:downloadOutdatedDrivers(dir, repo, driverFilenames, inclu
         -- one driver from this repo reaches the write with the alias still locked.
         UnlockC4ZRoot()
         C4:FileSetDir(dir)
-        local currentContents = C4:FileExists(download.name) and FileRead(download.name) or nil
-        FileWrite(download.name, download.body, true)
-        -- The vendored FileWrite returns nothing, so only reading the file back shows a failed write.
-        if FileRead(download.name) ~= download.body then
-          -- Restore the previous contents if the write failed
-          if currentContents ~= nil then
-            FileWrite(download.name, currentContents, true)
-          end
+        if not ReplaceFile(download.name, download.body) then
           return reject(string.format("failed to write asset %s", download.name))
         end
         table.insert(written, download.name)
