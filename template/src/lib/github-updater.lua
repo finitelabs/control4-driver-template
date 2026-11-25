@@ -111,17 +111,15 @@ function GitHubUpdater:getOutdatedDriverAssets(repo, driverFilenames, includePre
   end)
 end
 
---- Download outdated driver assets from GitHub and write them to the specified directory.
---- @param dir string Target directory to save downloaded driver assets.
+--- Downloads the outdated driver assets of the latest release from GitHub.
 --- @param repo string The GitHub repository, in the format "owner/repo".
 --- @param driverFilenames string[] List of driver filenames to update.
 --- @param includePrereleases? boolean If true, includes pre-releases (optional).
 --- @param forceUpdate? boolean Optional. If true, downloads all drivers regardless of version (optional).
---- @return Deferred<string[], string|table<number, string>> outdatedDrivers Deferred resolving to a list of successfully downloaded driver filenames, or rejected with an error message or a table of them indexed by number.
-function GitHubUpdater:downloadOutdatedDrivers(dir, repo, driverFilenames, includePrereleases, forceUpdate)
+--- @return Deferred<DriverPackage[], string|table<number, string>> packages Deferred resolving to each downloaded driver, or rejected with an error message or a table of them indexed by number.
+function GitHubUpdater:downloadOutdatedDrivers(repo, driverFilenames, includePrereleases, forceUpdate)
   log:trace(
-    "GitHubUpdater:downloadOutdatedDrivers(%s, %s, %s, %s, %s)",
-    dir,
+    "GitHubUpdater:downloadOutdatedDrivers(%s, %s, %s, %s)",
     repo,
     driverFilenames,
     includePrereleases,
@@ -149,28 +147,14 @@ function GitHubUpdater:downloadOutdatedDrivers(dir, repo, driverFilenames, inclu
 
       table.insert(downloads, download)
     end
-    -- Nothing is written until every asset has downloaded, so a failed download leaves
+    -- Nothing is installed until every asset has downloaded, so a failed download leaves
     -- every installed file as it was.
-    return deferred.all(downloads):next(function(downloaded)
-      --- @type string[]
-      local written = {}
-      for _, download in ipairs(downloaded) do
-        -- GetDriverVersion only unlocks C4Z_ROOT for companion drivers, so a project running
-        -- one driver from this repo reaches the write with the alias still locked.
-        UnlockC4ZRoot()
-        C4:FileSetDir(dir)
-        if not ReplaceFile(download.name, download.body) then
-          return reject(string.format("failed to write asset %s", download.name))
-        end
-        table.insert(written, download.name)
-      end
-      return written
-    end)
+    return deferred.all(downloads)
   end)
 end
 
 --- Update all given drivers to the latest release from GitHub.
---- Downloads new drivers, writes them, and sends them for update over TCP to the local system.
+--- Downloads new drivers and installs them with InstallDrivers.
 --- @param repo string The GitHub repository, in the format "owner/repo".
 --- @param driverFilenames string[] List of driver filenames to update: the repo's own is `require("lib.driver-filenames")`.
 --- @param includePrereleases? boolean If true, includes pre-releases (optional).
@@ -187,10 +171,8 @@ function GitHubUpdater:updateAll(repo, driverFilenames, includePrereleases, forc
   end
 
   return self
-    :downloadOutdatedDrivers("C4Z_ROOT", repo, installedDriverFilenames, includePrereleases, forceUpdate)
-    :next(function(downloadedDriverFilenames)
-      return UpdateProjectDrivers(downloadedDriverFilenames)
-    end)
+    :downloadOutdatedDrivers(repo, installedDriverFilenames, includePrereleases, forceUpdate)
+    :next(InstallDrivers)
 end
 
 return GitHubUpdater:new()
