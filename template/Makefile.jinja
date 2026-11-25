@@ -299,6 +299,7 @@ package: $(VENV_STAMP) $(PACKAGER) ## Create .c4z driver packages
 		[ -d "$$host" ] || { echo "embedded_drivers names {{ pair.split(':')[0] }}, which $$build has no driver folder for"; exit 1; }; \
 		mkdir -p "$$host/c4z"; \
 {%- for driver in pair.split(':')[1].split(',') %}
+		[ -d "build/$$build/drivers/{{ driver }}" ] || { echo "embedded_drivers names {{ driver }}, which $$build has no driver folder for"; exit 1; }; \
 		archive=$$($(VENV_PY) tools/package.py c4z-filename "build/$$build/drivers/{{ driver }}/driver.c4zproj") || exit 1; \
 		cp "dist/$$build/c4z/$$archive" "$$host/c4z/" || exit 1; \
 {%- endfor %}

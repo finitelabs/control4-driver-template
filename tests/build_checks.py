@@ -418,7 +418,7 @@ def embedded(render):
             if build == "drivercentral":
                 problems += encryption_problems(out / f"{host}.c4z", files)
             for name in names.split(","):
-                archive = name.replace("_", ".") + ".c4z"
+                archive = ElementTree.parse(render / "drivers" / name / "driver.c4zproj").getroot().get("name") + ".c4z"
                 own = render / out / archive
                 if not own.exists():
                     problems.append(f"the {build} build made no {archive} of its own")
