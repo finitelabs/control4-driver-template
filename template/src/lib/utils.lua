@@ -273,8 +273,6 @@ local function installCarriedDriver(filename)
   InstallDrivers({ { name = filename, body = body } }):next(nil, function(err)
     log:error("Couldn't install %s: %s", filename, err)
   end)
-  UnlockC4ZRoot()
-  C4:FileSetDir("C4Z_ROOT")
   return C4:FileExists(filename)
 end
 
