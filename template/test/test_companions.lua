@@ -303,11 +303,12 @@ result = run({ need(5012) })
 T.eq("the next setup binds it again", result and { result.rebound, result.added }, { 1, 0 })
 T.eq("the project has one", lights(), 1)
 
--- A host carrying the companion in its own package, as the embedded_drivers answer packages it.
+-- The companion's .c4z as the host carries it in its own package.
 local CARRIED = "example_light package 20261125"
 
---- The controller's driver store and the host's package: what the store holds, the version the project's companions
---- run, and the host's own version and carried copy.
+--- Sets up the controller's driver store and the host's package. `stored` is what the store holds, `running` is the
+--- version the project's companions run, `version` is the host's own version, and `carried` is the copy the host
+--- carries. Returns a function that undoes the setup.
 --- @param opts { stored?: string, running?: string, carried?: string, version?: string }
 local function store(opts)
   local root, package, unpacked = ShimFiles("C4Z_ROOT"), ShimFiles("C4Z/c4z"), ShimFiles("C4Z_ROOT/example_light")
@@ -340,7 +341,7 @@ local function updatesSent(capture)
 end
 
 --- Installs the copy the host carries, as a host does at start.
---- @return string|nil refused Why the install was refused, nil when it was not.
+--- @return string|nil refused The reason the install was refused, or nil if it wasn't.
 local function install()
   local refused
   InstallDrivers({ { name = LIGHT } }):next(nil, function(err)
@@ -406,7 +407,7 @@ T.eq("Director is asked to update them", updatesSent(tcp), 1)
 tcp.restore()
 restore()
 
-T.section("A write the store refuses is refused, and leaves the store with nothing, or its older copy")
+T.section("When a write fails, the install is refused and the store keeps what it had")
 local write = C4.FileWrite
 local function refuseWrites()
   C4.FileWrite = function()
@@ -445,7 +446,7 @@ T.eq("Director is asked once", updatesSent(tcp), 1)
 tcp.restore()
 restore()
 
-T.section("A store the controller won't open leaves setup working")
+T.section("Setup still works when the controller won't open the store")
 project()
 local setDir = C4.FileSetDir
 C4.FileSetDir = function(self, dir, ...)

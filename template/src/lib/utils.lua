@@ -171,21 +171,21 @@ local function updateProjectC4iRequest(filename)
 end
 
 --- @class DriverPackage
---- @field name string The driver's file, as `example_light.c4z`.
---- @field body? string The .c4z's contents; nil takes the copy this driver carries.
+--- @field name string The driver's file name, such as `example_light.c4z`.
+--- @field body? string The .c4z file's contents. When nil, the copy this driver carries in its package is used.
 
--- Where `make package` puts the drivers a host carries in the host's own package.
+-- The folder in a host's package where `make package` puts the drivers it carries.
 local CARRIED_DIR = "c4z"
 
---- A driver version as a number: the build stamps the date, as 20261125.
+--- Returns a driver version as a number. Versions are build dates, such as 20261125.
 --- @param version string|nil
 --- @return number|nil
 local function versionNumber(version)
   return tonumber(string.match(tostring(version or ""), "^%d+$") or "")
 end
 
---- The contents to install for a package, or nil when there is nothing to install. A copy in the store with none of
---- its drivers unpacked yet has no version to compare, so it is left as it is.
+--- Returns the contents to install for a package, or nil when there is nothing to install. If the store has a copy but
+--- none of its drivers has been added yet, there is no version to compare, so the copy is left alone.
 --- @param package DriverPackage
 --- @return string|nil body
 local function bodyToInstall(package)
@@ -204,8 +204,7 @@ local function bodyToInstall(package)
   return not IsEmpty(body) and body or nil
 end
 
---- Puts each package in the controller's driver store and writes it there, then asks Director to update the
---- project's drivers of it, as an update in Composer does.
+--- Writes each package that needs installing to the controller's driver store, and returns the file names written.
 --- @param packages DriverPackage[]
 --- @return string[] written
 local function writePackages(packages)
@@ -215,7 +214,7 @@ local function writePackages(packages)
     if body ~= nil then
       UnlockC4ZRoot()
       C4:FileSetDir("C4Z_ROOT")
-      -- Already the same when an earlier install wrote it and Director's update was lost.
+      -- The file can already match if an earlier install wrote it but Director's update was lost.
       if FileRead(package.name) ~= body then
         if not replaceFile(package.name, body) then
           error(string.format("failed to write %s", package.name), 0)
@@ -228,16 +227,16 @@ local function writePackages(packages)
   return written
 end
 
---- Installs drivers as an update in Composer does: puts each in the controller's driver store, then asks Director, on
---- port 5020, to update the project's drivers of each file that has any. A package with no body is the copy this
---- driver carries in its own package, installed only when the store has none or the project's drivers of it run an
---- older version than this driver. A write that doesn't take keeps the file's old contents, and nothing is sent.
---- Director is asked one file at a time, since it drops requests still queued on a socket that closes, and this
---- driver's own file last, since its update reloads this driver. It leaves the file folder at the driver store, as
---- GetDriverVersion does.
+--- Installs drivers the same way an update in Composer does. Each package is written to the controller's driver store,
+--- then Director is asked (on port 5020) to update the project's devices that use each file. A package with no body is
+--- the copy this driver carries in its own package. It is installed only when the store doesn't have it, or when the
+--- project's devices run an older version than this driver. If a write fails, the file keeps its old contents and
+--- nothing is sent to Director. Director is asked about one file at a time, because it drops requests still queued on a
+--- closed socket. This driver's own file goes last, because updating it reloads this driver. Leaves the current folder
+--- set to the driver store, as GetDriverVersion does.
 --- @param packages DriverPackage[]
---- @return Deferred<string[], string> installed The files written, once Director answered each update or this
---- driver's own was sent.
+--- @return Deferred<string[], string> installed Resolves with the files written, after Director answers each update or
+--- after this driver's own update is sent.
 function InstallDrivers(packages)
   local ok, written = pcall(writePackages, packages)
   if not ok then
@@ -271,7 +270,7 @@ function InstallDrivers(packages)
         client:Write(updateProjectC4iRequest(filename))
         client:ReadUntil("\0")
         if filename == own then
-          -- Its update reloads this driver, usually before Director replies.
+          -- Updating this driver reloads it, usually before Director replies.
           d:resolve(written)
         end
       end)

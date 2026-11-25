@@ -1742,8 +1742,8 @@ end
 local shim_driver_files = {}
 local shim_next_id = 9000
 
---- @param files string[] The driver files C4:AddDevice can add, with those in ShimFiles("C4Z_ROOT"); any other is not on
---- the controller.
+--- @param files string[] The driver files C4:AddDevice can add, along with any file in ShimFiles("C4Z_ROOT"). Any other
+--- file counts as not on the controller.
 function ShimSetDriverFiles(files)
   shim_driver_files = {}
   for _, file in ipairs(files or {}) do
