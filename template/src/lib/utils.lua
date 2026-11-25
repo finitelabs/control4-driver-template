@@ -172,8 +172,7 @@ end
 
 --- @class DriverPackage
 --- @field name string The driver's file, as `example_light.c4z`.
---- @field body? string The .c4z's contents; nil takes the copy this driver carries in its own package, under the
---- folder `make package` puts the embedded_drivers answer's drivers in, at this driver's version.
+--- @field body? string The .c4z's contents; nil takes the copy this driver carries.
 
 -- Where `make package` puts the drivers a host carries in the host's own package.
 local CARRIED_DIR = "c4z"
@@ -185,9 +184,8 @@ local function versionNumber(version)
   return tonumber(string.match(tostring(version or ""), "^%d+$") or "")
 end
 
---- The contents to install for a package, or nil when there is nothing to install: a carried copy this driver doesn't
---- have, or one the project's drivers already run at this driver's version or newer. A carried copy in the store
---- with none of its drivers unpacked yet has no version to compare, so it is left as it is too.
+--- The contents to install for a package, or nil when there is nothing to install. A copy in the store with none of
+--- its drivers unpacked yet has no version to compare, so it is left as it is.
 --- @param package DriverPackage
 --- @return string|nil body
 local function bodyToInstall(package)
@@ -233,10 +231,10 @@ end
 --- Installs drivers as an update in Composer does: puts each in the controller's driver store, then asks Director, on
 --- port 5020, to update the project's drivers of each file that has any. A package with no body is the copy this
 --- driver carries in its own package, installed only when the store has none or the project's drivers of it run an
---- older version than this driver; that is how a host adds the drivers it carries, and how updating the host updates
---- them. A write that doesn't take keeps the file's old contents, and nothing is sent. Director is asked one file at a
---- time, since it drops requests still queued on a socket that closes, and this driver's own file last, since its
---- update reloads this driver. It leaves the file folder at the driver store, as GetDriverVersion does.
+--- older version than this driver. A write that doesn't take keeps the file's old contents, and nothing is sent.
+--- Director is asked one file at a time, since it drops requests still queued on a socket that closes, and this
+--- driver's own file last, since its update reloads this driver. It leaves the file folder at the driver store, as
+--- GetDriverVersion does.
 --- @param packages DriverPackage[]
 --- @return Deferred<string[], string> installed The files written, once Director answered each update or this
 --- driver's own was sent.
