@@ -226,22 +226,7 @@ function GitHubUpdater:updateAll(repo, driverFilenames, includePrereleases, forc
         if driverFilename == nil then
           return d:resolve(downloadedDriverFilenames)
         end
-        local c4soap = XMLTag(
-          "c4soap",
-          XMLTag("param", driverFilename, nil, nil, {
-            name = "name",
-            type = "string",
-          }),
-          false,
-          false,
-          {
-            name = "UpdateProjectC4i",
-            session = "0",
-            operation = "RWX",
-            category = "composer",
-            async = "0",
-          }
-        ) .. "\0"
+        local c4soap = UpdateProjectC4iRequest(driverFilename)
         C4:CreateTCPClient()
           :OnConnect(function(client)
             client:Write(c4soap)

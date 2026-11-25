@@ -129,6 +129,29 @@ function GetDriverVersion(filename)
   return Select(ParseXml(FileRead("driver.xml")) or {}, "devicedata", "version") or nil
 end
 
+--- The request that asks Director, on port 5020, to update every driver of a file in the project to the copy in the
+--- controller's driver store, as an update in Composer does.
+--- @param filename string The driver's file, as `example_light.c4z`.
+--- @return string c4soap
+function UpdateProjectC4iRequest(filename)
+  return XMLTag(
+    "c4soap",
+    XMLTag("param", filename, nil, nil, {
+      name = "name",
+      type = "string",
+    }),
+    false,
+    false,
+    {
+      name = "UpdateProjectC4i",
+      session = "0",
+      operation = "RWX",
+      category = "composer",
+      async = "0",
+    }
+  ) .. "\0"
+end
+
 --- What a send's trace shows in place of parameters that hold a secret.
 local REDACTED = "***REDACTED***"
 
