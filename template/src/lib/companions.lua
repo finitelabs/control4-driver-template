@@ -46,8 +46,6 @@ local PERSIST_KEY = "Companions"
 local ADD_SPACING_MS = 5000
 local ADD_TIMEOUT_MS = 30000
 local ROOM_C4I_NAME = "roomdevice.c4i"
--- Where `make package` puts the drivers a host carries (the embedded_drivers answer) in the host's own package.
-local EMBEDDED_DIR = "c4z"
 
 --- @return Companions
 function Companions:new()
@@ -212,89 +210,13 @@ local function add(need)
   return d
 end
 
---- A driver version as a number: the build stamps the date, as 20261125.
---- @param version string|nil
---- @return number|nil
-local function versionNumber(version)
-  return tonumber(string.match(tostring(version or ""), "^%d+$") or "")
-end
-
---- Asks Director to update the project's drivers of a file to the copy in the driver store.
---- @param file string
-local function updateProject(file)
-  log:info("Companions: updating %s to the version this driver carries", file)
-  C4:CreateTCPClient()
-    :OnConnect(function(client)
-      client:Write(UpdateProjectC4iRequest(file))
-      client:ReadUntil("\0")
-    end)
-    :OnRead(function(client)
-      client:Close()
-    end)
-    :OnError(function(client, errCode, errMsg)
-      client:Close()
-      log:error("Companions: couldn't update %s: error %s: %s", file, errCode, errMsg)
-    end)
-    :Connect("127.0.0.1", 5020)
-end
-
---- @param file string
---- @return boolean available
-local function install(file)
-  -- The version Director unpacked, which the project's companions run.
-  local unpacked = versionNumber(GetDriverVersion(file))
-  local carried = versionNumber(C4:GetDriverConfigInfo("version"))
-  UnlockC4ZRoot()
-  C4:FileSetDir("C4Z_ROOT")
-  local inStore = C4:FileExists(file)
-  -- A copy with no companion unpacked yet has no version to compare, so it is left as it is too.
-  if inStore and (unpacked == nil or carried == nil or unpacked >= carried) then
-    return true
-  end
-  C4:FileSetDir("C4Z", EMBEDDED_DIR)
-  local package = FileRead(file)
-  if IsEmpty(package) then
-    return inStore
-  end
-  C4:FileSetDir("C4Z_ROOT")
-  -- Already the same when an earlier start wrote it and Director's update was lost.
-  if FileRead(file) ~= package then
-    if not ReplaceFile(file, package) then
-      log:error("Companions: couldn't put %s in the controller's driver store", file)
-      return inStore
-    end
-    log:info("Companions: put %s in the controller's driver store", file)
-  end
-  if unpacked ~= nil then
-    updateProject(file)
-  end
-  return true
-end
-
---- Puts a companion driver this driver carries in its own package in the controller's driver store, when the store has
---- none or the project's companions run an older version than this driver, and then asks Director to update those
---- companions. Otherwise the store is left as it is: companions on this driver's version or newer, or a copy put
---- there another way before any companion of it was added.
---- `setup` runs it for each need's file; a host also runs it at start, so an update of the host brings its companions
---- along. It leaves the file folder at the driver store, as GetDriverVersion does.
---- @param file string The companion's driver file, as `example_light.c4z`.
---- @return boolean available Whether the store has the file, so a companion of it can be added.
-function Companions:install(file)
-  local ok, available = pcall(install, file)
-  if not ok then
-    log:error("Companions: couldn't check the driver store for %s: %s", file, available)
-    return false
-  end
-  return available
-end
-
---- Gives every need's binding a companion, one at a time, after `install` for each need's file. A binding already
---- bound is left alone. Otherwise the companion it had is bound again, when it is in the project and bound to
---- nothing; else a spare the rule allows; else a new one, added in the need's room with its name and shown only in
---- that room, ADD_SPACING_MS before the next. An add with no answer in ADD_TIMEOUT_MS fails, and the next need goes
---- on; if it answers later, its companion takes the binding when that is still free. Nothing is renamed but a spare
---- with `renameSpares`, and nothing is unbound or removed. Navigators are refreshed at the end when anything was
---- bound.
+--- Gives every need's binding a companion, one at a time, after InstallCarriedDriver for each need's file. A
+--- binding already bound is left alone. Otherwise the companion it had is bound again, when it is in the project and
+--- bound to nothing; else a spare the rule allows; else a new one, added in the need's room with its name and shown
+--- only in that room, ADD_SPACING_MS before the next. An add with no answer in ADD_TIMEOUT_MS fails, and the next need
+--- goes on; if it answers later, its companion takes the binding when that is still free. Nothing is renamed but a
+--- spare with `renameSpares`, and nothing is unbound or removed. Navigators are refreshed at the end when anything
+--- was bound.
 --- @param needs CompanionNeed[]
 --- @param options? CompanionOptions
 --- @return Deferred<CompanionResult, string> result Rejected only when a setup is already running.
@@ -315,7 +237,7 @@ function Companions:setup(needs, options)
   for _, need in ipairs(needs) do
     if not installed[need.file] then
       installed[need.file] = true
-      self:install(need.file)
+      InstallCarriedDriver(need.file)
     end
   end
   -- A companion some binding had is never another's spare.

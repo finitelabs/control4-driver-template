@@ -146,11 +146,10 @@ function ReplaceFile(filename, contents)
   return false
 end
 
---- The request that asks Director, on port 5020, to update every driver of a file in the project to the copy in the
---- controller's driver store, as an update in Composer does.
---- @param filename string The driver's file, as `example_light.c4z`.
+--- The request that asks Director to update every driver of a file in the project to the copy in the driver store.
+--- @param filename string
 --- @return string c4soap
-function UpdateProjectC4iRequest(filename)
+local function updateProjectC4iRequest(filename)
   return XMLTag(
     "c4soap",
     XMLTag("param", filename, nil, nil, {
@@ -167,6 +166,120 @@ function UpdateProjectC4iRequest(filename)
       async = "0",
     }
   ) .. "\0"
+end
+
+--- Asks Director, on port 5020, to update every driver of each file in the project to the copy in the controller's
+--- driver store, as an update in Composer does. One at a time, since Director drops requests still queued on a socket
+--- that closes, and this driver's own file last, since its update reloads this driver and would strand the rest.
+--- @param filenames string[] Driver files, as `example_light.c4z`.
+--- @return Deferred<string[], string> updated The filenames, once Director answered each or this driver's own was sent.
+function UpdateProjectDrivers(filenames)
+  --- @type Deferred<string[], string>
+  local d = deferred.new()
+  local ownFilename = C4.GetDriverFileName and C4:GetDriverFileName()
+  local order, own = {}, nil
+  for _, filename in ipairs(filenames) do
+    if filename == ownFilename then
+      own = filename
+    else
+      table.insert(order, filename)
+    end
+  end
+  if own ~= nil then
+    table.insert(order, own)
+  end
+
+  local function send(index)
+    local filename = order[index]
+    if filename == nil then
+      return d:resolve(filenames)
+    end
+    C4:CreateTCPClient()
+      :OnConnect(function(client)
+        client:Write(updateProjectC4iRequest(filename))
+        client:ReadUntil("\0")
+        if filename == own then
+          -- Its update reloads this driver, usually before Director replies.
+          d:resolve(filenames)
+        end
+      end)
+      :OnRead(function(client)
+        client:Close()
+        if filename ~= own then
+          send(index + 1)
+        end
+      end)
+      :OnError(function(client, errCode, errMsg)
+        client:Close()
+        d:reject("Error " .. errCode .. ": " .. errMsg)
+      end)
+      :Connect("127.0.0.1", 5020)
+  end
+  send(1)
+  return d
+end
+
+--- A driver version as a number: the build stamps the date, as 20261125.
+--- @param version string|nil
+--- @return number|nil
+local function versionNumber(version)
+  return tonumber(string.match(tostring(version or ""), "^%d+$") or "")
+end
+
+-- Where `make package` puts the drivers a host carries (the embedded_drivers answer) in the host's own package.
+local CARRIED_DIR = "c4z"
+
+--- @param filename string
+--- @return boolean available
+local function installCarriedDriver(filename)
+  -- The version Director unpacked, which the project's drivers of the file run.
+  local unpacked = versionNumber(GetDriverVersion(filename))
+  local carried = versionNumber(C4:GetDriverConfigInfo("version"))
+  UnlockC4ZRoot()
+  C4:FileSetDir("C4Z_ROOT")
+  local inStore = C4:FileExists(filename)
+  -- A copy with none of its drivers unpacked yet has no version to compare, so it is left as it is too.
+  if inStore and (unpacked == nil or carried == nil or unpacked >= carried) then
+    return true
+  end
+  C4:FileSetDir("C4Z", CARRIED_DIR)
+  local package = FileRead(filename)
+  if IsEmpty(package) then
+    return inStore
+  end
+  C4:FileSetDir("C4Z_ROOT")
+  -- Already the same when an earlier start wrote it and Director's update was lost.
+  if FileRead(filename) ~= package then
+    if not ReplaceFile(filename, package) then
+      log:error("Couldn't put %s in the controller's driver store", filename)
+      return inStore
+    end
+    log:info("Put %s in the controller's driver store", filename)
+  end
+  if unpacked ~= nil then
+    log:info("Updating %s to the version this driver carries", filename)
+    UpdateProjectDrivers({ filename }):next(nil, function(err)
+      log:error("Couldn't update %s: %s", filename, err)
+    end)
+  end
+  return true
+end
+
+--- Puts a driver this driver carries in its own package in the controller's driver store, when the store has none or
+--- the project's drivers of it run an older version than this driver, and then asks Director to update those drivers.
+--- Otherwise the store is left as it is: drivers on this driver's version or newer, or a copy put there another way
+--- before any driver of it was added. `lib.companions` runs it before adding companions; a host also runs it at start,
+--- so an update of the host brings the drivers it carries along. It leaves the file folder at the driver store, as
+--- GetDriverVersion does.
+--- @param filename string The carried driver's file, as `example_light.c4z`.
+--- @return boolean available Whether the store has the file, so a driver of it can be added.
+function InstallCarriedDriver(filename)
+  local ok, available = pcall(installCarriedDriver, filename)
+  if not ok then
+    log:error("Couldn't check the driver store for %s: %s", filename, available)
+    return false
+  end
+  return available
 end
 
 --- What a send's trace shows in place of parameters that hold a secret.

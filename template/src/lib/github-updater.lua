@@ -189,60 +189,7 @@ function GitHubUpdater:updateAll(repo, driverFilenames, includePrereleases, forc
   return self
     :downloadOutdatedDrivers("C4Z_ROOT", repo, installedDriverFilenames, includePrereleases, forceUpdate)
     :next(function(downloadedDriverFilenames)
-      --- @type Deferred<string[], string|table<number, string>>
-      local d = deferred.new()
-      if IsEmpty(downloadedDriverFilenames) then
-        return d:resolve(downloadedDriverFilenames)
-      end
-
-      -- Update the running driver's own c4z LAST: reloading it tears down this
-      -- loop (and its socket) before the remaining companions are sent, which
-      -- strands them a version behind.
-      local ownFilename = C4.GetDriverFileName and C4:GetDriverFileName()
-      local updateOrder = {}
-      local ownFilenameToUpdate
-      for _, driverFilename in pairs(downloadedDriverFilenames) do
-        if driverFilename == ownFilename then
-          ownFilenameToUpdate = driverFilename
-        else
-          table.insert(updateOrder, driverFilename)
-        end
-      end
-      if ownFilenameToUpdate ~= nil then
-        table.insert(updateOrder, ownFilenameToUpdate)
-      end
-
-      -- Director drops UpdateProjectC4i commands still queued on a socket that
-      -- closes, so each update waits for Director's reply before the next is sent.
-      local function sendUpdate(index)
-        local driverFilename = updateOrder[index]
-        if driverFilename == nil then
-          return d:resolve(downloadedDriverFilenames)
-        end
-        local c4soap = UpdateProjectC4iRequest(driverFilename)
-        C4:CreateTCPClient()
-          :OnConnect(function(client)
-            client:Write(c4soap)
-            client:ReadUntil("\0")
-            if driverFilename == ownFilenameToUpdate then
-              -- Its update reloads this driver, usually before Director replies.
-              d:resolve(downloadedDriverFilenames)
-            end
-          end)
-          :OnRead(function(client)
-            client:Close()
-            if driverFilename ~= ownFilenameToUpdate then
-              sendUpdate(index + 1)
-            end
-          end)
-          :OnError(function(client, errCode, errMsg)
-            client:Close()
-            d:reject("Error " .. errCode .. ": " .. errMsg)
-          end)
-          :Connect("127.0.0.1", 5020)
-      end
-      sendUpdate(1)
-      return d
+      return UpdateProjectDrivers(downloadedDriverFilenames)
     end)
 end
 

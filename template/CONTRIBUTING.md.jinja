@@ -395,12 +395,12 @@ its package. Each embedded driver also ships as its own `.c4z`, so
 `lib.driver-filenames` lists it and the OSS build's updater keeps an installed
 copy current.
 
-`lib.companions` puts a carried driver in the store: `setup` does it for each
-companion's file before adding any, and the host also calls
-`companions:install(file)` at start, so updating the host updates the companions
-already in the project. It writes the carried copy when the store has none or
-the companions run an older version than the host, then asks Director to update
-them. A copy at least as new, put there another way, is left as it is.
+`InstallCarriedDriver(file)` in `lib.utils` puts a carried driver in the
+store. The host calls it at start, so updating the host updates the drivers it
+carries that are already in the project, and `lib.companions` calls it for each
+companion's file before adding any. It writes the carried copy when the store has
+none or the project's drivers of it run an older version than the host, then
+asks Director to update them. Otherwise the store is left as it is.
 {%- endif %}
 
 ## Writing Tests
