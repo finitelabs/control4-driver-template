@@ -91,8 +91,9 @@ def add_example(name, directory):
                 continue
             shutil.copytree(drivers / "example", drivers / embedded)
             title = embedded.replace("_", " ").title()
+            archive = embedded.replace("_", ".")
             for file, old, new in (
-                ("driver.c4zproj", 'name="example"', f'name="{embedded}"'),
+                ("driver.c4zproj", 'name="example"', f'name="{archive}"'),
                 ("driver.xml", "<name>Example Driver</name>", f"<name>{title}</name>"),
                 ("driver.xml", "<model>Example Driver</model>", f"<model>{title}</model>"),
             ):

@@ -418,11 +418,12 @@ def embedded(render):
             if build == "drivercentral":
                 problems += encryption_problems(out / f"{host}.c4z", files)
             for name in names.split(","):
-                own = render / out / f"{name}.c4z"
+                archive = name.replace("_", ".") + ".c4z"
+                own = render / out / archive
                 if not own.exists():
-                    problems.append(f"the {build} build made no {name}.c4z of its own")
-                elif files.get(f"c4z/{name}.c4z") != own.read_bytes():
-                    problems.append(f"{out / host}.c4z does not hold c4z/{name}.c4z as its own build made it")
+                    problems.append(f"the {build} build made no {archive} of its own")
+                elif files.get(f"c4z/{archive}") != own.read_bytes():
+                    problems.append(f"{out / host}.c4z does not hold c4z/{archive} as its own build made it")
     return report(problems, "Each host ships the drivers it embeds under c4z/, as their own builds made them, in every distribution")
 
 
