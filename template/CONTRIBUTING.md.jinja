@@ -394,6 +394,14 @@ the other drivers first, then each host with their `.c4z` files under `c4z/` in
 its package. Each embedded driver also ships as its own `.c4z`, so
 `lib.driver-filenames` lists it and the OSS build's updater keeps an installed
 copy current.
+
+`InstallDrivers(packages)` in `lib.utils` installs drivers. The GitHub updater
+uses it to install downloads, and a host uses it to install the drivers it
+carries. To install a carried driver, pass a package with no body. It is
+installed only when the controller doesn't have it yet, or when the project's
+devices run an older version than the host. A host installs what it carries when
+it starts, so updating the host also updates those drivers. `lib.companions`
+installs each companion's driver file before adding any companions.
 {%- endif %}
 
 ## Writing Tests
