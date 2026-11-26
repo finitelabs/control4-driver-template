@@ -139,10 +139,15 @@ if not string.pack then
     end
     return table.concat(out)
   end
+  -- Like lpack, it stops at the first value the data is too short for and returns those before it.
   function string.unpack(data, fmt, pos)
     pos = pos or 1
     local out = {}
     for c in fmt:gmatch(".") do
+      local size = c == "f" and 4 or CODE[c] and CODE[c][1]
+      if size and pos + size - 1 > #data then
+        break
+      end
       if c == "<" or c == ">" or c == "=" then
       elseif c == "f" then
         local v
