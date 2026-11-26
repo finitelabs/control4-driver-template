@@ -275,9 +275,6 @@ function WebSocket:Send(s, opcode)
     elseif len <= 65535 then
       lenstr = string.char(opcode, bit.bor(126, 0x80)) .. tohex(string.format("%04X", len))
     else
-      -- %016X, not %16X: the latter is space padded to width 16 rather than zero
-      -- padded to 16 digits, and tohex only substitutes hex pairs, so the spaces
-      -- survived into a malformed 14-byte field. This one must be exactly 8 bytes.
       lenstr = string.char(opcode, bit.bor(127, 0x80)) .. tohex(string.format("%016X", len))
     end
 
