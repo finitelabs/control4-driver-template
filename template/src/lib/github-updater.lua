@@ -139,16 +139,18 @@ function GitHubUpdater:downloadOutdatedDrivers(repo, driverFilenames, includePre
       end
 
       --- @type Deferred<table, string>
-      local download = http:get(asset.browser_download_url, DEFAULT_HEADERS, { maxBytes = MAX_ASSET_BYTES }):next(function(response)
-        local downloadSize = string.len(response.body)
-        if downloadSize < 1 then
-          return reject(string.format("asset %s download is empty", asset.name))
-        end
-        log:info("Downloaded asset %s (%d bytes)", asset.name, downloadSize)
-        return { name = asset.name, body = response.body }
-      end, function(response)
-        return reject(response.error)
-      end)
+      local download = http
+        :get(asset.browser_download_url, DEFAULT_HEADERS, { maxBytes = MAX_ASSET_BYTES })
+        :next(function(response)
+          local downloadSize = string.len(response.body)
+          if downloadSize < 1 then
+            return reject(string.format("asset %s download is empty", asset.name))
+          end
+          log:info("Downloaded asset %s (%d bytes)", asset.name, downloadSize)
+          return { name = asset.name, body = response.body }
+        end, function(response)
+          return reject(response.error)
+        end)
 
       table.insert(downloads, download)
     end
