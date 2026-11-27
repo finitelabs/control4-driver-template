@@ -21,6 +21,11 @@ local DEFAULT_HEADERS = {
   Accept = "*/*",
 }
 
+--- The largest driver file downloaded, in bytes. Setting it sends the download through the http library's
+--- streaming path: the controller's plain transfer fails on a body past 4 MiB.
+--- @type integer
+local MAX_ASSET_BYTES = 64 * 1024 * 1024
+
 --- Create a new instance of GitHubUpdater.
 --- @return GitHubUpdater updater A new GitHubUpdater instance.
 function GitHubUpdater:new()
@@ -134,7 +139,7 @@ function GitHubUpdater:downloadOutdatedDrivers(repo, driverFilenames, includePre
       end
 
       --- @type Deferred<table, string>
-      local download = http:get(asset.browser_download_url, DEFAULT_HEADERS):next(function(response)
+      local download = http:get(asset.browser_download_url, DEFAULT_HEADERS, { maxBytes = MAX_ASSET_BYTES }):next(function(response)
         local downloadSize = string.len(response.body)
         if downloadSize < 1 then
           return reject(string.format("asset %s download is empty", asset.name))
