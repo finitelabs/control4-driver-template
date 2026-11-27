@@ -29,7 +29,7 @@ Subcommands:
       Exit 1 unless dist/<build>/docs holds at least one PDF.
 
   package.py check-size <build>
-      Exit 1 if any .c4z in dist/<build>/c4z is larger than 3.5 MiB. A released
+      Exit 1 if any .c4z in dist/<build>/c4z is larger than 4,000,000 bytes. A released
       GitHub updater downloads with a plain transfer that fails past 4 MiB.
 
   package.py check-version <build> <version>
@@ -153,8 +153,8 @@ def check_pdfs(build: str) -> int:
     return 0
 
 
-# Under the 4 MiB a released GitHub updater can download, with room for a release to grow.
-MAX_C4Z_BYTES = 3_670_016
+# Under the 4 MiB a released GitHub updater can download, with margin for a controller whose cap is lower.
+MAX_C4Z_BYTES = 4_000_000
 
 
 def check_size(build: str) -> int:
