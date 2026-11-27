@@ -111,12 +111,18 @@ fmt-md: $(VENV_STAMP)
 
 # Lossy but not visibly: run it after adding or exporting PNGs. resources/ is the
 # template's images and the DriverCentral listing art, which ships in no .c4z.
+# A second run changes nothing: pngquant skips a palette PNG (IHDR color type 3),
+# which is what it writes, oxipng keeps the color type (--nc), and oxipng runs
+# first so pngquant's size comparison can't come out differently next time.
 .PHONY: images
-images: ## Compress the committed PNGs outside resources/ (brew install pngquant oxipng)
-	@git ls-files '*.png' ':!:resources/**' | while IFS= read -r f; do \
-		pngquant --quality 80-95 --skip-if-larger --strip --force --output "$$f" -- "$$f"; \
-		code=$$?; [ $$code -eq 0 ] || [ $$code -eq 98 ] || [ $$code -eq 99 ] || exit 1; \
-		oxipng -q -o 4 --strip safe "$$f" || exit 1; \
+images: ## Compress the repo's PNGs outside resources/ (brew install pngquant oxipng)
+	@git ls-files --cached --others --exclude-standard '*.png' ':!:resources/**' | while IFS= read -r f; do \
+		oxipng -q -o 4 --nc --strip safe "$$f" || exit 1; \
+		if [ "$$(od -An -tu1 -j25 -N1 "$$f" | tr -d ' ')" != 3 ]; then \
+			pngquant --quality 80-95 --skip-if-larger --strip --force --output "$$f" -- "$$f"; \
+			code=$$?; [ $$code -eq 0 ] || [ $$code -eq 98 ] || [ $$code -eq 99 ] || exit 1; \
+		fi; \
+		oxipng -q -o 4 --nc --strip safe "$$f" || exit 1; \
 	done
 
 # ─── Check ────────────────────────────────────────────────────────────────────
