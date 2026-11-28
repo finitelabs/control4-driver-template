@@ -18,6 +18,7 @@ from package import (  # noqa: E402
     c4z_filename,
     check_encrypted,
     check_pdfs,
+    check_size,
     check_sort_order,
     check_version,
     tag_version,
@@ -194,6 +195,25 @@ class CheckPdfsTest(InTempDir):
 
     def test_no_docs_folder_fails(self):
         self.assertEqual(self._run(check_pdfs, "oss")[0], 1)
+
+
+class CheckSizeTest(InTempDir):
+    def _sized(self, name, size):
+        c4z = Path("dist") / "oss" / "c4z"
+        c4z.mkdir(parents=True, exist_ok=True)
+        (c4z / name).write_bytes(b"\0" * size)
+
+    def test_a_package_at_the_limit_passes(self):
+        self._sized("a.c4z", 4_194_304)
+        self.assertEqual(self._run(check_size, "oss")[0], 0)
+
+    def test_a_package_past_the_limit_fails(self):
+        self._sized("a.c4z", 4_194_304)
+        self._sized("b.c4z", 4_194_305)
+        code, _, err = self._run(check_size, "oss")
+        self.assertEqual(code, 1)
+        self.assertIn("b.c4z is 4,194,305 bytes", err)
+        self.assertNotIn("a.c4z", err)
 
 
 def version_xml(version):

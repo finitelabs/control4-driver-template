@@ -153,6 +153,11 @@ Then `make icons` exports everything to `dist/icons/`:
 - `cards/`: the DriverCentral card and the light and dark website cards, which carry no badges;
   the DriverCentral card's tile is centered at 264 px in its 300 px frame
 
+A driver whose icon changes with its state gets one frame per state, named `State Icon / <id>` with
+the id in lowercase, such as `running` or `utility_out`. Copy the icon artboard into it, remove the
+fill from both frames so the icons stay transparent, and change the copy for that state. `make icons`
+then exports its icons to `www/icons/` as `<id>_experience_70.png` and so on, at the same 18 sizes.
+
 It also refreshes each of those files a driver already has under `drivers/*/www/`, and the
 repo-root `documentation/images/header.png` a root-docs README is built from. Run
 `make docs-readme`, then commit what both refreshed, so `make icons` leaves a clean tree. For a new driver,
