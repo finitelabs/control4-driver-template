@@ -119,8 +119,8 @@ end
 
 --- Retrieves a value from the persistence store.
 --- On first call, loads any driver-specific migrations from `migrations.lua`.
---- If a migration exists for the requested key, it runs once, persists the transformed value,
---- and removes itself. A table holding a string that is not UTF-8 text reads back with each
+--- If a migration exists for the requested key, it runs once, persists its result only when that
+--- serializes differently from the stored value, and removes itself. A table holding a string that is not UTF-8 text reads back with each
 --- byte JSON:decode rejects as its Latin-1 character.
 --- @param key string The key to retrieve the value for.
 --- @param default? any The value to return if the key isn't stored (optional). It is this call's alone.
