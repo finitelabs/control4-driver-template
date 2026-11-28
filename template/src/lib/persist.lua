@@ -137,7 +137,7 @@ function Persist:get(key, default, encrypted)
       -- Snapshot before the call: a migration may change the table it was given.
       local before = Serialize(self._persist[key])
       local migrated = MIGRATIONS[key](value)
-      if migrated == nil or type(migrated) ~= type(self._persist[key]) or Serialize(migrated) ~= before then
+      if Serialize(migrated) ~= before then
         self:set(key, migrated, encrypted)
         -- Read again: a migration that deletes the key leaves this call its default.
         value = self:_get(key, default, encrypted)
