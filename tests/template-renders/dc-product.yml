@@ -2,5 +2,5 @@
 dc_pid: 999
 icon_style: square
 # The example driver carries a companion in its package: the build job adds drivers/example_companion, a copy of
-# the example, and the build-embedded check finds it inside example.c4z under c4z/.
+# the example, and the build-embedded check finds c4z/example.companion.c4z inside example.c4z.
 embedded_drivers: example:example_companion
